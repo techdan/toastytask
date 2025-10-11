@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## todo.md
 
-Pause at every major phase in Todo to await feedback.
+Pause at every major phase in Todo to await feedback. Update todo.md with results as progress.
 
 ## Project Overview
 

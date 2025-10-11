@@ -1,0 +1,89 @@
+import { NextResponse } from "next/server";
+import { taskRepository } from "@/lib/db/repositories";
+import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
+import type { NewTask } from "@/types";
+
+// Force Node.js runtime for better-sqlite3 compatibility
+export const runtime = 'nodejs';
+
+// GET /api/tasks - List all tasks
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const projectId = searchParams.get("projectId");
+    const includeCompleted = searchParams.get("includeCompleted") === "true";
+
+    let tasks = await taskRepository.findAll();
+
+    // Filter by project if specified
+    if (projectId !== null) {
+      const pid = projectId === "null" ? null : parseInt(projectId, 10);
+      tasks = tasks.filter((task) => task.projectId === pid);
+    }
+
+    // Filter out completed tasks unless requested
+    if (!includeCompleted) {
+      tasks = tasks.filter((task) => !task.completedAt);
+    }
+
+    // Filter out deleted tasks
+    tasks = tasks.filter((task) => !task.deletedAt);
+
+    // Sort by importance (desc), then due proximity
+    tasks.sort((a, b) => {
+      // Sort by importance first (higher is better)
+      if (b.importanceV1 !== a.importanceV1) {
+        return b.importanceV1 - a.importanceV1;
+      }
+
+      // Then by due date (earlier is better, nulls last)
+      if (a.dueAt && b.dueAt) {
+        const aTime = typeof a.dueAt === "number" ? a.dueAt : a.dueAt.getTime();
+        const bTime = typeof b.dueAt === "number" ? b.dueAt : b.dueAt.getTime();
+        return aTime - bTime;
+      }
+      if (a.dueAt) return -1;
+      if (b.dueAt) return 1;
+
+      // Finally by creation date (newest first)
+      const aCreated =
+        typeof a.createdAt === "number" ? a.createdAt : a.createdAt.getTime();
+      const bCreated =
+        typeof b.createdAt === "number" ? b.createdAt : b.createdAt.getTime();
+      return bCreated - aCreated;
+    });
+
+    return NextResponse.json({ tasks });
+  } catch (error) {
+    console.error("Failed to fetch tasks:", error);
+    return NextResponse.json({ error: "Failed to fetch tasks" }, { status: 500 });
+  }
+}
+
+// POST /api/tasks - Create a new task
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const taskData: NewTask = {
+      title: body.title,
+      priority: body.priority || "medium",
+      bucket: body.bucket || "todo",
+      star: body.star || false,
+      dueAt: body.dueAt ? new Date(body.dueAt) : null,
+      projectId: body.projectId || null,
+      heat: 0.0,
+      touchCount: 0,
+      importanceV1: 0, // Will calculate below
+    };
+
+    // Calculate importance before saving
+    taskData.importanceV1 = calculateImportanceV1(taskData as any);
+
+    const task = await taskRepository.create(taskData);
+
+    return NextResponse.json({ task }, { status: 201 });
+  } catch (error) {
+    console.error("Failed to create task:", error);
+    return NextResponse.json({ error: "Failed to create task" }, { status: 500 });
+  }
+}

@@ -1,0 +1,37 @@
+// Core enums
+export const Priority = {
+  LOW: "low",
+  MEDIUM: "medium",
+  HIGH: "high",
+  TOP: "top",
+} as const;
+
+export type Priority = (typeof Priority)[keyof typeof Priority];
+
+export const Bucket = {
+  TODO: "todo",
+  WATCH: "watch",
+  LATER: "later",
+} as const;
+
+export type Bucket = (typeof Bucket)[keyof typeof Bucket];
+
+export const RepeatType = {
+  NONE: "none",
+  DAILY: "daily",
+  WEEKLY: "weekly",
+  MONTHLY: "monthly",
+} as const;
+
+export type RepeatType = (typeof RepeatType)[keyof typeof RepeatType];
+
+export const GroupingMode = {
+  UNGROUPED: "ungrouped",
+  IMPORTANCE: "importance",
+  HEAT: "heat",
+} as const;
+
+export type GroupingMode = (typeof GroupingMode)[keyof typeof GroupingMode];
+
+// Re-export types from schema for convenience
+export type { Task, NewTask, Project, NewProject, Settings, NewSettings } from "@/lib/db/schema";

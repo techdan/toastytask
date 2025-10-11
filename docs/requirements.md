@@ -20,7 +20,9 @@
 
 **MVP Functional Requirements**
 - Task CRUD: title (required), priority (Low/Med/High/Top), star, due date (optional), repeat, project, bucket, completed, archived.
-- Sorting: default by Heat desc; fallback by Importance v1 desc; then due proximity; then last touched desc.
+- Sorting: default by Heat desc; fallback by Importance v1 desc (12→2, highest first); then due proximity; then last touched desc.
+  - Completed tasks automatically move to bottom of list within their view.
+  - Importance display order: 12 (highest) → 2 (lowest) for visual hierarchy.
 - Views
   - Tabs: Todo, Watch, Later, Resurfacing, Completed, Archived.
   - Filters: project, due state (none/future/today/past due), priority, starred.
@@ -127,13 +129,37 @@
   - User can pin/unpin from Focus; pinning applies a small heat floor.
 
 **Views & UX**
+- Layout:
+  - Left Navigation: Project list with task counts per project
+    - Shows all active projects with badge showing number of tasks
+    - Includes "All Projects" and "No Project" options
+    - Color-coded project indicators
+    - Quick project creation from nav
+    - Collapsible section for archived projects
+  - Main Content: Tabs and task list
 - Tabs: Todo, Watch, Later, Resurfacing, Focus, Archived.
 - Presets:
   - Hot Today: Focus + high-heat Todo; bulk touch/snooze.
   - Weekly Review: Watch resurfacing this week; bulk escalate/de-escalate.
   - Someday Browser: Later sorted by heat desc then created desc.
-- Task Row
-  - Leading heat chip; checkbox; star; notes toggle icon,title; project chip (optional); due/recurrence;  priority select, touch, snooze,  overflow menu.
+- Task Row (Dense Layout)
+  - Reference design: `docs/Toodledo Sample UI.png` for compact, information-dense layout
+  - Leading heat chip; checkbox; star; title (inline editable); due date display; priority display; action buttons (touch, snooze, delete)
+  - Priority Display Intelligence:
+    - Default state: Priority displayed as text (e.g., "Low", "Medium", "High", "Top")
+    - Click behavior: Text converts to dropdown selector on click
+    - Selection behavior: Choosing a priority from dropdown updates the task and reverts to text display
+    - Keyboard accessible: Tab focuses priority, Enter/Space opens dropdown
+  - Due Date Display Intelligence:
+    - Past due: Red background with date (e.g., "Jan 15" in red)
+    - Today: Bold "Today" text
+    - Tomorrow: Bold "Tomorrow" text
+    - Future: Regular date format (e.g., "Jan 20")
+    - No due date: Light gray "No Due Date" text
+    - Clicking due date opens calendar picker inline
+  - Priority display: Reverse order in dropdown (Top → High → Medium → Low) for quick access to high priorities
+  - Compact spacing: Reduced padding and margins for higher information density
+  - All interactions client-side with optimistic updates; async server persistence
 - Quick Add (MVP)
   - Single text field. Creates a task with configurable defaults (Due: Today, Bucket: Todo, Priority: Medium) and applies the new-task heat boost so it appears near the top.
   - After creation, users adjust details via inline edit or inspector.
@@ -141,16 +167,22 @@
 - Settings Drawer
   - Accessible from the header; lets users change default new-task bucket/due/priority, new-task heat boost and decay, and snooze durations per bucket.
   - Includes palette controls to adjust the global importance/heat colors with live previews of grouping headers.
-- Project Filter & Badges
-  - Global dropdown (header) filters any view by project, including "All Projects" and "No Project" options.
-  - Tasks display an inline project badge (color-coded) when assigned; clicking badge opens a quick project reassignment popover.
+- Project Management
+  - Left navigation shows project list with task counts; clicking filters to that project
+  - Project CRUD: Create, rename, recolor, archive/restore projects
+  - Tasks display an inline project badge (color-coded) when assigned; clicking badge opens a quick project reassignment popover
+  - Drag-and-drop task to project in left nav for quick reassignment
 
 **Import/Export**
 - JSON export/import (full fidelity). CSV import (title, due, priority, star, project, bucket).
 - Notes export includes NoteRow order and current text; optional toggle to include full version history. JSON export also includes Project definitions (name, color, archived flag).
 
 **Non-Functional**
-- Performance: snappy up to 1k–5k tasks; list virtualization as needed.
+- Performance:
+  - Snappy up to 1k–5k tasks; list virtualization as needed.
+  - Optimistic UI updates: All user interactions (check, star, priority change, etc.) update UI immediately with async server persistence.
+  - Client-side sorting and filtering to eliminate server round-trip lag.
+  - Target: <50ms UI response time for all interactions; <100ms for server persistence.
 - Accessibility: keyboard-first; ARIA roles on lists/controls.
 - Persistence: local PostgreSQL database (via Drizzle ORM) for MVP; schema managed through Drizzle migrations and ready for future sync.
 - Privacy: offline by default; no third-party telemetry.
@@ -169,6 +201,8 @@
 - MVP+ (Week 3)
   - Bulk actions, undo history, import/export.
 - Phase 2
+  - Notes system (per-line, versioned) with sticky-note UI and history
+  - Project CRUD with left navigation and task counts
   - Knowledge archive search, analytics (touch history & heat over time), settings to tune model/cadences, natural-language quick add and repeat rules (e.g., "every Fri").
 - Phase 3
   - Auth, sync, notifications/PWA, integrations.
