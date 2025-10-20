@@ -2,9 +2,36 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## todo.md
+## Task Tracking with Beads
 
-Pause at every major phase in Todo to await feedback. Update todo.md with results as progress.
+**IMPORTANT: This project uses Beads for task tracking instead of markdown TODOs.**
+
+- **Beads (bd) is installed in WSL Ubuntu** at `/home/danman/go/bin/bd`
+- **Always run bd commands through WSL**: `wsl bash -c "cd /mnt/c/src/ClaudeCode/toodle && /home/danman/go/bin/bd <command>"`
+- Beads does not work natively on Windows (Unix-specific dependencies)
+- The project database is at `.beads/toodle.db` (accessed from WSL)
+- Commands are auto-approved in `.claude/settings.json` - no permission prompts needed
+
+### Common Beads Commands (via WSL)
+
+```bash
+# Find ready work
+wsl bash -c "cd /mnt/c/src/ClaudeCode/toodle && /home/danman/go/bin/bd ready --json"
+
+# Create new issue
+wsl bash -c "cd /mnt/c/src/ClaudeCode/toodle && /home/danman/go/bin/bd create 'Task title' -t task -p 1 --json"
+
+# Update issue status
+wsl bash -c "cd /mnt/c/src/ClaudeCode/toodle && /home/danman/go/bin/bd update <id> --status in_progress --json"
+
+# Complete work
+wsl bash -c "cd /mnt/c/src/ClaudeCode/toodle && /home/danman/go/bin/bd close <id> --reason 'Done' --json"
+
+# Show issue details
+wsl bash -c "cd /mnt/c/src/ClaudeCode/toodle && /home/danman/go/bin/bd show <id> --json"
+```
+
+See the [Beads documentation](https://github.com/steveyegge/beads) for full command reference.
 
 ## Project Overview
 

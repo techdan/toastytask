@@ -1,0 +1,36 @@
+{
+  "allowedTools": [
+    "Bash(wsl bash -lc *bd *)",
+    "Bash(wsl bash -c *bd *)",
+    "Bash(wsl bd *)",
+    "Bash(wsl ~/go/bin/bd *)",
+    "Bash(npm run dev*)",
+    "Bash(npm run build)",
+    "Bash(npm run lint)",
+    "Bash(npm install*)",
+    "Bash(npx*)",
+    "Bash(git status)",
+    "Bash(git diff*)",
+    "Bash(git log*)",
+    "Bash(git branch*)",
+    "Bash(cd *)",
+    "Bash(md *)",
+    "Bash(mkdir *)",
+    "Bash(ls *)",
+    "Bash(dir *)",
+    "Bash(pwd)",
+    "Read",
+    "Glob",
+    "Grep",
+    "WebFetch",
+    "WebSearch"
+  ],
+  "deniedTools": [
+    "Bash(rm -rf *)",
+    "Bash(wsl rm -rf *)",
+    "Bash(del /s *)",
+    "Bash(rd /s *)",
+    "Bash(git push --force*)",
+    "Bash(npm publish*)"
+  ]
+}
