@@ -187,6 +187,31 @@
 - Persistence: local PostgreSQL database (via Drizzle ORM) for MVP; schema managed through Drizzle migrations and ready for future sync.
 - Privacy: offline by default; no third-party telemetry.
 
+**Architecture: Calculated vs. Stored Fields**
+- Challenge: Some fields (importance, heat) are derived from other data and become stale when underlying data changes (e.g., due date passes).
+- Strategy varies by complexity and staleness tolerance:
+  - **Importance v1**: Recalculate on Read
+    - Always recalculate before returning to client (GET endpoints)
+    - Still store in DB for future optimizations (indexes, DB-side sorting)
+    - Simple formula (O(1) per task) = negligible overhead for 1k-5k tasks
+    - Guarantees freshness: due date passing overnight = correct importance next day
+    - Implementation: [lib/scoring/importance-v1.ts](lib/scoring/importance-v1.ts)
+  - **Heat v2**: Lazy Refresh Pattern (Phase 3)
+    - Store `heat` and `heat_calculated_at` timestamp
+    - On read: if stale (now - heat_calculated_at > threshold), recalculate
+    - Thresholds vary by bucket (Todo: 1h, Watch: 6h, Later: 24h)
+    - Complex formula (exponential decay, activity scoring) = acceptable cost when amortized
+    - Allows DB-side sorting by slightly-stale heat (acceptable trade-off)
+    - Bulk refresh endpoint for manual/scheduled updates
+    - Implementation: [lib/scoring/heat-v2.ts](lib/scoring/heat-v2.ts) (future)
+- Rationale:
+  - Performance: Avoid recalculating complex formulas on every read
+  - Accuracy: Ensure time-sensitive values (due dates) don't cause stale displays
+  - Scalability: Pattern supports future optimizations (background jobs, DB triggers)
+- Related Issues:
+  - Importance staleness bug fix: toodle-54
+  - Heat lazy refresh implementation: toodle-56 (depends on toodle-40)
+
 **UI Rebuild Approach (No Copying)**
 - Reference Strategy
   - Use screenshots/screen recordings of public pages for flow reference only; never reuse HTML/CSS/JS or assets.

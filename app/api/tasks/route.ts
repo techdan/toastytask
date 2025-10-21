@@ -29,6 +29,13 @@ export async function GET(request: Request) {
     // Filter out deleted tasks
     tasks = tasks.filter((task) => !task.deletedAt);
 
+    // Recalculate importance for each task to ensure freshness
+    // (values become stale when due dates pass since we only calculate on write)
+    tasks = tasks.map((task) => ({
+      ...task,
+      importanceV1: calculateImportanceV1(task),
+    }));
+
     // Sort by importance (desc), then due proximity
     tasks.sort((a, b) => {
       // Sort by importance first (higher is better)
