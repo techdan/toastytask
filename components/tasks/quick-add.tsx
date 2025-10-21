@@ -4,17 +4,45 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useSettingsQuery } from "@/lib/queries/use-settings-query";
 import type { NewTask } from "@/types";
 
 interface QuickAddProps {
   onAdd: (task: Omit<NewTask, "createdAt" | "updatedAt">) => void;
   defaultPriority?: "low" | "medium" | "high" | "top";
   defaultBucket?: "todo" | "watch" | "later";
+  currentProjectId?: number | null;
 }
 
-export function QuickAdd({ onAdd, defaultPriority = "medium", defaultBucket = "todo" }: QuickAddProps) {
+// Helper to calculate due date from default setting
+function calculateDueDate(defaultDueDate: "none" | "today" | "tomorrow" | "next_week"): Date | null {
+  const now = new Date();
+  now.setHours(23, 59, 59, 999); // Set to end of day
+
+  switch (defaultDueDate) {
+    case "none":
+      return null;
+    case "today":
+      return now;
+    case "tomorrow":
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      return tomorrow;
+    case "next_week":
+      const nextWeek = new Date(now);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      return nextWeek;
+    default:
+      return null;
+  }
+}
+
+export function QuickAdd({ onAdd, defaultPriority, defaultBucket, currentProjectId }: QuickAddProps) {
   const [title, setTitle] = useState("");
   const [isAdding, setIsAdding] = useState(false);
+
+  // Fetch settings for defaults
+  const { data: settings } = useSettingsQuery();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,14 +53,19 @@ export function QuickAdd({ onAdd, defaultPriority = "medium", defaultBucket = "t
     setIsAdding(true);
 
     try {
+      // Use settings defaults if available, otherwise fall back to props or hardcoded defaults
+      const priority = defaultPriority || settings?.defaultPriority || "medium";
+      const bucket = defaultBucket || settings?.defaultBucket || "todo";
+      const dueAt = calculateDueDate(settings?.defaultDueDate || "none");
+
       // Create task with defaults
       await onAdd({
         title: trimmedTitle,
-        priority: defaultPriority,
-        bucket: defaultBucket,
+        priority,
+        bucket,
         star: false,
-        dueAt: null,
-        projectId: null,
+        dueAt,
+        projectId: currentProjectId ?? null,
         heat: 0.0,
         touchCount: 0,
         importanceV1: 0, // Will be calculated on the server

@@ -1,4 +1,4 @@
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import type { NoteRow, NewNoteRow, NoteRowVersion, NewNoteRowVersion } from "@/lib/db/schema";
 import { noteRows, noteRowVersions } from "@/lib/db/schema";
 import { getDatabase } from "@/lib/db/client";
@@ -7,8 +7,16 @@ export interface NoteRowWithVersion extends NoteRow {
   currentText?: string;
 }
 
+export interface NotesMetadata {
+  taskId: number;
+  count: number;
+  lastModified: Date | null;
+}
+
 export interface INoteRepository {
   getNotesForTask(taskId: number): Promise<NoteRowWithVersion[]>;
+  getNotesForTasks(taskIds: number[]): Promise<Map<number, NoteRowWithVersion[]>>;
+  getNotesMetadataForTasks(taskIds: number[]): Promise<Map<number, NotesMetadata>>;
   createNoteRow(noteRow: NewNoteRow, text: string): Promise<NoteRowWithVersion>;
   updateNoteRow(noteRowId: number, text: string): Promise<NoteRowWithVersion>;
   deleteNoteRow(noteRowId: number): Promise<void>;
@@ -19,6 +27,78 @@ export interface INoteRepository {
 
 export class SQLiteNoteRepository implements INoteRepository {
   private db = getDatabase();
+
+  async getNotesForTasks(taskIds: number[]): Promise<Map<number, NoteRowWithVersion[]>> {
+    if (taskIds.length === 0) {
+      return new Map();
+    }
+
+    // Fetch all note rows for all tasks
+    const rows = await this.db
+      .select()
+      .from(noteRows)
+      .where(inArray(noteRows.taskId, taskIds))
+      .orderBy(noteRows.taskId, noteRows.ordinal);
+
+    // Fetch all active versions for these notes
+    const noteRowIds = rows.map(r => r.id);
+    const versions = noteRowIds.length > 0
+      ? await this.db
+          .select()
+          .from(noteRowVersions)
+          .where(inArray(noteRowVersions.id, rows.map(r => r.activeVersionId).filter(Boolean) as number[]))
+      : [];
+
+    // Create a map of versionId -> text
+    const versionTextMap = new Map<number, string>();
+    for (const version of versions) {
+      versionTextMap.set(version.id, version.text);
+    }
+
+    // Group rows by taskId and attach text
+    const notesMap = new Map<number, NoteRowWithVersion[]>();
+    for (const row of rows) {
+      const rowWithVersion: NoteRowWithVersion = {
+        ...row,
+        currentText: row.activeVersionId ? (versionTextMap.get(row.activeVersionId) || "") : "",
+      };
+
+      if (!notesMap.has(row.taskId)) {
+        notesMap.set(row.taskId, []);
+      }
+      notesMap.get(row.taskId)!.push(rowWithVersion);
+    }
+
+    return notesMap;
+  }
+
+  async getNotesMetadataForTasks(taskIds: number[]): Promise<Map<number, NotesMetadata>> {
+    if (taskIds.length === 0) {
+      return new Map();
+    }
+
+    // Query to get count and max updatedAt for each task
+    const results = await this.db
+      .select({
+        taskId: noteRows.taskId,
+        count: sql<number>`count(*)`,
+        lastModified: sql<number | null>`max(${noteRows.updatedAt})`,
+      })
+      .from(noteRows)
+      .where(inArray(noteRows.taskId, taskIds))
+      .groupBy(noteRows.taskId);
+
+    const metadataMap = new Map<number, NotesMetadata>();
+    for (const result of results) {
+      metadataMap.set(result.taskId, {
+        taskId: result.taskId,
+        count: result.count,
+        lastModified: result.lastModified ? new Date(result.lastModified * 1000) : null,
+      });
+    }
+
+    return metadataMap;
+  }
 
   async getNotesForTask(taskId: number): Promise<NoteRowWithVersion[]> {
     const rows = await this.db

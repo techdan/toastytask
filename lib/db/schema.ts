@@ -39,6 +39,11 @@ export const tasks = sqliteTable("tasks", {
   // Calculated fields
   importanceV1: integer("importance_v1").notNull().default(0),
 
+  // Notes metadata (populated by API, not stored in DB)
+  // These are added in memory when fetching tasks
+  // notesCount?: number;
+  // notesLastModified?: Date;
+
   // Status fields
   completedAt: integer("completed_at", { mode: "timestamp" }),
   archivedAt: integer("archived_at", { mode: "timestamp" }),

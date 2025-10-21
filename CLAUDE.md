@@ -68,6 +68,8 @@ See the [Beads documentation](https://github.com/steveyegge/beads) for full comm
 - **If planning reveals multiple tasks**, create them ALL in Beads first, then implement one at a time
 - **Fresh sessions must pick up from Beads**, not from ephemeral session state
 
+- Be verbose as you carry out tasks. Provide output describing your understanding of the current task and how you are approaching it.
+
 ## Project Overview
 
 Toodle is a Next.js 15 application built with React 19, TypeScript, and Tailwind CSS v4. It uses the Next.js App Router architecture and is configured with shadcn/ui component library (New York style).

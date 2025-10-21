@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,62 +19,38 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useUpdateSettings } from "@/lib/queries/use-settings-mutations";
 import type { Settings as SettingsType } from "@/types";
 
 interface SettingsDrawerProps {
+  initialSettings: SettingsType | null;
   onSettingsChange?: (settings: SettingsType) => void;
 }
 
-export function SettingsDrawer({ onSettingsChange }: SettingsDrawerProps) {
+export function SettingsDrawer({ initialSettings, onSettingsChange }: SettingsDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [settings, setSettings] = useState<SettingsType | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const [settings, setSettings] = useState<SettingsType | null>(initialSettings);
 
+  const updateSettingsMutation = useUpdateSettings();
+
+  // Sync local state when initialSettings changes
   useEffect(() => {
-    if (isOpen) {
-      fetchSettings();
+    if (initialSettings) {
+      setSettings(initialSettings);
     }
-  }, [isOpen]);
-
-  const fetchSettings = async () => {
-    try {
-      setIsLoading(true);
-      const response = await fetch("/api/settings");
-      if (!response.ok) throw new Error("Failed to fetch settings");
-
-      const data = await response.json();
-      setSettings(data.settings);
-    } catch (error) {
-      console.error("Error fetching settings:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, [initialSettings]);
 
   const handleSave = async () => {
     if (!settings) return;
 
     try {
-      setIsSaving(true);
-      const response = await fetch("/api/settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
-      });
-
-      if (!response.ok) throw new Error("Failed to save settings");
-
-      const data = await response.json();
-      setSettings(data.settings);
-      onSettingsChange?.(data.settings);
+      await updateSettingsMutation.mutateAsync(settings);
+      onSettingsChange?.(settings);
 
       // Close drawer on successful save
       setIsOpen(false);
     } catch (error) {
       console.error("Error saving settings:", error);
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -93,91 +69,108 @@ export function SettingsDrawer({ onSettingsChange }: SettingsDrawerProps) {
           <Settings className="h-4 w-4" />
         </Button>
       </SheetTrigger>
-      <SheetContent className="w-[400px] overflow-y-auto sm:w-[540px]">
-        <SheetHeader>
-          <SheetTitle>Settings</SheetTitle>
-          <SheetDescription>
+      <SheetContent className="w-[400px] overflow-y-auto px-6 sm:w-[540px]">
+        <SheetHeader className="space-y-3 pb-6">
+          <SheetTitle className="text-2xl">Settings</SheetTitle>
+          <SheetDescription className="text-base">
             Configure default values and preferences for new tasks
           </SheetDescription>
         </SheetHeader>
 
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <p className="text-muted-foreground">Loading settings...</p>
-          </div>
-        ) : settings ? (
-          <div className="mt-6 space-y-6">
-            {/* Default Task Values */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Default Task Values</h3>
-
-              <div className="space-y-2">
-                <Label htmlFor="defaultPriority">Default Priority</Label>
-                <Select
-                  value={settings.defaultPriority}
-                  onValueChange={(value) =>
-                    updateSetting("defaultPriority", value as any)
-                  }
-                >
-                  <SelectTrigger id="defaultPriority">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="top">Top</SelectItem>
-                  </SelectContent>
-                </Select>
+        {settings ? (
+          <div className="space-y-8 pr-2">
+            {/* Default Task Values Section */}
+            <div className="rounded-lg border bg-card p-6 shadow-sm">
+              <div className="mb-6 space-y-2">
+                <h3 className="text-lg font-semibold tracking-tight">Default Task Values</h3>
+                <p className="text-sm text-muted-foreground">
+                  Set default values for newly created tasks
+                </p>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="defaultBucket">Default Bucket</Label>
-                <Select
-                  value={settings.defaultBucket}
-                  onValueChange={(value) =>
-                    updateSetting("defaultBucket", value as any)
-                  }
-                >
-                  <SelectTrigger id="defaultBucket">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todo">Todo</SelectItem>
-                    <SelectItem value="watch">Watch</SelectItem>
-                    <SelectItem value="later">Later</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  <Label htmlFor="defaultPriority" className="text-sm font-medium">
+                    Default Priority
+                  </Label>
+                  <Select
+                    value={settings.defaultPriority}
+                    onValueChange={(value) =>
+                      updateSetting("defaultPriority", value as any)
+                    }
+                  >
+                    <SelectTrigger id="defaultPriority" className="h-11 text-base">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="top">Top</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="defaultDueDate">Default Due Date</Label>
-                <Select
-                  value={settings.defaultDueDate}
-                  onValueChange={(value) =>
-                    updateSetting("defaultDueDate", value as any)
-                  }
-                >
-                  <SelectTrigger id="defaultDueDate">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    <SelectItem value="today">Today</SelectItem>
-                    <SelectItem value="tomorrow">Tomorrow</SelectItem>
-                    <SelectItem value="next_week">Next Week</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="space-y-3">
+                  <Label htmlFor="defaultBucket" className="text-sm font-medium">
+                    Default Bucket
+                  </Label>
+                  <Select
+                    value={settings.defaultBucket}
+                    onValueChange={(value) =>
+                      updateSetting("defaultBucket", value as any)
+                    }
+                  >
+                    <SelectTrigger id="defaultBucket" className="h-11 text-base">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todo">Todo</SelectItem>
+                      <SelectItem value="watch">Watch</SelectItem>
+                      <SelectItem value="later">Later</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-3">
+                  <Label htmlFor="defaultDueDate" className="text-sm font-medium">
+                    Default Due Date
+                  </Label>
+                  <Select
+                    value={settings.defaultDueDate}
+                    onValueChange={(value) =>
+                      updateSetting("defaultDueDate", value as any)
+                    }
+                  >
+                    <SelectTrigger id="defaultDueDate" className="h-11 text-base">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="tomorrow">Tomorrow</SelectItem>
+                      <SelectItem value="next_week">Next Week</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
-            {/* Save Button */}
-            <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={() => setIsOpen(false)}>
+            {/* Action Buttons */}
+            <div className="flex justify-end gap-3 pt-4 pr-2">
+              <Button
+                variant="outline"
+                onClick={() => setIsOpen(false)}
+                className="h-11 px-8 text-base"
+              >
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={isSaving}>
-                {isSaving ? "Saving..." : "Save Settings"}
+              <Button
+                onClick={handleSave}
+                disabled={updateSettingsMutation.isPending}
+                className="h-11 px-8 text-base"
+              >
+                {updateSettingsMutation.isPending ? "Saving..." : "Save Settings"}
               </Button>
             </div>
           </div>

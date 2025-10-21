@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import type { Task } from "@/types";
 
 interface TasksQueryParams {
@@ -33,7 +34,9 @@ async function fetchTasks(params: TasksQueryParams = {}): Promise<Task[]> {
 }
 
 export function useTasksQuery(params: TasksQueryParams = {}) {
-  return useQuery({
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
     queryKey: ["tasks", params],
     queryFn: () => fetchTasks(params),
     // Tasks are critical data - refetch on window focus
@@ -43,4 +46,18 @@ export function useTasksQuery(params: TasksQueryParams = {}) {
     // so when cache does refetch (on focus, navigation, etc), importance is fresh.
     // Worst case: 5min stale importance if user keeps app open without interaction.
   });
+
+  // Seed the notes cache when tasks load
+  useEffect(() => {
+    if (query.data) {
+      query.data.forEach((task) => {
+        if (task.notes) {
+          // Seed the notes cache for this task
+          queryClient.setQueryData(["notes", task.id], task.notes);
+        }
+      });
+    }
+  }, [query.data, queryClient]);
+
+  return query;
 }

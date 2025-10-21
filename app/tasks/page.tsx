@@ -16,6 +16,7 @@ import {
   useUpdateProject,
   useDeleteProject,
 } from "@/lib/queries";
+import { useSettingsQuery } from "@/lib/queries/use-settings-query";
 import type { Task, NewTask, Project } from "@/types";
 
 export default function TasksPage() {
@@ -40,6 +41,9 @@ export default function TasksPage() {
   const { data: projects = [] } = useProjectsQuery({
     includeArchived: true,
   });
+
+  // Fetch settings for the drawer
+  const { data: settings = null } = useSettingsQuery();
 
   // Mutation hooks with optimistic updates
   const createTaskMutation = useCreateTask();
@@ -144,13 +148,16 @@ export default function TasksPage() {
             </div>
             <div className="flex items-center gap-3">
               <ThemeToggle />
-              <SettingsDrawer />
+              <SettingsDrawer initialSettings={settings} />
             </div>
           </div>
 
           {/* Quick Add */}
           <div className="mb-6">
-            <QuickAdd onAdd={handleAddTask} />
+            <QuickAdd
+              onAdd={handleAddTask}
+              currentProjectId={selectedProjectId === "all" ? null : selectedProjectId}
+            />
           </div>
 
           {/* Task List */}

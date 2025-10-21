@@ -34,4 +34,19 @@ export const GroupingMode = {
 export type GroupingMode = (typeof GroupingMode)[keyof typeof GroupingMode];
 
 // Re-export types from schema for convenience
-export type { Task, NewTask, Project, NewProject, Settings, NewSettings } from "@/lib/db/schema";
+export type { Task as BaseTask, NewTask, Project, NewProject, Settings, NewSettings } from "@/lib/db/schema";
+
+// Note row data structure
+export interface NoteRowData {
+  id: number;
+  currentText: string;
+  updatedAt: number | Date;
+}
+
+// Extended Task type with notes data (added by API)
+import type { Task as BaseTaskType } from "@/lib/db/schema";
+export type Task = BaseTaskType & {
+  notes?: NoteRowData[];
+  notesCount?: number;
+  notesLastModified?: Date | null;
+};

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { taskRepository } from "@/lib/db/repositories";
+import { taskRepository, noteRepository } from "@/lib/db/repositories";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
 import type { NewTask } from "@/types";
 
@@ -35,6 +35,29 @@ export async function GET(request: Request) {
       ...task,
       importanceV1: calculateImportanceV1(task),
     }));
+
+    // Fetch all notes for all tasks in one query
+    const taskIds = tasks.map(t => t.id);
+    const allNotesMap = await noteRepository.getNotesForTasks(taskIds);
+
+    // Attach notes data to each task
+    tasks = tasks.map((task) => {
+      const taskNotes = allNotesMap.get(task.id) || [];
+      const lastModified = taskNotes.length > 0
+        ? taskNotes.reduce((latest, note) => {
+            const noteTime = typeof note.updatedAt === 'number' ? note.updatedAt * 1000 : new Date(note.updatedAt).getTime();
+            const latestTime = typeof latest.updatedAt === 'number' ? latest.updatedAt * 1000 : new Date(latest.updatedAt).getTime();
+            return noteTime > latestTime ? note : latest;
+          }, taskNotes[0]).updatedAt
+        : null;
+
+      return {
+        ...task,
+        notes: taskNotes,
+        notesCount: taskNotes.length,
+        notesLastModified: lastModified ? (typeof lastModified === 'number' ? new Date(lastModified * 1000) : new Date(lastModified)) : null,
+      };
+    });
 
     // Sort by importance (desc), then due proximity
     tasks.sort((a, b) => {
