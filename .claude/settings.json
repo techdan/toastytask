@@ -1,10 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(wsl*bd*)",
+      "Bash(wsl bash -c:*)",
       "Bash(npx drizzle-kit:*)",
-      "Bash(npm:*)",
-      "Bash(npx*)",
+      "Bash(npm run dev:*)",
+      "Bash(npm run build)",
+      "Bash(npm run lint)",
+      "Bash(npm install:*)",
+      "Bash(npx:*)",
       "Bash(curl:*)",
       "Bash(git:*)",
       "Bash(tasklist)",
