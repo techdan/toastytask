@@ -183,6 +183,20 @@
   - Optimistic UI updates: All user interactions (check, star, priority change, etc.) update UI immediately with async server persistence.
   - Client-side sorting and filtering to eliminate server round-trip lag.
   - Target: <50ms UI response time for all interactions; <100ms for server persistence.
+  - **Client-Side Caching Strategy**:
+    - TanStack Query (React Query v5) for intelligent caching and state management
+    - Default staleTime: 5 minutes (data considered fresh, no refetch)
+    - Default cacheTime: 30 minutes (unused data stays in cache)
+    - Optimistic updates on all mutations with automatic rollback on error
+    - Progressive loading: Priority fetch visible data, background pre-fetch other views
+    - Notes included in task fetch for instant display on toggle
+    - Client-side filtering for project/bucket/view switches (zero network latency)
+    - Cache hit rate target: >95% for navigation actions
+    - Memory budget: <100MB for 5k tasks with full notes
+  - **Database Optimizations**:
+    - Single JOIN query for notes to eliminate N+1 pattern
+    - Indexes on `tasks(projectId, deletedAt)`, `tasks(bucket, heat DESC)`, `noteRows(taskId, ordinal)`
+    - Batch endpoints for bulk operations (touch, snooze, escalate)
 - Accessibility: keyboard-first; ARIA roles on lists/controls.
 - Persistence: local PostgreSQL database (via Drizzle ORM) for MVP; schema managed through Drizzle migrations and ready for future sync.
 - Privacy: offline by default; no third-party telemetry.
@@ -212,6 +226,36 @@
   - Importance staleness bug fix: toodle-54
   - Heat lazy refresh implementation: toodle-56 (depends on toodle-40)
 
+**API Design**
+- RESTful conventions with optimizations for client-side caching
+- **Core Endpoints**:
+  - `GET /api/tasks?projectId={id}&includeNotes=true&includeCompleted=false`
+    - Fetches all tasks matching filters
+    - `includeNotes=true`: Embeds notes in response (single query, no N+1)
+    - Returns: `{ tasks: [{ id, title, ..., notes: [{ ordinal, text }] }] }`
+  - `GET /api/projects?includeArchived=false`
+    - Fetches all projects with optional archived filter
+  - `GET /api/settings`
+    - Returns user configuration (defaults, cadences, thresholds, colors)
+  - `PATCH /api/tasks/{id}` - Update single task with optimistic update support
+  - `POST /api/tasks/{id}/touch` - Increment touch count and heat
+  - `POST /api/tasks/{id}/snooze` - Set next surface date and apply cooling
+- **Batch Endpoints** (Phase 2 optimization):
+  - `POST /api/tasks/batch` - Bulk updates for multiple tasks
+    - Body: `{ updates: [{ id, changes }], action?: 'touch' | 'snooze' }`
+    - Use case: Weekly review bulk actions, multi-select operations
+  - `GET /api/initial-data` - Single call for app bootstrap
+    - Returns: `{ tasks, projects, settings }` in one round-trip
+    - Reduces initial page load from 3 requests to 1
+- **Response Format**:
+  - Success: `{ data: T, meta?: { timestamp, version } }`
+  - Error: `{ error: { message, code, details? } }`
+  - Calculated fields always fresh (importance recalculated on read)
+- **Caching Headers**:
+  - Tasks/Projects: `Cache-Control: private, no-cache` (always check server)
+  - Settings: `Cache-Control: private, max-age=300` (cache 5min)
+  - Let TanStack Query handle staleness, not HTTP cache
+
 **UI Rebuild Approach (No Copying)**
 - Reference Strategy
   - Use screenshots/screen recordings of public pages for flow reference only; never reuse HTML/CSS/JS or assets.
@@ -231,6 +275,57 @@
   - Knowledge archive search, analytics (touch history & heat over time), settings to tune model/cadences, natural-language quick add and repeat rules (e.g., "every Fri").
 - Phase 3
   - Auth, sync, notifications/PWA, integrations.
+
+**Real-Time Sync Strategy (Phase 3)**
+- Objective: Enable multi-client synchronization (web + mobile) with offline support and conflict resolution
+- **Migration Path**:
+  - Migrate from SQLite (local) → PostgreSQL (Supabase hosted)
+  - Keep Drizzle ORM schema; update connection and migration strategy
+  - One-time data export/import for existing users
+- **Real-Time Subscriptions**:
+  - Supabase Realtime: PostgreSQL logical replication to WebSocket
+  - Subscribe to changes on `tasks`, `projects`, `noteRows`, `noteRowVersions` tables
+  - Client receives INSERT/UPDATE/DELETE events in real-time
+  - Filter subscriptions by user ID (multi-tenant row-level security)
+- **Conflict Resolution**:
+  - Strategy: Last-Write-Wins (LWW) with server timestamp authority
+  - Add `version` field to tasks/projects for optimistic locking
+  - Client includes `version` in PATCH requests; server rejects if stale
+  - On conflict: Server wins, client merges and shows "Synced with latest changes" toast
+  - Importance/Heat recalculated server-side on merge (authoritative)
+- **Offline Support**:
+  - IndexedDB queue for pending mutations when offline
+  - TanStack Query persistent cache with `persistQueryClient` plugin
+  - Mutations queued and replayed on reconnect (in order)
+  - Visual indicator: "Offline mode - changes will sync when connected"
+  - Background sync API for PWA (when available)
+- **Cache Integration**:
+  - Realtime events trigger TanStack Query cache updates
+  - `queryClient.setQueryData()` to merge remote changes
+  - Optimistic updates remain (local-first UX)
+  - Automatic refetch on reconnect to ensure consistency
+- **Mobile Client Considerations**:
+  - React Native app shares TanStack Query hooks and API client
+  - Same conflict resolution and offline queue logic
+  - Platform-specific: IndexedDB (web) vs AsyncStorage (mobile)
+  - Push notifications for task reminders (Phase 3 feature)
+- **Security & Row-Level Security (RLS)**:
+  - Supabase RLS policies: users see only their own tasks/projects
+  - Auth via Supabase Auth (email/password, OAuth providers)
+  - JWT tokens in HTTP headers and WebSocket connection
+  - API routes validate user ID from token before queries
+- **Implementation Phases**:
+  - Phase 3.1: Supabase setup, migration, basic auth
+  - Phase 3.2: Realtime subscriptions, cache integration
+  - Phase 3.3: Conflict resolution, version tracking
+  - Phase 3.4: Offline queue, IndexedDB persistence
+  - Phase 3.5: Mobile React Native client
+  - Phase 3.6: PWA features, push notifications
+- **Backward Compatibility**:
+  - Local-only mode remains an option (privacy-first users)
+  - Feature flag: `ENABLE_SYNC` environment variable
+  - Graceful degradation if Supabase unavailable
+- **Related Beads Epic**: `toodle-70` (Phase 3: Multi-Client Real-Time Sync)
 
 **Acceptance Criteria (Samples)**
 - Touch raises heat immediately and moves the task up within its bucket; Snooze lowers heat and hides until `next_surface_at`.
