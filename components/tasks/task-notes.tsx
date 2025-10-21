@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,7 @@ interface TaskNotesProps {
 }
 
 export function TaskNotes({ taskId, isExpanded, onToggle }: TaskNotesProps) {
+  const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [notesText, setNotesText] = useState("");
   const [displayText, setDisplayText] = useState("");
@@ -57,6 +59,11 @@ export function TaskNotes({ taskId, isExpanded, onToggle }: TaskNotesProps) {
       const text = data.notes.map((n: any) => n.currentText || "").join("\n");
       setDisplayText(text);
       setIsEditing(false);
+
+      // Invalidate tasks cache to refetch fresh data (including updated importance)
+      // This ensures that if time has passed (e.g., midnight crossed), importance
+      // values are recalculated based on current date when tasks refetch
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
     } catch (error) {
       console.error("Error saving notes:", error);
     }

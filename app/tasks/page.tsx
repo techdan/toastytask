@@ -1,40 +1,57 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { QuickAdd } from "@/components/tasks/quick-add";
 import { TaskList } from "@/components/tasks/task-list";
 import { ProjectsSidebar } from "@/components/projects/projects-sidebar";
 import { SettingsDrawer } from "@/components/settings/settings-drawer";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
+import {
+  useTasksQuery,
+  useProjectsQuery,
+  useCreateTask,
+  useUpdateTask,
+  useDeleteTask,
+  useCreateProject,
+  useUpdateProject,
+  useDeleteProject,
+} from "@/lib/queries";
 import type { Task, NewTask, Project } from "@/types";
 
 export default function TasksPage() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null | "all">("all");
 
-  // Fetch projects and tasks on mount
-  useEffect(() => {
-    fetchProjects();
-    fetchTasks();
-  }, [selectedProjectId]);
+  // Query hooks - TanStack Query handles caching and state
+  // Fetch filtered tasks for display
+  const {
+    data: tasks = [],
+    isLoading: isLoadingTasks,
+  } = useTasksQuery({
+    projectId: selectedProjectId === "all" ? undefined : selectedProjectId,
+    includeCompleted: false,
+  });
 
-  const fetchProjects = async () => {
-    try {
-      const response = await fetch("/api/projects?includeArchived=true");
-      if (!response.ok) throw new Error("Failed to fetch projects");
+  // Always fetch ALL tasks for accurate counts in sidebar
+  const { data: allTasks = [] } = useTasksQuery({
+    projectId: undefined, // No filter - get all tasks
+    includeCompleted: false,
+  });
 
-      const data = await response.json();
-      setProjects(data.projects);
-    } catch (error) {
-      console.error("Error fetching projects:", error);
-    }
-  };
+  const { data: projects = [] } = useProjectsQuery({
+    includeArchived: true,
+  });
 
-  const sortTasks = (tasksToSort: Task[]) => {
-    return [...tasksToSort].sort((a, b) => {
+  // Mutation hooks with optimistic updates
+  const createTaskMutation = useCreateTask();
+  const updateTaskMutation = useUpdateTask();
+  const deleteTaskMutation = useDeleteTask();
+  const createProjectMutation = useCreateProject();
+  const updateProjectMutation = useUpdateProject();
+  const deleteProjectMutation = useDeleteProject();
+
+  // Client-side sorting (already sorted by server, but apply completed logic)
+  const sortedTasks = useMemo(() => {
+    return [...tasks].sort((a, b) => {
       // Completed tasks always go to bottom
       if (a.completedAt && !b.completedAt) return 1;
       if (!a.completedAt && b.completedAt) return -1;
@@ -58,202 +75,49 @@ export default function TasksPage() {
       const bCreated = typeof b.createdAt === "number" ? b.createdAt * 1000 : new Date(b.createdAt).getTime();
       return bCreated - aCreated;
     });
-  };
-
-  const fetchTasks = async () => {
-    try {
-      setIsLoading(true);
-      const params = new URLSearchParams();
-      if (selectedProjectId !== "all") {
-        params.append("projectId", String(selectedProjectId));
-      }
-
-      const response = await fetch(`/api/tasks?${params}`);
-      if (!response.ok) throw new Error("Failed to fetch tasks");
-
-      const data = await response.json();
-      setTasks(sortTasks(data.tasks));
-    } catch (error) {
-      console.error("Error fetching tasks:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, [tasks]);
 
   const handleAddTask = async (taskData: Omit<NewTask, "createdAt" | "updatedAt">) => {
-    // Optimistic update: create temporary task
-    const tempId = Date.now();
-    const tempTask: Task = {
-      id: tempId,
-      ...taskData,
-      // OPTIMISTIC UI: Calculate importance for immediate feedback
-      // Server will recalculate and this will be replaced with authoritative value
-      importanceV1: calculateImportanceV1(taskData as any),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      completedAt: null,
-      archivedAt: null,
-      deletedAt: null,
-      lastTouchedAt: null,
-      nextSurfaceAt: null,
-    } as Task;
-
-    setTasks((prev) => sortTasks([tempTask, ...prev]));
-
-    try {
-      const response = await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(taskData),
-      });
-
-      if (!response.ok) throw new Error("Failed to create task");
-
-      const data = await response.json();
-
-      // Replace temporary task with real task
-      setTasks((prev) => sortTasks(prev.map((t) => (t.id === tempId ? data.task : t))));
-    } catch (error) {
-      console.error("Error adding task:", error);
-      // Remove temporary task on error
-      setTasks((prev) => prev.filter((t) => t.id !== tempId));
-      throw error;
-    }
+    createTaskMutation.mutate(taskData as NewTask);
   };
 
   const handleUpdateTask = async (id: number, updates: Partial<Task>) => {
-    // Optimistic update: immediately update UI
-    const previousTasks = tasks;
-    setTasks((prev) =>
-      sortTasks(
-        prev.map((task) => {
-          if (task.id === id) {
-            const updatedTask = { ...task, ...updates, updatedAt: new Date() };
-
-            // OPTIMISTIC UI: Recalculate importance if relevant fields changed for immediate feedback
-            // Server will recalculate using the same algorithm and replace with authoritative value
-            if (
-              updates.priority !== undefined ||
-              updates.star !== undefined ||
-              updates.dueAt !== undefined
-            ) {
-              updatedTask.importanceV1 = calculateImportanceV1(updatedTask);
-            }
-
-            return updatedTask;
-          }
-          return task;
-        })
-      )
-    );
-
-    try {
-      const response = await fetch(`/api/tasks/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.text();
-        console.error("Update failed with status:", response.status, errorData);
-        // Revert on error
-        setTasks(previousTasks);
-        throw new Error(`Failed to update task: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      // Update with server response
-      setTasks((prev) =>
-        sortTasks(prev.map((task) => (task.id === id ? data.task : task)))
-      );
-    } catch (error) {
-      console.error("Error updating task:", error);
-    }
+    updateTaskMutation.mutate({ id, updates });
   };
 
   const handleDeleteTask = async (id: number) => {
-    try {
-      const response = await fetch(`/api/tasks/${id}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) throw new Error("Failed to delete task");
-
-      // Remove task from the list
-      setTasks((prev) => prev.filter((task) => task.id !== id));
-    } catch (error) {
-      console.error("Error deleting task:", error);
-    }
+    deleteTaskMutation.mutate(id);
   };
 
   // Project CRUD handlers
   const handleCreateProject = async (name: string, colorHex: string) => {
-    try {
-      const response = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, colorHex }),
-      });
-
-      if (!response.ok) throw new Error("Failed to create project");
-
-      const data = await response.json();
-      setProjects((prev) => [...prev, data.project]);
-    } catch (error) {
-      console.error("Error creating project:", error);
-      throw error;
-    }
+    createProjectMutation.mutate({ name, colorHex, archived: false });
   };
 
   const handleUpdateProject = async (id: number, updates: Partial<Project>) => {
-    try {
-      const response = await fetch(`/api/projects/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates),
-      });
-
-      if (!response.ok) throw new Error("Failed to update project");
-
-      const data = await response.json();
-      setProjects((prev) => prev.map((p) => (p.id === id ? data.project : p)));
-    } catch (error) {
-      console.error("Error updating project:", error);
-      throw error;
-    }
+    updateProjectMutation.mutate({ id, updates });
   };
 
   const handleDeleteProject = async (id: number) => {
-    try {
-      const response = await fetch(`/api/projects/${id}`, {
-        method: "DELETE",
-      });
+    deleteProjectMutation.mutate(id);
 
-      if (!response.ok) throw new Error("Failed to delete project");
-
-      setProjects((prev) => prev.filter((p) => p.id !== id));
-
-      // If the deleted project was selected, switch to "all"
-      if (selectedProjectId === id) {
-        setSelectedProjectId("all");
-      }
-    } catch (error) {
-      console.error("Error deleting project:", error);
-      throw error;
+    // If the deleted project was selected, switch to "all"
+    if (selectedProjectId === id) {
+      setSelectedProjectId("all");
     }
   };
 
-  // Calculate task counts per project
+  // Calculate task counts per project from ALL tasks (not filtered)
   const taskCounts = useMemo(() => {
     const counts: Record<number, number> = {};
-    tasks.forEach((task) => {
+    allTasks.forEach((task) => {
       const projectId = task.projectId || 0; // 0 for tasks with no project
       counts[projectId] = (counts[projectId] || 0) + 1;
     });
     return counts;
-  }, [tasks]);
+  }, [allTasks]);
+
+  const isLoading = isLoadingTasks;
 
   return (
     <div className="flex h-screen">
@@ -296,7 +160,7 @@ export default function TasksPage() {
             </div>
           ) : (
             <TaskList
-              tasks={tasks}
+              tasks={sortedTasks}
               onUpdate={handleUpdateTask}
               onDelete={handleDeleteTask}
             />
