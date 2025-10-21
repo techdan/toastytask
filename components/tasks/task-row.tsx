@@ -4,7 +4,6 @@ import { useState, useMemo } from "react";
 import { Star, Trash2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { PrioritySelect } from "./priority-select";
 import { DueDateDisplay } from "./due-date-display";
 import { TaskNotes } from "./task-notes";
@@ -81,7 +80,7 @@ export function TaskRow({ task, onUpdate, onDelete }: TaskRowProps) {
   return (
     <div
       className={cn(
-        "group grid grid-cols-[auto_auto_auto_1fr_auto_auto_auto_auto] items-center gap-2 rounded border bg-card px-2 py-1.5 transition-colors hover:bg-accent/30",
+        "group grid grid-cols-[auto_auto_auto_1fr_120px_90px_auto_auto] items-center gap-2 rounded border bg-card px-2 py-1.5 transition-colors hover:bg-accent/30",
         isCompleted && "opacity-50"
       )}
     >
@@ -140,19 +139,23 @@ export function TaskRow({ task, onUpdate, onDelete }: TaskRowProps) {
         )}
       </div>
 
-      {/* Due Date - Smart Display */}
-      <DueDateDisplay
-        dueAt={task.dueAt}
-        onDateChange={handleDateChange}
-        disabled={isCompleted}
-      />
+      {/* Due Date - Smart Display with fixed width column */}
+      <div className="w-[120px]">
+        <DueDateDisplay
+          dueAt={task.dueAt}
+          onDateChange={handleDateChange}
+          disabled={isCompleted}
+        />
+      </div>
 
-      {/* Priority Select - Compact */}
-      <PrioritySelect
-        value={task.priority}
-        onValueChange={handlePriorityChange}
-        disabled={isCompleted}
-      />
+      {/* Priority Select - Compact with fixed width column */}
+      <div className="w-[90px]">
+        <PrioritySelect
+          value={task.priority}
+          onValueChange={handlePriorityChange}
+          disabled={isCompleted}
+        />
+      </div>
 
       {/* Notes Toggle */}
       <TaskNotes
