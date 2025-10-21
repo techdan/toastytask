@@ -5,7 +5,7 @@ import { QuickAdd } from "@/components/tasks/quick-add";
 import { TaskList } from "@/components/tasks/task-list";
 import { ProjectsSidebar } from "@/components/projects/projects-sidebar";
 import { SettingsDrawer } from "@/components/settings/settings-drawer";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import {
   useTasksQuery,
   useProjectsQuery,

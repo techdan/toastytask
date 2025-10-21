@@ -47,16 +47,21 @@ export async function POST(
     // Split text into lines
     const lines = text.split("\n");
 
-    // Update or create note rows
+    // Update or create note rows - only update if text actually changed
     const updatedNotes = [];
 
     for (let i = 0; i < lines.length; i++) {
       const lineText = lines[i];
 
       if (existingNotes[i]) {
-        // Update existing row
-        const updated = await noteRepository.updateNoteRow(existingNotes[i].id, lineText);
-        updatedNotes.push(updated);
+        // Only update if the text has actually changed
+        if (existingNotes[i].currentText !== lineText) {
+          const updated = await noteRepository.updateNoteRow(existingNotes[i].id, lineText);
+          updatedNotes.push(updated);
+        } else {
+          // No change - keep existing note row as-is
+          updatedNotes.push(existingNotes[i]);
+        }
       } else {
         // Create new row
         const created = await noteRepository.createNoteRow(

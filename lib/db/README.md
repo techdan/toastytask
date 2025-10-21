@@ -13,6 +13,7 @@ All database operations are abstracted behind repository interfaces:
 ### Directory Structure
 ```
 lib/db/
+├── drizzle.config.ts      # Drizzle Kit configuration
 ├── schema.ts              # Drizzle schema definitions
 ├── client.ts              # Database connection singleton
 ├── seed.ts                # Database seeding script
@@ -96,7 +97,7 @@ The repository pattern allows zero-code-change database swapping:
 
 1. Install PostgreSQL adapter: `npm install drizzle-orm/postgres-js postgres`
 2. Create `PostgresTaskRepository` implementing `ITaskRepository`
-3. Update `drizzle.config.ts` dialect to `postgres`
+3. Update `lib/db/drizzle.config.ts` dialect to `postgres`
 4. Update `.env.local` with `DATABASE_TYPE=postgres`
 5. Run migration script to transfer data
 
