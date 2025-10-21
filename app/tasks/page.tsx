@@ -5,6 +5,7 @@ import { QuickAdd } from "@/components/tasks/quick-add";
 import { TaskList } from "@/components/tasks/task-list";
 import { ProjectsSidebar } from "@/components/projects/projects-sidebar";
 import { SettingsDrawer } from "@/components/settings/settings-drawer";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
 import type { Task, NewTask, Project } from "@/types";
 
@@ -278,6 +279,7 @@ export default function TasksPage() {
               </p>
             </div>
             <div className="flex items-center gap-3">
+              <ThemeToggle />
               <SettingsDrawer />
             </div>
           </div>
