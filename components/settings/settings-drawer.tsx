@@ -96,7 +96,7 @@ export function SettingsDrawer({ initialSettings, onSettingsChange }: SettingsDr
                   <Select
                     value={settings.defaultPriority}
                     onValueChange={(value) =>
-                      updateSetting("defaultPriority", value as any)
+                      updateSetting("defaultPriority", value as SettingsType["defaultPriority"])
                     }
                   >
                     <SelectTrigger id="defaultPriority" className="h-11 text-base">
@@ -118,7 +118,7 @@ export function SettingsDrawer({ initialSettings, onSettingsChange }: SettingsDr
                   <Select
                     value={settings.defaultBucket}
                     onValueChange={(value) =>
-                      updateSetting("defaultBucket", value as any)
+                      updateSetting("defaultBucket", value as SettingsType["defaultBucket"])
                     }
                   >
                     <SelectTrigger id="defaultBucket" className="h-11 text-base">
@@ -139,7 +139,7 @@ export function SettingsDrawer({ initialSettings, onSettingsChange }: SettingsDr
                   <Select
                     value={settings.defaultDueDate}
                     onValueChange={(value) =>
-                      updateSetting("defaultDueDate", value as any)
+                      updateSetting("defaultDueDate", value as SettingsType["defaultDueDate"])
                     }
                   >
                     <SelectTrigger id="defaultDueDate" className="h-11 text-base">

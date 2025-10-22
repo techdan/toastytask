@@ -3,8 +3,8 @@ import type { Config } from "drizzle-kit";
 export default {
   schema: "./lib/db/schema.ts",
   out: "./lib/db/migrations",
-  dialect: "postgresql",
+  dialect: "sqlite",
   dbCredentials: {
-    url: process.env.DATABASE_URL || "postgresql://USER:PASSWORD@localhost:5432/toodle",
+    url: process.env.DATABASE_URL || "./data/toodle.db",
   },
 } satisfies Config;

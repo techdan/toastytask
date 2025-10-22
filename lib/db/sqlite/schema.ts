@@ -1,29 +1,20 @@
 import { sql } from "drizzle-orm";
-import {
-  serial,
-  pgTable,
-  text,
-  real,
-  integer,
-  boolean,
-  timestamp,
-  index
-} from "drizzle-orm/pg-core";
+import { integer, sqliteTable, text, real, index } from "drizzle-orm/sqlite-core";
 
 // Projects table
-export const projects = pgTable("projects", {
-  id: serial("id").primaryKey(),
+export const projects = sqliteTable("projects", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   colorHex: text("color_hex").notNull().default("#6b7280"), // neutral-500
-  archived: boolean("archived").notNull().default(false),
-  createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
+  archived: integer("archived", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
-    .default(sql`(NOW() AT TIME ZONE 'UTC')`),
+    .default(sql`(unixepoch())`),
 });
 
 // Tasks table
-export const tasks = pgTable("tasks", {
-  id: serial("id").primaryKey(),
+export const tasks = sqliteTable("tasks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   title: text("title").notNull(),
   projectId: integer("project_id").references(() => projects.id),
 
@@ -31,8 +22,8 @@ export const tasks = pgTable("tasks", {
   priority: text("priority", { enum: ["low", "medium", "high", "top"] })
     .notNull()
     .default("medium"),
-  star: boolean("star").notNull().default(false),
-  dueAt: timestamp("due_at", { mode: "date", withTimezone: true }),
+  star: integer("star", { mode: "boolean" }).notNull().default(false),
+  dueAt: integer("due_at", { mode: "timestamp" }),
 
   // Bucket (Phase 2)
   bucket: text("bucket", { enum: ["todo", "watch", "later"] })
@@ -47,8 +38,8 @@ export const tasks = pgTable("tasks", {
   // Heat model fields (Phase 3)
   heat: real("heat").notNull().default(0.0),
   touchCount: integer("touch_count").notNull().default(0),
-  lastTouchedAt: timestamp("last_touched_at", { mode: "date", withTimezone: true }),
-  nextSurfaceAt: timestamp("next_surface_at", { mode: "date", withTimezone: true }),
+  lastTouchedAt: integer("last_touched_at", { mode: "timestamp" }),
+  nextSurfaceAt: integer("next_surface_at", { mode: "timestamp" }),
 
   // Calculated fields
   importanceV1: integer("importance_v1").notNull().default(0),
@@ -59,33 +50,27 @@ export const tasks = pgTable("tasks", {
   // notesLastModified?: Date;
 
   // Status fields
-  completedAt: timestamp("completed_at", { mode: "date", withTimezone: true }),
-  archivedAt: timestamp("archived_at", { mode: "date", withTimezone: true }),
-  deletedAt: timestamp("deleted_at", { mode: "date", withTimezone: true }),
+  completedAt: integer("completed_at", { mode: "timestamp" }),
+  archivedAt: integer("archived_at", { mode: "timestamp" }),
+  deletedAt: integer("deleted_at", { mode: "timestamp" }),
 
   // Timestamps
-  createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
+  createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
-    .default(sql`(NOW() AT TIME ZONE 'UTC')`),
-  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true })
+    .default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
     .notNull()
-    .default(sql`(NOW() AT TIME ZONE 'UTC')`),
+    .default(sql`(unixepoch())`),
 }, (table) => ({
   // Index for filtering tasks by project and excluding deleted ones
   projectIdDeletedAtIdx: index("tasks_project_id_deleted_at_idx").on(table.projectId, table.deletedAt),
   // Index for sorting tasks by heat within each bucket
   bucketHeatIdx: index("tasks_bucket_heat_idx").on(table.bucket, table.heat),
-  // Index for sorting by due date (common in task views)
-  dueAtIdx: index("tasks_due_at_idx").on(table.dueAt),
-  // Index for filtering completed tasks
-  completedAtIdx: index("tasks_completed_at_idx").on(table.completedAt),
-  // Composite index for active tasks sorted by importance
-  activeImportanceIdx: index("tasks_active_importance_idx").on(table.deletedAt, table.importanceV1),
 }));
 
 // Settings table (single row for user preferences)
-export const settings = pgTable("settings", {
-  id: serial("id").primaryKey(),
+export const settings = sqliteTable("settings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
 
   // Default values for new tasks
   defaultPriority: text("default_priority", {
@@ -145,39 +130,39 @@ export const settings = pgTable("settings", {
     .notNull()
     .default("ungrouped"),
 
-  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true })
+  updatedAt: integer("updated_at", { mode: "timestamp" })
     .notNull()
-    .default(sql`(NOW() AT TIME ZONE 'UTC')`),
+    .default(sql`(unixepoch())`),
 });
 
 // Note tables for per-line versioned notes
-export const noteRows = pgTable("note_rows", {
-  id: serial("id").primaryKey(),
+export const noteRows = sqliteTable("note_rows", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   taskId: integer("task_id")
     .notNull()
     .references(() => tasks.id, { onDelete: "cascade" }),
   ordinal: integer("ordinal").notNull(), // Order of lines in the note
   activeVersionId: integer("active_version_id"), // Points to current version
-  createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
+  createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
-    .default(sql`(NOW() AT TIME ZONE 'UTC')`),
-  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true })
+    .default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
     .notNull()
-    .default(sql`(NOW() AT TIME ZONE 'UTC')`),
+    .default(sql`(unixepoch())`),
 }, (table) => ({
   // Index for fetching notes efficiently in order for a given task
   taskIdOrdinalIdx: index("note_rows_task_id_ordinal_idx").on(table.taskId, table.ordinal),
 }));
 
-export const noteRowVersions = pgTable("note_row_versions", {
-  id: serial("id").primaryKey(),
+export const noteRowVersions = sqliteTable("note_row_versions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   noteRowId: integer("note_row_id")
     .notNull()
     .references(() => noteRows.id, { onDelete: "cascade" }),
   text: text("text").notNull(),
-  createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
+  createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
-    .default(sql`(NOW() AT TIME ZONE 'UTC')`),
+    .default(sql`(unixepoch())`),
 });
 
 // Type exports for use in application code

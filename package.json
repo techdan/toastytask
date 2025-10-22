@@ -11,7 +11,14 @@
     "db:migrate": "drizzle-kit migrate --config=lib/db/drizzle.config.ts",
     "db:push": "drizzle-kit push --config=lib/db/drizzle.config.ts",
     "db:studio": "drizzle-kit studio --config=lib/db/drizzle.config.ts",
-    "db:seed": "tsx lib/db/seed.ts"
+    "db:seed": "tsx lib/db/seed.ts",
+    "pg:test": "node lib/db/scripts/test-postgres-connection.js",
+    "pg:create": "node lib/db/scripts/create-postgres-database.js",
+    "pg:migrate": "node lib/db/scripts/apply-postgres-migration.js",
+    "pg:verify": "node lib/db/scripts/verify-postgres-schema.js",
+    "pg:import": "node lib/db/scripts/migrate-sqlite-to-postgres.js",
+    "supabase:setup": "node lib/db/scripts/setup-supabase.js",
+    "supabase:import": "node lib/db/scripts/import-to-supabase.js"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.3",
@@ -30,6 +37,7 @@
     "lucide-react": "^0.545.0",
     "next": "15.5.4",
     "next-themes": "^0.4.6",
+    "pg": "^8.16.3",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "sonner": "^2.0.7",
@@ -42,6 +50,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^17.2.3",
     "drizzle-kit": "^0.31.5",
     "eslint": "^9",
     "eslint-config-next": "15.5.4",

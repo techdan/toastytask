@@ -69,3 +69,4 @@ The design system uses CSS variables for theming. Light and dark color schemes a
 
 When adding shadcn/ui components, they will be installed to `@/components/ui` with the New York style preset. Use the `cn()` utility from `@/lib/utils` for conditional class merging.
 - always use descriptive variable names
+

@@ -22,7 +22,7 @@ export async function PATCH(
     }
 
     // Prepare updates
-    const updates: any = { ...body };
+    const updates: Record<string, unknown> = { ...body };
 
     // Convert date strings to Date objects if present
     if (updates.dueAt !== undefined) {

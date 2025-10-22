@@ -107,7 +107,7 @@ export async function POST(request: Request) {
     };
 
     // Calculate importance before saving
-    taskData.importanceV1 = calculateImportanceV1(taskData as any);
+    taskData.importanceV1 = calculateImportanceV1(taskData as Parameters<typeof calculateImportanceV1>[0]);
 
     const task = await taskRepository.create(taskData);
 

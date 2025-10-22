@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const includeArchived = searchParams.get("includeArchived") === "true";
 
-    let projects = await projectRepository.findAll(includeArchived);
+    const projects = await projectRepository.findAll(includeArchived);
 
     // Sort by name
     projects.sort((a, b) => a.name.localeCompare(b.name));
