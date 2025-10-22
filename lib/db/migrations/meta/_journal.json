@@ -15,6 +15,13 @@
       "when": 1760157373185,
       "tag": "0001_needy_typhoid_mary",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1761106250208,
+      "tag": "0002_sticky_mikhail_rasputin",
+      "breakpoints": true
     }
   ]
 }

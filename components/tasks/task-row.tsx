@@ -182,7 +182,7 @@ export function TaskRow({ task, onUpdate, onDelete }: TaskRowProps) {
       {/* Notes Panel - Rendered outside grid */}
       {notesExpanded && (
         <div className="px-2">
-          <TaskNotesPanel taskId={task.id} />
+          <TaskNotesPanel taskId={task.id} initialNotes={task.notes} />
         </div>
       )}
     </div>

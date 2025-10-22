@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import type { Settings } from "@/types";
 
 interface SettingsResponse {
@@ -44,11 +45,17 @@ export function useUpdateSettings() {
 
       return { previousSettings };
     },
-    onError: (_error, _variables, context) => {
+    onSuccess: () => {
+      toast.success("Settings updated successfully");
+    },
+    onError: (error, _variables, context) => {
       // Rollback on error
       if (context?.previousSettings) {
         queryClient.setQueryData(["settings"], context.previousSettings);
       }
+      toast.error("Failed to update settings", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
     },
     onSettled: () => {
       // Refetch to ensure consistency

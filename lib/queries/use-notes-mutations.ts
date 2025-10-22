@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import type { NoteRowData } from "./use-notes-query";
 
 interface SaveNotesData {
@@ -69,11 +70,14 @@ export function useSaveNotes() {
         refetchType: 'active' // Force active queries to refetch immediately
       });
     },
-    onError: (err, variables, context) => {
+    onError: (error, variables, context) => {
       // Rollback to previous value on error
       if (context?.previousNotes) {
         queryClient.setQueryData(["notes", variables.taskId], context.previousNotes);
       }
+      toast.error("Failed to save notes", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
     },
   });
 }

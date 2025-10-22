@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
 import type { Task, NewTask } from "@/types";
 
@@ -63,6 +64,12 @@ export function useCreateTask() {
     onSuccess: () => {
       // Invalidate tasks queries to refetch with new task
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      toast.success("Task created successfully");
+    },
+    onError: (error) => {
+      toast.error("Failed to create task", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
     },
   });
 }
@@ -109,13 +116,16 @@ export function useUpdateTask() {
 
       return { previousTasks };
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       // Rollback on error
       if (context?.previousTasks) {
         context.previousTasks.forEach(([queryKey, data]) => {
           queryClient.setQueryData(queryKey, data);
         });
       }
+      toast.error("Failed to update task", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
     },
     onSettled: () => {
       // Refetch to ensure consistency
@@ -148,13 +158,19 @@ export function useDeleteTask() {
 
       return { previousTasks };
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       // Rollback on error
       if (context?.previousTasks) {
         context.previousTasks.forEach(([queryKey, data]) => {
           queryClient.setQueryData(queryKey, data);
         });
       }
+      toast.error("Failed to delete task", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    },
+    onSuccess: () => {
+      toast.success("Task deleted successfully");
     },
     onSettled: () => {
       // Refetch to ensure consistency

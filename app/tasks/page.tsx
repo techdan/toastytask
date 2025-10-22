@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { QuickAdd } from "@/components/tasks/quick-add";
 import { TaskList } from "@/components/tasks/task-list";
 import { ProjectsSidebar } from "@/components/projects/projects-sidebar";
@@ -21,6 +22,7 @@ import type { Task, NewTask, Project } from "@/types";
 
 export default function TasksPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<number | null | "all">("all");
+  const queryClient = useQueryClient();
 
   // Query hooks - TanStack Query handles caching and state
   // Fetch filtered tasks for display
@@ -44,6 +46,37 @@ export default function TasksPage() {
 
   // Fetch settings for the drawer
   const { data: settings = null } = useSettingsQuery();
+
+  // Background pre-fetching for better perceived performance
+  useEffect(() => {
+    // After initial load, pre-fetch tasks for each project in the background
+    // This makes switching between projects instant
+    if (projects.length > 0 && !isLoadingTasks) {
+      projects.forEach((project) => {
+        // Only pre-fetch if not already in cache
+        queryClient.prefetchQuery({
+          queryKey: ["tasks", { projectId: project.id, includeCompleted: false }],
+          queryFn: async () => {
+            const response = await fetch(`/api/tasks?projectId=${project.id}&includeCompleted=false`);
+            if (!response.ok) return [];
+            const data = await response.json();
+            return data.tasks;
+          },
+        });
+      });
+
+      // Also pre-fetch tasks with no project
+      queryClient.prefetchQuery({
+        queryKey: ["tasks", { projectId: null, includeCompleted: false }],
+        queryFn: async () => {
+          const response = await fetch(`/api/tasks?projectId=null&includeCompleted=false`);
+          if (!response.ok) return [];
+          const data = await response.json();
+          return data.tasks;
+        },
+      });
+    }
+  }, [projects, isLoadingTasks, queryClient]);
 
   // Mutation hooks with optimistic updates
   const createTaskMutation = useCreateTask();

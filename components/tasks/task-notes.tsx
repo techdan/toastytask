@@ -1,24 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Notebook, NotebookText, NotebookPen } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useNotesQuery, useSaveNotes, type NoteRowData } from "@/lib/queries";
-
-interface TaskNotesIconProps {
-  taskId: number;
-  isExpanded: boolean;
-  onToggle: () => void;
-  onMetadataLoaded?: (hasContent: boolean, lastModified: Date | null) => void;
-}
-
-interface TaskNotesPanelProps {
-  taskId: number;
-  isExpanded: boolean;
-  noteRows: NoteRowData[];
-  onNotesLoaded?: (rows: NoteRowData[]) => void;
-}
 
 interface TaskNotesProps {
   taskId: number;
@@ -28,7 +14,7 @@ interface TaskNotesProps {
   notesLastModified?: Date | null;
 }
 
-export function TaskNotes({ taskId, isExpanded, onToggle, notesCount = 0, notesLastModified = null }: TaskNotesProps) {
+export function TaskNotes({ isExpanded, onToggle, notesCount = 0, notesLastModified = null }: TaskNotesProps) {
   const [isHovered, setIsHovered] = useState(false);
 
   // Derive metadata from task props (passed from API)
@@ -99,13 +85,14 @@ export function TaskNotes({ taskId, isExpanded, onToggle, notesCount = 0, notesL
 }
 
 // Separate component for the notes panel
-export function TaskNotesPanel({ taskId }: { taskId: number }) {
+export function TaskNotesPanel({ taskId, initialNotes }: { taskId: number; initialNotes?: NoteRowData[] }) {
   const [isEditing, setIsEditing] = useState(false);
   const [notesText, setNotesText] = useState("");
   const [hoveredLineIndex, setHoveredLineIndex] = useState<number | null>(null);
 
   // Use query hook for fetching notes with caching
-  const { data: noteRows = [], isLoading } = useNotesQuery(taskId, true);
+  // If initialNotes are provided (from task cache), use them for instant display
+  const { data: noteRows = initialNotes || [], isLoading } = useNotesQuery(taskId, true, initialNotes);
 
   // Use mutation hook for saving notes
   const saveNotesMutation = useSaveNotes();

@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import type { Project, NewProject } from "@/types";
 
 interface ProjectResponse {
@@ -65,6 +66,12 @@ export function useCreateProject() {
     onSuccess: () => {
       // Invalidate projects queries to refetch with new project
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success("Project created successfully");
+    },
+    onError: (error) => {
+      toast.error("Failed to create project", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
     },
   });
 }
@@ -98,13 +105,16 @@ export function useUpdateProject() {
 
       return { previousProjects };
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       // Rollback on error
       if (context?.previousProjects) {
         context.previousProjects.forEach(([queryKey, data]) => {
           queryClient.setQueryData(queryKey, data);
         });
       }
+      toast.error("Failed to update project", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
     },
     onSettled: () => {
       // Refetch to ensure consistency
@@ -139,13 +149,19 @@ export function useDeleteProject() {
 
       return { previousProjects };
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       // Rollback on error
       if (context?.previousProjects) {
         context.previousProjects.forEach(([queryKey, data]) => {
           queryClient.setQueryData(queryKey, data);
         });
       }
+      toast.error("Failed to delete project", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    },
+    onSuccess: () => {
+      toast.success("Project deleted successfully");
     },
     onSettled: () => {
       // Refetch to ensure consistency

@@ -21,11 +21,12 @@ async function fetchNotes(taskId: number): Promise<NoteRowData[]> {
   return data.notes;
 }
 
-export function useNotesQuery(taskId: number, enabled: boolean = true) {
+export function useNotesQuery(taskId: number, enabled: boolean = true, initialData?: NoteRowData[]) {
   return useQuery({
     queryKey: ["notes", taskId],
     queryFn: () => fetchNotes(taskId),
     enabled, // Only fetch when enabled (e.g., when notes panel is expanded)
+    initialData, // Use cached notes from task fetch for instant display
     // Notes are less critical than tasks - don't refetch on every window focus
     refetchOnWindowFocus: false,
     // Cache notes for longer since they don't change as frequently

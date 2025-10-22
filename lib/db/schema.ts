@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text, real } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text, real, index } from "drizzle-orm/sqlite-core";
 
 // Projects table
 export const projects = sqliteTable("projects", {
@@ -56,7 +56,12 @@ export const tasks = sqliteTable("tasks", {
   updatedAt: integer("updated_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
-});
+}, (table) => ({
+  // Index for filtering tasks by project and excluding deleted ones
+  projectIdDeletedAtIdx: index("tasks_project_id_deleted_at_idx").on(table.projectId, table.deletedAt),
+  // Index for sorting tasks by heat within each bucket
+  bucketHeatIdx: index("tasks_bucket_heat_idx").on(table.bucket, table.heat),
+}));
 
 // Settings table (single row for user preferences)
 export const settings = sqliteTable("settings", {
@@ -139,7 +144,10 @@ export const noteRows = sqliteTable("note_rows", {
   updatedAt: integer("updated_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
-});
+}, (table) => ({
+  // Index for fetching notes efficiently in order for a given task
+  taskIdOrdinalIdx: index("note_rows_task_id_ordinal_idx").on(table.taskId, table.ordinal),
+}));
 
 export const noteRowVersions = sqliteTable("note_row_versions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
