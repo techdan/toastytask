@@ -2,77 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Task Tracking with Beads
-
-**IMPORTANT: This project uses Beads for task tracking instead of markdown TODOs.**
-
-- **Beads (bd) is installed in WSL Ubuntu** at `/home/danman/go/bin/bd`
-- **Always run bd commands through WSL**: `wsl bash -c "cd /mnt/c/src/ClaudeCode/toodle && /home/danman/go/bin/bd <command>"`
-- Beads does not work natively on Windows (Unix-specific dependencies)
-- The project database is at `.beads/toodle.db` (accessed from WSL)
-- Commands are auto-approved in `.claude/settings.json` - no permission prompts needed
-
-### Common Beads Commands (via WSL)
-
-```bash
-# Find ready work
-wsl bash -c "cd /mnt/c/src/ClaudeCode/toodle && /home/danman/go/bin/bd ready --json"
-
-# Create new issue
-wsl bash -c "cd /mnt/c/src/ClaudeCode/toodle && /home/danman/go/bin/bd create 'Task title' -t task -p 1 --json"
-
-# Update issue status
-wsl bash -c "cd /mnt/c/src/ClaudeCode/toodle && /home/danman/go/bin/bd update <id> --status in_progress --json"
-
-# Complete work
-wsl bash -c "cd /mnt/c/src/ClaudeCode/toodle && /home/danman/go/bin/bd close <id> --reason 'Done' --json"
-
-# Show issue details
-wsl bash -c "cd /mnt/c/src/ClaudeCode/toodle && /home/danman/go/bin/bd show <id> --json"
-```
-
-See the [Beads documentation](https://github.com/steveyegge/beads) for full command reference.
-
-## Planning & Documentation Workflow
-
-**IMPORTANT: All planning and feature tracking must be documented in structured formats.**
-
-### Where to Document
-1. **requirements.md** (`docs/requirements.md`)
-   - Product requirements and specifications
-   - Architecture decisions and patterns
-   - Acceptance criteria and test plans
-   - Update whenever features/architecture changes
-
-2. **Beads Issue Tracker**
-   - All tasks, bugs, and epics tracked in `.beads/toodle.db`
-   - Use `bd create` for new work items
-   - Use `bd update` to track progress
-   - Never use markdown TODO comments in code
-
-3. **Code Comments**
-   - Implementation details and "why" explanations only
-   - No TODO or FIXME comments (use Beads instead)
-
-### Workflow
-1. User request → Research & clarify requirements
-2. Update `docs/requirements.md` with new/changed specs
-3. Create Beads epic/tasks to track implementation
-4. Implement with references to Beads issue IDs in commits
-5. Update requirements.md when complete
-
-**CRITICAL RULES:**
-- **DO NOT use markdown TODO lists** for planning or tracking
-- **DO NOT use TodoWrite tool** for implementation tasks (only for tracking current Beads task during work session)
-- **ALL implementation work** must have a corresponding Beads task created BEFORE starting
-- **If planning reveals multiple tasks**, create them ALL in Beads first, then implement one at a time
-- **Fresh sessions must pick up from Beads**, not from ephemeral session state
-
-- Be verbose as you carry out tasks. Provide output describing your understanding of the current task and how you are approaching it.
+**Note**: This project uses [bd (beads)](https://github.com/steveyegge/beads) for issue tracking. Use `bd` commands instead of markdown TODOs. See [AGENTS.md](AGENTS.md) for workflow details.
 
 ## Project Overview
 
 Toodle is a Next.js 15 application built with React 19, TypeScript, and Tailwind CSS v4. It uses the Next.js App Router architecture and is configured with shadcn/ui component library (New York style).
+
+## General Rules
+
+- Be verbose as you carry out tasks. Provide output describing your understanding of the current task and how you are approaching it.
 
 ## Development Commands
 

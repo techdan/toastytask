@@ -1,7 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(wsl bash -c:*)",
+      "Bash(bd:*)",
       "Bash(npx drizzle-kit:*)",
       "Bash(npm run dev:*)",
       "Bash(npm run build)",
@@ -15,10 +15,13 @@
       "Bash(md:*)",
       "Bash(mkdir:*)",
       "Bash(grep:*)",
+      "Bash(cat:*)",
       "Bash(ls:*)",
       "Bash(dir:*)",
       "Bash(pwd)",
       "Bash(echo:*)",
+      "Bash(sqlite3:*)",
+      "Bash(bd list --json | python:*)",
       "Read",
       "Write",
       "Edit",
@@ -31,7 +34,6 @@
     ],
     "deny": [
       "Bash(rm -rf :*)",
-      "Bash(wsl rm -rf :*)",
       "Bash(del /s :*)",
       "Bash(rd /s :*)",
       "Bash(git push --force:*)",
