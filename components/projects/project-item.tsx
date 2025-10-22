@@ -23,23 +23,23 @@ interface ProjectItemProps {
 }
 
 const colorOptions = [
-  "#ef4444", // red
-  "#f97316", // orange
-  "#f59e0b", // amber
-  "#eab308", // yellow
-  "#84cc16", // lime
-  "#22c55e", // green
-  "#10b981", // emerald
-  "#14b8a6", // teal
-  "#06b6d4", // cyan
-  "#0ea5e9", // sky
-  "#3b82f6", // blue
-  "#6366f1", // indigo
-  "#8b5cf6", // violet
-  "#a855f7", // purple
-  "#d946ef", // fuchsia
-  "#ec4899", // pink
-  "#6b7280", // gray
+  "#f87171", // red-400
+  "#fb923c", // orange-400
+  "#fbbf24", // amber-400
+  "#facc15", // yellow-400
+  "#a3e635", // lime-400
+  "#4ade80", // green-400
+  "#34d399", // emerald-400
+  "#2dd4bf", // teal-400
+  "#22d3ee", // cyan-400
+  "#38bdf8", // sky-400
+  "#60a5fa", // blue-400
+  "#818cf8", // indigo-400
+  "#a78bfa", // violet-400
+  "#c084fc", // purple-400
+  "#e879f9", // fuchsia-400
+  "#f472b6", // pink-400
+  "#9ca3af", // gray-400
 ];
 
 export function ProjectItem({

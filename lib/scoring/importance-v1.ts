@@ -133,11 +133,11 @@ export function calculateImportanceV1WithFactors(
  * Maps 2-12 range to visual indicators
  */
 export function getImportanceColor(score: number): string {
-  if (score <= 3) return "bg-blue-500"; // Low importance (2-3)
-  if (score <= 5) return "bg-green-500"; // Medium-low (4-5)
-  if (score <= 7) return "bg-yellow-500"; // Medium (6-7)
-  if (score <= 9) return "bg-orange-500"; // Medium-high (8-9)
-  return "bg-red-500"; // High importance (10-12)
+  if (score <= 3) return "bg-blue-400"; // Low importance (2-3)
+  if (score <= 5) return "bg-green-400"; // Medium-low (4-5)
+  if (score <= 7) return "bg-yellow-400"; // Medium (6-7)
+  if (score <= 9) return "bg-orange-400"; // Medium-high (8-9)
+  return "bg-red-400"; // High importance (10-12)
 }
 
 /**

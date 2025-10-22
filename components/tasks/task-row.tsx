@@ -108,7 +108,7 @@ export function TaskRow({ task, onUpdate, onDelete }: TaskRowProps) {
         <button
           className={cn(
             "shrink-0 transition-colors cursor-pointer",
-            task.star ? "text-yellow-500" : "text-muted-foreground/40 hover:text-muted-foreground"
+            task.star ? "text-yellow-400" : "text-muted-foreground/40 hover:text-muted-foreground"
           )}
           onClick={handleStarClick}
           disabled={isCompleted}

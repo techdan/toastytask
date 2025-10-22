@@ -24,11 +24,11 @@ const priorityLabels: Record<Priority, string> = {
   top: "Top",
 };
 
-const priorityColors: Record<Priority, string> = {
-  low: "text-blue-600",
-  medium: "text-green-600",
-  high: "text-orange-600",
-  top: "text-red-600",
+const priorityStyles: Record<Priority, string> = {
+  low: "text-muted-foreground",
+  medium: "",
+  high: "font-bold text-[#344c63] dark:text-[#7a9ec6]",
+  top: "font-bold text-[#990000] dark:text-[#dd5555]",
 };
 
 // Reverse order: Top → Low for quick access to high priorities
@@ -47,8 +47,8 @@ export function PrioritySelect({ value, onValueChange, disabled }: PrioritySelec
     return (
       <button
         className={cn(
-          "text-xs font-medium hover:underline transition-colors px-2 py-1 rounded cursor-pointer",
-          priorityColors[value],
+          "text-xs hover:underline transition-colors px-2 py-1 rounded cursor-pointer",
+          priorityStyles[value],
           disabled && "opacity-50 cursor-not-allowed hover:no-underline"
         )}
         onClick={() => !disabled && setIsOpen(true)}
@@ -71,13 +71,13 @@ export function PrioritySelect({ value, onValueChange, disabled }: PrioritySelec
     >
       <SelectTrigger className="w-[90px] h-7 text-xs">
         <SelectValue>
-          <span className={priorityColors[value]}>{priorityLabels[value]}</span>
+          <span className={priorityStyles[value]}>{priorityLabels[value]}</span>
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {priorityOrder.map((priority) => (
           <SelectItem key={priority} value={priority}>
-            <span className={priorityColors[priority]}>{priorityLabels[priority]}</span>
+            <span className={priorityStyles[priority]}>{priorityLabels[priority]}</span>
           </SelectItem>
         ))}
       </SelectContent>
