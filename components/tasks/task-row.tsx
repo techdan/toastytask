@@ -90,7 +90,7 @@ export function TaskRow({ task, onUpdate, onDelete }: TaskRowProps) {
         <Checkbox
           checked={isCompleted}
           onCheckedChange={handleCheckboxChange}
-          className="h-4 w-4"
+          className="h-4 w-4 cursor-pointer"
         />
 
         {/* Importance Badge - Compact */}
@@ -107,7 +107,7 @@ export function TaskRow({ task, onUpdate, onDelete }: TaskRowProps) {
         {/* Star Button - Compact */}
         <button
           className={cn(
-            "shrink-0 transition-colors",
+            "shrink-0 transition-colors cursor-pointer",
             task.star ? "text-yellow-500" : "text-muted-foreground/40 hover:text-muted-foreground"
           )}
           onClick={handleStarClick}
@@ -117,13 +117,15 @@ export function TaskRow({ task, onUpdate, onDelete }: TaskRowProps) {
         </button>
 
         {/* Notes Toggle */}
-        <TaskNotes
-          taskId={task.id}
-          isExpanded={notesExpanded}
-          onToggle={() => setNotesExpanded(!notesExpanded)}
-          notesCount={task.notesCount}
-          notesLastModified={task.notesLastModified}
-        />
+        <div className="mr-3">
+          <TaskNotes
+            taskId={task.id}
+            isExpanded={notesExpanded}
+            onToggle={() => setNotesExpanded(!notesExpanded)}
+            notesCount={task.notesCount}
+            notesLastModified={task.notesLastModified}
+          />
+        </div>
 
         {/* Title - More compact */}
         <div className="flex-1 min-w-0">
@@ -139,7 +141,7 @@ export function TaskRow({ task, onUpdate, onDelete }: TaskRowProps) {
           ) : (
             <button
               className={cn(
-                "w-full text-left text-sm hover:text-primary",
+                "w-full text-left text-sm hover:text-primary cursor-pointer",
                 isCompleted && "line-through"
               )}
               onClick={handleTitleClick}

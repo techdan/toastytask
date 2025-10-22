@@ -49,9 +49,9 @@ export function ProjectsSidebar({
   };
 
   return (
-    <div className="flex h-full w-64 flex-col border-r bg-muted/20 p-4">
+    <div className="flex h-full w-64 flex-col border-r bg-muted/20 p-4 pr-2">
       {/* Header */}
-      <div className="mb-4">
+      <div className="mb-4 pr-2">
         <h2 className="mb-2 text-sm font-semibold text-muted-foreground">PROJECTS</h2>
       </div>
 
@@ -59,7 +59,7 @@ export function ProjectsSidebar({
       <button
         onClick={() => onSelectProject("all")}
         className={cn(
-          "mb-2 flex w-full items-center justify-between rounded px-3 py-2 text-sm transition-colors hover:bg-accent",
+          "mb-2 flex w-full items-center justify-between rounded pl-3 pr-2 py-2 text-sm transition-colors hover:bg-accent",
           selectedProjectId === "all" && "bg-accent font-medium"
         )}
       >
@@ -67,14 +67,18 @@ export function ProjectsSidebar({
           <Folder className="h-4 w-4" />
           <span>All Projects</span>
         </div>
-        <span className="rounded bg-muted px-1.5 py-0.5 text-xs">{totalActiveTasks}</span>
+        <div className="flex items-center gap-1">
+          <span className="rounded bg-muted px-1.5 py-0.5 text-xs">{totalActiveTasks}</span>
+          {/* Spacer to align with individual project items that have a menu button */}
+          <div className="w-4" />
+        </div>
       </button>
 
       {/* No Project Option */}
       <button
         onClick={() => onSelectProject(null)}
         className={cn(
-          "mb-4 flex w-full items-center justify-between rounded px-3 py-2 text-sm transition-colors hover:bg-accent",
+          "mb-4 flex w-full items-center justify-between rounded pl-3 pr-2 py-2 text-sm transition-colors hover:bg-accent",
           selectedProjectId === null && "bg-accent font-medium"
         )}
       >
@@ -82,7 +86,11 @@ export function ProjectsSidebar({
           <div className="h-3 w-3 rounded-full border-2 border-muted-foreground" />
           <span>No Project</span>
         </div>
-        <span className="rounded bg-muted px-1.5 py-0.5 text-xs">{taskCounts[0] || 0}</span>
+        <div className="flex items-center gap-1">
+          <span className="rounded bg-muted px-1.5 py-0.5 text-xs">{taskCounts[0] || 0}</span>
+          {/* Spacer to align with individual project items that have a menu button */}
+          <div className="w-4" />
+        </div>
       </button>
 
       {/* Project List */}

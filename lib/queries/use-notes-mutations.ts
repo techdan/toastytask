@@ -40,6 +40,12 @@ export function useSaveNotes() {
       // Snapshot the previous value
       const previousNotes = queryClient.getQueryData<NoteRowData[]>(["notes", taskId]);
 
+      // If text is empty or only whitespace, set to empty array
+      if (text.trim() === "") {
+        queryClient.setQueryData(["notes", taskId], []);
+        return { previousNotes };
+      }
+
       // Optimistically update the cache with the new text
       const lines = text.split("\n");
       const optimisticNotes: NoteRowData[] = lines.map((line, index) => ({
@@ -57,8 +63,11 @@ export function useSaveNotes() {
       // Set the actual server response data
       queryClient.setQueryData(["notes", variables.taskId], data);
 
-      // Invalidate tasks cache since importance might change
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      // Invalidate and refetch tasks cache to update notesCount and notesLastModified
+      queryClient.invalidateQueries({
+        queryKey: ["tasks"],
+        refetchType: 'active' // Force active queries to refetch immediately
+      });
     },
     onError: (err, variables, context) => {
       // Rollback to previous value on error

@@ -44,6 +44,14 @@ export async function POST(
     // Get existing notes
     const existingNotes = await noteRepository.getNotesForTask(taskId);
 
+    // If text is empty or only whitespace, delete all notes
+    if (text.trim() === "") {
+      for (const note of existingNotes) {
+        await noteRepository.deleteNoteRow(note.id);
+      }
+      return NextResponse.json({ notes: [] });
+    }
+
     // Split text into lines
     const lines = text.split("\n");
 

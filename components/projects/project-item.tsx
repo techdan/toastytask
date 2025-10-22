@@ -97,7 +97,7 @@ export function ProjectItem({
   return (
     <div
       className={cn(
-        "group flex items-center justify-between rounded px-3 py-2 transition-colors hover:bg-accent",
+        "group flex items-center justify-between rounded pl-3 pr-2 py-2 transition-colors hover:bg-accent",
         isSelected && "bg-accent font-medium",
         project.archived && "opacity-60"
       )}

@@ -72,7 +72,7 @@ export function TaskNotes({ taskId, isExpanded, onToggle, notesCount = 0, notesL
       <button
         onClick={onToggle}
         className={cn(
-          "transition-colors",
+          "transition-colors cursor-pointer",
           isExpanded ? "text-primary" :
             hasContent ? "text-foreground/70 hover:text-foreground" :
             "text-muted-foreground/40 hover:text-muted-foreground"
@@ -119,14 +119,11 @@ export function TaskNotesPanel({ taskId }: { taskId: number }) {
   }, [noteRows, isEditing]);
 
   const handleSave = () => {
-    saveNotesMutation.mutate(
-      { taskId, text: notesText },
-      {
-        onSuccess: () => {
-          setIsEditing(false);
-        },
-      }
-    );
+    // Optimistically exit edit mode immediately for snappy UX
+    setIsEditing(false);
+
+    // Save to server with optimistic update
+    saveNotesMutation.mutate({ taskId, text: notesText });
   };
 
   const handleBlur = () => {
@@ -180,7 +177,7 @@ export function TaskNotesPanel({ taskId }: { taskId: number }) {
           autoFocus
         />
       ) : (
-        <div className="min-h-[60px] cursor-text" onClick={handleClick}>
+        <div className="min-h-[60px] cursor-pointer" onClick={handleClick}>
           {noteRows.length > 0 ? (
             <div className="space-y-0">
               {noteRows.map((row, index) => {
