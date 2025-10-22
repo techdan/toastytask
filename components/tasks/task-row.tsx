@@ -11,6 +11,13 @@ import { calculateImportanceV1, getImportanceColor } from "@/lib/scoring/importa
 import type { Task, Priority } from "@/types";
 import { cn } from "@/lib/utils";
 
+const priorityStyles: Record<Priority, string> = {
+  low: "text-muted-foreground",
+  medium: "",
+  high: "font-bold text-[#344c63] dark:text-[#7a9ec6]",
+  top: "font-bold text-[#990000] dark:text-[#dd5555]",
+};
+
 interface TaskRowProps {
   task: Task;
   onUpdate: (id: number, updates: Partial<Task>) => void;
@@ -142,6 +149,7 @@ export function TaskRow({ task, onUpdate, onDelete }: TaskRowProps) {
             <button
               className={cn(
                 "w-full text-left text-sm hover:text-primary cursor-pointer",
+                priorityStyles[task.priority],
                 isCompleted && "line-through"
               )}
               onClick={handleTitleClick}

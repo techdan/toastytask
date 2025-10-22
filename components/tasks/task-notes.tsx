@@ -151,7 +151,7 @@ export function TaskNotesPanel({ taskId, initialNotes }: { taskId: number; initi
   };
 
   return (
-    <div className="mt-2 rounded border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-900 dark:bg-yellow-950/20">
+    <div className="mt-2 rounded bg-[#FFFACD] dark:bg-[#7a7550] p-3 shadow-sm dark:shadow-[0_1px_3px_rgba(122,117,80,0.3)]">
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading notes...</p>
       ) : isEditing ? (
@@ -159,7 +159,7 @@ export function TaskNotesPanel({ taskId, initialNotes }: { taskId: number; initi
           value={notesText}
           onChange={(e) => setNotesText(e.target.value)}
           onBlur={handleBlur}
-          className="min-h-[100px] resize-y bg-transparent text-sm"
+          className="min-h-[100px] resize-y bg-transparent text-sm border-0 focus-visible:ring-0 text-gray-800 dark:text-gray-200"
           placeholder="Add notes here..."
           autoFocus
         />
@@ -175,11 +175,11 @@ export function TaskNotesPanel({ taskId, initialNotes }: { taskId: number; initi
                 return (
                   <div
                     key={row.id}
-                    className="group/line relative py-1 hover:bg-yellow-100/50 dark:hover:bg-yellow-900/20 transition-colors"
+                    className="group/line relative py-1 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                     onMouseEnter={() => setHoveredLineIndex(index)}
                     onMouseLeave={() => setHoveredLineIndex(null)}
                   >
-                    <div className="text-sm pr-32">{row.currentText || "\u00A0"}</div>
+                    <div className="text-sm pr-32 text-gray-800 dark:text-gray-200">{row.currentText || "\u00A0"}</div>
 
                     {/* Last modified date on hover - right edge */}
                     {hoveredLineIndex === index && (
@@ -192,7 +192,7 @@ export function TaskNotesPanel({ taskId, initialNotes }: { taskId: number; initi
               })}
             </div>
           ) : (
-            <span className="text-muted-foreground text-sm">Click to add notes...</span>
+            <span className="text-gray-600 dark:text-gray-400 text-sm">Click to add notes...</span>
           )}
         </div>
       )}
