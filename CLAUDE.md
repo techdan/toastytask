@@ -11,6 +11,7 @@ Toodle is a Next.js 15 application built with React 19, TypeScript, and Tailwind
 ## General Rules
 
 - Be verbose as you carry out tasks. Provide output describing your understanding of the current task and how you are approaching it.
+- **CRITICAL**: Always use `bd` (beads) commands for task tracking and progress management. NEVER use TodoWrite or other task tracking tools. Use `bd create`, `bd update`, `bd close` etc. See [AGENTS.md](AGENTS.md) for full workflow.
 
 ## Development Commands
 

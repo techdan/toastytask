@@ -1,0 +1,1 @@
+ALTER TABLE `tasks` ADD `repeat_type` text DEFAULT 'none' NOT NULL;

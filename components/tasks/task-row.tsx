@@ -5,6 +5,7 @@ import { Star, Trash2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { PrioritySelect } from "./priority-select";
+import { RecurrenceSelect } from "./recurrence-select";
 import { DueDateDisplay } from "./due-date-display";
 import { TaskNotes, TaskNotesPanel } from "./task-notes";
 import { calculateImportanceV1, getImportanceColor } from "@/lib/scoring/importance-v1";
@@ -22,9 +23,11 @@ interface TaskRowProps {
   task: Task;
   onUpdate: (id: number, updates: Partial<Task>) => void;
   onDelete: (id: number) => void;
+  onComplete: (id: number) => void;
+  onUncomplete: (id: number) => void;
 }
 
-export function TaskRow({ task, onUpdate, onDelete }: TaskRowProps) {
+export function TaskRow({ task, onUpdate, onDelete, onComplete, onUncomplete }: TaskRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(task.title);
   const [notesExpanded, setNotesExpanded] = useState(false);
@@ -67,9 +70,11 @@ export function TaskRow({ task, onUpdate, onDelete }: TaskRowProps) {
   };
 
   const handleCheckboxChange = (checked: boolean) => {
-    onUpdate(task.id, {
-      completedAt: checked ? new Date() : null,
-    });
+    if (checked) {
+      onComplete(task.id);
+    } else {
+      onUncomplete(task.id);
+    }
   };
 
   const handleStarClick = () => {
@@ -84,12 +89,16 @@ export function TaskRow({ task, onUpdate, onDelete }: TaskRowProps) {
     onUpdate(task.id, { dueAt: date });
   };
 
+  const handleRecurrenceChange = (repeatType: Task["repeatType"]) => {
+    onUpdate(task.id, { repeatType });
+  };
+
   return (
     <div>
       {/* Main Task Row */}
       <div
         className={cn(
-          "group grid grid-cols-[auto_auto_auto_auto_1fr_120px_90px_auto] items-center gap-2 rounded border bg-card px-2 py-1.5 transition-colors hover:bg-accent/30",
+          "group grid grid-cols-[auto_auto_auto_auto_1fr_120px_90px_100px_auto] items-center gap-2 rounded border bg-card px-2 py-1.5 transition-colors hover:bg-accent/30",
           isCompleted && "opacity-50"
         )}
       >
@@ -174,6 +183,15 @@ export function TaskRow({ task, onUpdate, onDelete }: TaskRowProps) {
           <PrioritySelect
             value={task.priority}
             onValueChange={handlePriorityChange}
+            disabled={isCompleted}
+          />
+        </div>
+
+        {/* Recurrence Select - Compact with fixed width column */}
+        <div className="w-[100px]">
+          <RecurrenceSelect
+            value={task.repeatType}
+            onValueChange={handleRecurrenceChange}
             disabled={isCompleted}
           />
         </div>

@@ -55,6 +55,36 @@ async function deleteTask(id: number): Promise<void> {
   }
 }
 
+// Complete task (handles recurrence)
+async function completeTask(id: number): Promise<Task> {
+  const response = await fetch(`/api/tasks/${id}/complete`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || "Failed to complete task");
+  }
+
+  const data: TaskResponse = await response.json();
+  return data.task;
+}
+
+// Uncomplete task
+async function uncompleteTask(id: number): Promise<Task> {
+  const response = await fetch(`/api/tasks/${id}/complete`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || "Failed to uncomplete task");
+  }
+
+  const data: TaskResponse = await response.json();
+  return data.task;
+}
+
 // Hook: Create task with optimistic update
 export function useCreateTask() {
   const queryClient = useQueryClient();
@@ -171,6 +201,143 @@ export function useDeleteTask() {
     },
     onSuccess: () => {
       toast.success("Task deleted successfully");
+    },
+    onSettled: () => {
+      // Refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
+}
+
+// Helper to optimistically calculate next due date for recurring tasks
+function calculateOptimisticNextDueDate(currentDueDate: Date | null | number, repeatType: string): Date {
+  const now = new Date();
+  let baseDate: Date;
+
+  if (currentDueDate) {
+    baseDate = typeof currentDueDate === 'number'
+      ? new Date(currentDueDate * 1000)
+      : new Date(currentDueDate);
+  } else {
+    baseDate = now;
+  }
+
+  const nextDate = new Date(baseDate);
+
+  switch (repeatType) {
+    case "daily":
+      nextDate.setDate(nextDate.getDate() + 1);
+      break;
+    case "weekly":
+      nextDate.setDate(nextDate.getDate() + 7);
+      break;
+    case "monthly":
+      nextDate.setMonth(nextDate.getMonth() + 1);
+      break;
+    default:
+      return baseDate;
+  }
+
+  return nextDate;
+}
+
+// Hook: Complete task (handles recurring tasks)
+export function useCompleteTask() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: completeTask,
+    onMutate: async (taskId) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["tasks"] });
+
+      // Snapshot previous values for rollback
+      const previousTasks = queryClient.getQueriesData({ queryKey: ["tasks"] });
+
+      // Optimistically update the task
+      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
+        if (!oldTasks || !Array.isArray(oldTasks)) {
+          return oldTasks;
+        }
+
+        return oldTasks.map((task) => {
+          if (task.id !== taskId) return task;
+
+          // If the task is recurring, advance the due date
+          // If not recurring, mark as completed
+          if (task.repeatType && task.repeatType !== "none") {
+            // Optimistic: advance due date immediately
+            const nextDueDate = calculateOptimisticNextDueDate(task.dueAt, task.repeatType);
+            const updatedTask = { ...task, dueAt: nextDueDate };
+
+            // INSTANT IMPORTANCE: Recalculate since due date changed
+            updatedTask.importanceV1 = calculateImportanceV1(updatedTask);
+
+            return updatedTask;
+          } else {
+            // Optimistic: mark as completed
+            return { ...task, completedAt: new Date() };
+          }
+        });
+      });
+
+      return { previousTasks };
+    },
+    onError: (error, _variables, context) => {
+      // Rollback on error
+      if (context?.previousTasks) {
+        context.previousTasks.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
+      toast.error("Failed to complete task", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    },
+    onSettled: () => {
+      // Refetch to get the actual updated task from server
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
+}
+
+// Hook: Uncomplete task
+export function useUncompleteTask() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: uncompleteTask,
+    onMutate: async (taskId) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["tasks"] });
+
+      // Snapshot previous values
+      const previousTasks = queryClient.getQueriesData({ queryKey: ["tasks"] });
+
+      // Optimistically update the task
+      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
+        if (!oldTasks || !Array.isArray(oldTasks)) {
+          return oldTasks;
+        }
+
+        return oldTasks.map((task) => {
+          if (task.id !== taskId) return task;
+          return { ...task, completedAt: null };
+        });
+      });
+
+      return { previousTasks };
+    },
+    onError: (error, _variables, context) => {
+      // Rollback on error
+      if (context?.previousTasks) {
+        context.previousTasks.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
+      toast.error("Failed to uncomplete task", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
     },
     onSettled: () => {
       // Refetch to ensure consistency

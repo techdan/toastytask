@@ -9,6 +9,8 @@ export {
   useCreateTask,
   useUpdateTask,
   useDeleteTask,
+  useCompleteTask,
+  useUncompleteTask,
 } from "./use-task-mutations";
 export {
   useCreateProject,

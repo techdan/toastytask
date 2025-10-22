@@ -30,6 +30,11 @@ export const tasks = sqliteTable("tasks", {
     .notNull()
     .default("todo"),
 
+  // Recurrence (Phase 7)
+  repeatType: text("repeat_type", { enum: ["none", "daily", "weekly", "monthly"] })
+    .notNull()
+    .default("none"),
+
   // Heat model fields (Phase 3)
   heat: real("heat").notNull().default(0.0),
   touchCount: integer("touch_count").notNull().default(0),

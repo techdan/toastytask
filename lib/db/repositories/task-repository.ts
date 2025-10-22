@@ -2,8 +2,35 @@ import { eq, and, isNull, desc, asc, inArray, sql } from "drizzle-orm";
 import type { ITaskRepository, TaskQueryOptions } from "./interfaces";
 import type { Task, NewTask } from "@/lib/db/schema";
 import type { Bucket } from "@/types";
+import { RepeatType } from "@/types";
 import { tasks } from "@/lib/db/schema";
 import { getDatabase } from "@/lib/db/client";
+
+/**
+ * Calculate the next due date for a recurring task
+ */
+function calculateNextDueDate(currentDueDate: Date | null, repeatType: string): Date {
+  const now = new Date();
+  const baseDate = currentDueDate || now;
+  const nextDate = new Date(baseDate);
+
+  switch (repeatType) {
+    case RepeatType.DAILY:
+      nextDate.setDate(nextDate.getDate() + 1);
+      break;
+    case RepeatType.WEEKLY:
+      nextDate.setDate(nextDate.getDate() + 7);
+      break;
+    case RepeatType.MONTHLY:
+      nextDate.setMonth(nextDate.getMonth() + 1);
+      break;
+    default:
+      // If no repeat type or "none", return the current date
+      return baseDate;
+  }
+
+  return nextDate;
+}
 
 export class SQLiteTaskRepository implements ITaskRepository {
   private db = getDatabase();
@@ -209,6 +236,27 @@ export class SQLiteTaskRepository implements ITaskRepository {
   }
 
   async complete(id: number): Promise<Task> {
+    // First, fetch the task to check if it's recurring
+    const task = await this.findById(id);
+    if (!task) {
+      throw new Error(`Task with id ${id} not found`);
+    }
+
+    // If the task is recurring (repeatType is not "none"), advance the due date instead of marking as completed
+    if (task.repeatType && task.repeatType !== RepeatType.NONE) {
+      const nextDueDate = calculateNextDueDate(task.dueAt, task.repeatType);
+      const [updatedTask] = await this.db
+        .update(tasks)
+        .set({
+          dueAt: nextDueDate,
+          updatedAt: new Date(),
+        })
+        .where(eq(tasks.id, id))
+        .returning();
+      return updatedTask;
+    }
+
+    // Otherwise, mark the task as completed normally
     const [updatedTask] = await this.db
       .update(tasks)
       .set({

@@ -13,6 +13,8 @@ import {
   useCreateTask,
   useUpdateTask,
   useDeleteTask,
+  useCompleteTask,
+  useUncompleteTask,
   useCreateProject,
   useUpdateProject,
   useDeleteProject,
@@ -82,6 +84,8 @@ export default function TasksPage() {
   const createTaskMutation = useCreateTask();
   const updateTaskMutation = useUpdateTask();
   const deleteTaskMutation = useDeleteTask();
+  const completeTaskMutation = useCompleteTask();
+  const uncompleteTaskMutation = useUncompleteTask();
   const createProjectMutation = useCreateProject();
   const updateProjectMutation = useUpdateProject();
   const deleteProjectMutation = useDeleteProject();
@@ -124,6 +128,14 @@ export default function TasksPage() {
 
   const handleDeleteTask = async (id: number) => {
     deleteTaskMutation.mutate(id);
+  };
+
+  const handleCompleteTask = async (id: number) => {
+    completeTaskMutation.mutate(id);
+  };
+
+  const handleUncompleteTask = async (id: number) => {
+    uncompleteTaskMutation.mutate(id);
   };
 
   // Project CRUD handlers
@@ -203,6 +215,8 @@ export default function TasksPage() {
               tasks={sortedTasks}
               onUpdate={handleUpdateTask}
               onDelete={handleDeleteTask}
+              onComplete={handleCompleteTask}
+              onUncomplete={handleUncompleteTask}
             />
           )}
         </div>

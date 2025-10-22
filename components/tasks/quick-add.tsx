@@ -69,6 +69,7 @@ export function QuickAdd({ onAdd, defaultPriority, defaultBucket, currentProject
         heat: 0.0,
         touchCount: 0,
         importanceV1: 0, // Will be calculated on the server
+        repeatType: "none", // Default to non-recurring
       });
 
       // Clear input on success
