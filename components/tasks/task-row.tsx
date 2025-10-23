@@ -41,7 +41,7 @@ export function TaskRow({ task, onUpdate, onDelete, onComplete, onUncomplete }: 
     }
     // Fallback: calculate on client (only happens for brand new tasks before server response)
     return calculateImportanceV1(task);
-  }, [task.importanceV1, task.priority, task.star, task.dueAt]);
+  }, [task]);
 
   const isCompleted = !!task.completedAt;
 

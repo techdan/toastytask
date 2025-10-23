@@ -26,10 +26,14 @@ export async function PATCH(
 
     // Convert date strings to Date objects if present
     if (updates.dueAt !== undefined) {
-      updates.dueAt = updates.dueAt ? new Date(updates.dueAt) : null;
+      updates.dueAt = updates.dueAt && (typeof updates.dueAt === 'string' || typeof updates.dueAt === 'number')
+        ? new Date(updates.dueAt as string | number)
+        : null;
     }
     if (updates.completedAt !== undefined) {
-      updates.completedAt = updates.completedAt ? new Date(updates.completedAt) : null;
+      updates.completedAt = updates.completedAt && (typeof updates.completedAt === 'string' || typeof updates.completedAt === 'number')
+        ? new Date(updates.completedAt as string | number)
+        : null;
     }
 
     // Recalculate importance if relevant fields changed

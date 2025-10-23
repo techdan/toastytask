@@ -1,5 +1,5 @@
-import { eq, and, desc, inArray, sql } from "drizzle-orm";
-import type { NoteRow, NewNoteRow, NoteRowVersion, NewNoteRowVersion } from "@/lib/db/schema";
+import { eq, desc, inArray, sql } from "drizzle-orm";
+import type { NoteRow, NewNoteRow, NoteRowVersion } from "@/lib/db/schema";
 import { noteRows, noteRowVersions } from "@/lib/db/schema";
 import { getDatabase } from "@/lib/db/client";
 

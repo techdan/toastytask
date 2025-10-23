@@ -1,4 +1,4 @@
-import { eq, and, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { IProjectRepository } from "./interfaces";
 import type { Project, NewProject } from "@/lib/db/schema";
 import { projects } from "@/lib/db/schema";

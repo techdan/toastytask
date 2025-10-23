@@ -1,5 +1,5 @@
 import type { Task, NewTask, Project, NewProject, Settings, NewSettings } from "@/lib/db/schema";
-import type { Bucket, Priority } from "@/types";
+import type { Bucket } from "@/types";
 
 // Task Repository Interface
 export interface ITaskRepository {
