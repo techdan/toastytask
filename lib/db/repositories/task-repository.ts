@@ -1,4 +1,4 @@
-import { eq, and, isNull, desc, asc, inArray, sql } from "drizzle-orm";
+import { eq, and, isNull, desc, asc, inArray, sql, or } from "drizzle-orm";
 import type { ITaskRepository, TaskQueryOptions } from "./interfaces";
 import type { Task, NewTask } from "@/lib/db/schema";
 import type { Bucket } from "@/types";
@@ -35,11 +35,12 @@ function calculateNextDueDate(currentDueDate: Date | null, repeatType: string): 
 export class SQLiteTaskRepository implements ITaskRepository {
   private db = getDatabase();
 
-  async create(task: NewTask): Promise<Task> {
+  async create(task: NewTask, userId: string): Promise<Task> {
     const [newTask] = await this.db
       .insert(tasks)
       .values({
         ...task,
+        userId,
         createdAt: new Date(),
         updatedAt: new Date(),
       })
@@ -47,13 +48,14 @@ export class SQLiteTaskRepository implements ITaskRepository {
     return newTask;
   }
 
-  async createMany(taskList: NewTask[]): Promise<Task[]> {
+  async createMany(taskList: NewTask[], userId: string): Promise<Task[]> {
     const now = new Date();
     const newTasks = await this.db
       .insert(tasks)
       .values(
         taskList.map((task) => ({
           ...task,
+          userId,
           createdAt: now,
           updatedAt: now,
         }))
@@ -62,12 +64,16 @@ export class SQLiteTaskRepository implements ITaskRepository {
     return newTasks;
   }
 
-  async findById(id: number): Promise<Task | undefined> {
-    const [task] = await this.db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
+  async findById(id: number, userId: string): Promise<Task | undefined> {
+    const [task] = await this.db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
+      .limit(1);
     return task;
   }
 
-  async findAll(options: TaskQueryOptions = {}): Promise<Task[]> {
+  async findAll(userId: string, options: TaskQueryOptions = {}): Promise<Task[]> {
     const {
       includeCompleted = false,
       includeArchived = false,
@@ -78,8 +84,8 @@ export class SQLiteTaskRepository implements ITaskRepository {
       offset,
     } = options;
 
-    // Build WHERE conditions
-    const conditions = [];
+    // Build WHERE conditions - ALWAYS filter by userId
+    const conditions = [eq(tasks.userId, userId)];
 
     if (!includeCompleted) {
       conditions.push(isNull(tasks.completedAt));
@@ -107,7 +113,7 @@ export class SQLiteTaskRepository implements ITaskRepository {
     let query = this.db
       .select()
       .from(tasks)
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .where(and(...conditions))
       .orderBy(orderByFn(orderByColumn));
 
     if (limit) {
@@ -121,12 +127,13 @@ export class SQLiteTaskRepository implements ITaskRepository {
     return query;
   }
 
-  async findByBucket(bucket: Bucket): Promise<Task[]> {
+  async findByBucket(bucket: Bucket, userId: string): Promise<Task[]> {
     return this.db
       .select()
       .from(tasks)
       .where(
         and(
+          eq(tasks.userId, userId),
           eq(tasks.bucket, bucket),
           isNull(tasks.completedAt),
           isNull(tasks.archivedAt),
@@ -136,12 +143,13 @@ export class SQLiteTaskRepository implements ITaskRepository {
       .orderBy(desc(tasks.heat));
   }
 
-  async findByProject(projectId: number): Promise<Task[]> {
+  async findByProject(projectId: number, userId: string): Promise<Task[]> {
     return this.db
       .select()
       .from(tasks)
       .where(
         and(
+          eq(tasks.userId, userId),
           eq(tasks.projectId, projectId),
           isNull(tasks.completedAt),
           isNull(tasks.archivedAt),
@@ -151,55 +159,67 @@ export class SQLiteTaskRepository implements ITaskRepository {
       .orderBy(desc(tasks.heat));
   }
 
-  async findCompleted(): Promise<Task[]> {
+  async findCompleted(userId: string): Promise<Task[]> {
     return this.db
       .select()
       .from(tasks)
-      .where(and(sql`${tasks.completedAt} IS NOT NULL`, isNull(tasks.deletedAt)))
+      .where(
+        and(
+          eq(tasks.userId, userId),
+          sql`${tasks.completedAt} IS NOT NULL`,
+          isNull(tasks.deletedAt)
+        )
+      )
       .orderBy(desc(tasks.completedAt));
   }
 
-  async findArchived(): Promise<Task[]> {
+  async findArchived(userId: string): Promise<Task[]> {
     return this.db
       .select()
       .from(tasks)
-      .where(and(sql`${tasks.archivedAt} IS NOT NULL`, isNull(tasks.deletedAt)))
+      .where(
+        and(
+          eq(tasks.userId, userId),
+          sql`${tasks.archivedAt} IS NOT NULL`,
+          isNull(tasks.deletedAt)
+        )
+      )
       .orderBy(desc(tasks.archivedAt));
   }
 
-  async update(id: number, updates: Partial<NewTask>): Promise<Task> {
+  async update(id: number, updates: Partial<NewTask>, userId: string): Promise<Task> {
     const [updatedTask] = await this.db
       .update(tasks)
       .set({
         ...updates,
         updatedAt: new Date(),
       })
-      .where(eq(tasks.id, id))
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
       .returning();
     return updatedTask;
   }
 
-  async updateMany(ids: number[], updates: Partial<NewTask>): Promise<void> {
+  async updateMany(ids: number[], updates: Partial<NewTask>, userId: string): Promise<void> {
     await this.db
       .update(tasks)
       .set({
         ...updates,
         updatedAt: new Date(),
       })
-      .where(inArray(tasks.id, ids));
+      .where(and(inArray(tasks.id, ids), eq(tasks.userId, userId)));
   }
 
-  async softDelete(id: number): Promise<void> {
+  async softDelete(id: number, userId: string): Promise<void> {
     await this.db
       .update(tasks)
       .set({
         deletedAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(tasks.id, id));
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
   }
 
-  async softDeleteMany(ids: number[]): Promise<void> {
+  async softDeleteMany(ids: number[], userId: string): Promise<void> {
     const now = new Date();
     await this.db
       .update(tasks)
@@ -207,10 +227,10 @@ export class SQLiteTaskRepository implements ITaskRepository {
         deletedAt: now,
         updatedAt: now,
       })
-      .where(inArray(tasks.id, ids));
+      .where(and(inArray(tasks.id, ids), eq(tasks.userId, userId)));
   }
 
-  async touch(id: number): Promise<Task> {
+  async touch(id: number, userId: string): Promise<Task> {
     const [updatedTask] = await this.db
       .update(tasks)
       .set({
@@ -218,26 +238,26 @@ export class SQLiteTaskRepository implements ITaskRepository {
         lastTouchedAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(tasks.id, id))
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
       .returning();
     return updatedTask;
   }
 
-  async snooze(id: number, untilDate: Date): Promise<Task> {
+  async snooze(id: number, untilDate: Date, userId: string): Promise<Task> {
     const [updatedTask] = await this.db
       .update(tasks)
       .set({
         nextSurfaceAt: untilDate,
         updatedAt: new Date(),
       })
-      .where(eq(tasks.id, id))
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
       .returning();
     return updatedTask;
   }
 
-  async complete(id: number): Promise<Task> {
+  async complete(id: number, userId: string): Promise<Task> {
     // First, fetch the task to check if it's recurring
-    const task = await this.findById(id);
+    const task = await this.findById(id, userId);
     if (!task) {
       throw new Error(`Task with id ${id} not found`);
     }
@@ -251,7 +271,7 @@ export class SQLiteTaskRepository implements ITaskRepository {
           dueAt: nextDueDate,
           updatedAt: new Date(),
         })
-        .where(eq(tasks.id, id))
+        .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
         .returning();
       return updatedTask;
     }
@@ -263,58 +283,64 @@ export class SQLiteTaskRepository implements ITaskRepository {
         completedAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(tasks.id, id))
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
       .returning();
     return updatedTask;
   }
 
-  async uncomplete(id: number): Promise<Task> {
+  async uncomplete(id: number, userId: string): Promise<Task> {
     const [updatedTask] = await this.db
       .update(tasks)
       .set({
         completedAt: null,
         updatedAt: new Date(),
       })
-      .where(eq(tasks.id, id))
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
       .returning();
     return updatedTask;
   }
 
-  async archive(id: number): Promise<Task> {
+  async archive(id: number, userId: string): Promise<Task> {
     const [updatedTask] = await this.db
       .update(tasks)
       .set({
         archivedAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(tasks.id, id))
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
       .returning();
     return updatedTask;
   }
 
-  async unarchive(id: number): Promise<Task> {
+  async unarchive(id: number, userId: string): Promise<Task> {
     const [updatedTask] = await this.db
       .update(tasks)
       .set({
         archivedAt: null,
         updatedAt: new Date(),
       })
-      .where(eq(tasks.id, id))
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
       .returning();
     return updatedTask;
   }
 
-  async moveToBucket(ids: number[], bucket: Bucket): Promise<void> {
-    await this.db.update(tasks).set({ bucket, updatedAt: new Date() }).where(inArray(tasks.id, ids));
+  async moveToBucket(ids: number[], bucket: Bucket, userId: string): Promise<void> {
+    await this.db
+      .update(tasks)
+      .set({ bucket, updatedAt: new Date() })
+      .where(and(inArray(tasks.id, ids), eq(tasks.userId, userId)));
   }
 
-  async updateHeat(id: number, heat: number): Promise<void> {
-    await this.db.update(tasks).set({ heat, updatedAt: new Date() }).where(eq(tasks.id, id));
+  async updateHeat(id: number, heat: number, userId: string): Promise<void> {
+    await this.db
+      .update(tasks)
+      .set({ heat, updatedAt: new Date() })
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
   }
 
-  async recalculateAllHeat(): Promise<void> {
+  async recalculateAllHeat(userId: string): Promise<void> {
     // This will be implemented in Phase 3 when we build the heat calculation engine
     // For now, this is a placeholder
-    console.log("recalculateAllHeat not yet implemented");
+    console.log(`recalculateAllHeat not yet implemented for user ${userId}`);
   }
 }

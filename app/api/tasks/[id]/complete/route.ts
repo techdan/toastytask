@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { taskRepository } from "@/lib/db/repositories";
 
 // Force Node.js runtime for better-sqlite3 compatibility
@@ -10,11 +11,16 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await params;
     const taskId = parseInt(id, 10);
 
     // Use the repository's complete method which handles recurrence logic
-    const task = await taskRepository.complete(taskId);
+    const task = await taskRepository.complete(taskId, userId);
 
     return NextResponse.json({ task });
   } catch (error) {
@@ -32,11 +38,16 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await params;
     const taskId = parseInt(id, 10);
 
     // Use the repository's uncomplete method
-    const task = await taskRepository.uncomplete(taskId);
+    const task = await taskRepository.uncomplete(taskId, userId);
 
     return NextResponse.json({ task });
   } catch (error) {

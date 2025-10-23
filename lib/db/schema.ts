@@ -16,16 +16,21 @@ export const projects = pgTable("projects", {
   name: text("name").notNull(),
   colorHex: text("color_hex").notNull().default("#6b7280"), // neutral-500
   archived: boolean("archived").notNull().default(false),
+  userId: text("user_id"), // Clerk user ID for multi-tenancy (nullable for migration)
   createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
     .notNull()
     .default(sql`(NOW() AT TIME ZONE 'UTC')`),
-});
+}, (table) => ({
+  // Index for filtering projects by user
+  userIdIdx: index("projects_user_id_idx").on(table.userId),
+}));
 
 // Tasks table
 export const tasks = pgTable("tasks", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   projectId: integer("project_id").references(() => projects.id),
+  userId: text("user_id"), // Clerk user ID for multi-tenancy (nullable for migration)
 
   // Core fields for Phase 1
   priority: text("priority", { enum: ["low", "medium", "high", "top"] })
@@ -71,6 +76,10 @@ export const tasks = pgTable("tasks", {
     .notNull()
     .default(sql`(NOW() AT TIME ZONE 'UTC')`),
 }, (table) => ({
+  // Index for filtering tasks by user (critical for multi-tenancy)
+  userIdIdx: index("tasks_user_id_idx").on(table.userId),
+  // Composite index for user's active tasks
+  userIdDeletedAtIdx: index("tasks_user_id_deleted_at_idx").on(table.userId, table.deletedAt),
   // Index for filtering tasks by project and excluding deleted ones
   projectIdDeletedAtIdx: index("tasks_project_id_deleted_at_idx").on(table.projectId, table.deletedAt),
   // Index for sorting tasks by heat within each bucket
@@ -86,6 +95,7 @@ export const tasks = pgTable("tasks", {
 // Settings table (single row for user preferences)
 export const settings = pgTable("settings", {
   id: serial("id").primaryKey(),
+  userId: text("user_id"), // Clerk user ID for multi-tenancy (nullable for migration)
 
   // Default values for new tasks
   defaultPriority: text("default_priority", {
@@ -148,7 +158,10 @@ export const settings = pgTable("settings", {
   updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true })
     .notNull()
     .default(sql`(NOW() AT TIME ZONE 'UTC')`),
-});
+}, (table) => ({
+  // Index for filtering settings by user
+  userIdIdx: index("settings_user_id_idx").on(table.userId),
+}));
 
 // Note tables for per-line versioned notes
 export const noteRows = pgTable("note_rows", {

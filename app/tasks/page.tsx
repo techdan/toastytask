@@ -5,8 +5,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { QuickAdd } from "@/components/tasks/quick-add";
 import { TaskList } from "@/components/tasks/task-list";
 import { ProjectsSidebar } from "@/components/projects/projects-sidebar";
-import { SettingsDrawer } from "@/components/settings/settings-drawer";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { UserAccountDropdown } from "@/components/auth/user-account-dropdown";
 import {
   useTasksQuery,
   useProjectsQuery,
@@ -19,7 +19,6 @@ import {
   useUpdateProject,
   useDeleteProject,
 } from "@/lib/queries";
-import { useSettingsQuery } from "@/lib/queries/use-settings-query";
 import type { Task, NewTask, Project } from "@/types";
 
 export default function TasksPage() {
@@ -45,9 +44,6 @@ export default function TasksPage() {
   const { data: projects = [] } = useProjectsQuery({
     includeArchived: true,
   });
-
-  // Fetch settings for the drawer
-  const { data: settings = null } = useSettingsQuery();
 
   // Background pre-fetching for better perceived performance
   useEffect(() => {
@@ -193,7 +189,7 @@ export default function TasksPage() {
             </div>
             <div className="flex items-center gap-3">
               <ThemeToggle />
-              <SettingsDrawer initialSettings={settings} />
+              <UserAccountDropdown />
             </div>
           </div>
 

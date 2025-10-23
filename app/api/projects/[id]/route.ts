@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { projectRepository } from "@/lib/db/repositories";
 
 // Force Node.js runtime for better-sqlite3 compatibility
@@ -10,6 +11,11 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await params;
     const projectId = parseInt(id);
     if (isNaN(projectId)) {
@@ -23,7 +29,7 @@ export async function PATCH(
     if (body.colorHex !== undefined) updates.colorHex = body.colorHex;
     if (body.archived !== undefined) updates.archived = body.archived;
 
-    const project = await projectRepository.update(projectId, updates);
+    const project = await projectRepository.update(projectId, updates, userId);
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
@@ -42,6 +48,11 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await params;
     const projectId = parseInt(id);
     if (isNaN(projectId)) {
@@ -50,7 +61,7 @@ export async function DELETE(
 
     // Note: This will fail if there are tasks referencing this project
     // due to foreign key constraint. Consider archiving instead.
-    await projectRepository.delete(projectId);
+    await projectRepository.delete(projectId, userId);
 
     return NextResponse.json({ success: true });
   } catch (error) {

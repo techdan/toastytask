@@ -7,8 +7,14 @@
 - Toodledo-compatible importance v1 plus a new heat model.
 - Modern UI with Tailwind CSS and shadcn/ui; no copying of Toodledo code/assets.
 
-**Out of Scope (Now)**
-- Accounts/sync, collaboration, integrations, notifications, native apps.
+**Authentication (Phase 10)**
+- Clerk-based authentication with email/password and OAuth providers
+- User accounts with profile management
+- Multi-user support with data isolation
+- Account dropdown replacing settings icon in header
+
+**Out of Scope (Later)**
+- Collaboration features, integrations, notifications, native mobile apps.
 
 **Core Concepts**
 - Buckets: `Todo` (daily), `Watch` (weekly), `Later` (monthly/long tail).
@@ -70,18 +76,55 @@
   - last_touched_at: datetime|null, next_surface_at: datetime|null
   - created_at, updated_at
   - project_id: uuid|null
+  - user_id: string (Clerk user ID for multi-tenancy)
 - Project
   - id, name, color_hex|null, archived_at|null, created_at, updated_at
+  - user_id: string (Clerk user ID for multi-tenancy)
 - Settings (user-configurable)
   - Review cadences, decay rates, automation thresholds, focus behavior.
   - Default new-task values: bucket (default Todo), due date (default Today), priority (default Medium).
   - New-task heat behavior: `new_task_heat_boost` (default 0.70) and `new_task_heat_half_life_hours` (default 24).
   - Default snooze durations: Todo → +1 day, Watch → +1 week, Later → +1 month.
   - Global color palette tokens for importance/heat group backgrounds.
+  - user_id: string (Clerk user ID for multi-tenancy)
 - Notes
   - NoteRow: id, task_id, ordinal, active_version_id, created_at, updated_at
   - NoteRowVersion: id, note_row_id, text, created_at
   - Stored in PostgreSQL with Drizzle schema definitions and migrations (see Non-Functional for tooling).
+
+**Authentication & Multi-User (Phase 10)**
+- Authentication Provider
+  - Clerk handles all authentication flows (sign-up, sign-in, password reset, OAuth)
+  - Environment variables: `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`
+  - ClerkProvider wraps app in root layout for user context
+  - Middleware protects authenticated routes
+- Sign-In/Sign-Up
+  - Dedicated pages at `/sign-in` and `/sign-up` using Clerk components
+  - OAuth providers: Google, GitHub (configurable in Clerk dashboard)
+  - Email/password authentication with email verification
+  - Redirect to `/tasks` after successful authentication
+- User Profile & Account Management
+  - Account dropdown in header (replaces settings icon) with user avatar
+  - Dropdown items: User profile, Settings, Sign out
+  - Profile page at `/profile` using Clerk's UserProfile component
+  - Users can update name, email, password, add OAuth connections
+- Data Isolation
+  - All user data (tasks, projects, settings, notes) scoped by `user_id` (Clerk user ID)
+  - Repository layer filters all queries by current user
+  - API routes validate authentication and inject user context
+  - No cross-user data access (enforced at repository level)
+- User Context
+  - Server: `auth()` from `@clerk/nextjs` for API routes and server components
+  - Client: `useUser()` hook from `@clerk/nextjs` for client components
+  - Automatic session management and token refresh by Clerk
+- Protected Routes
+  - `/tasks`, `/projects`, `/settings`, `/profile` require authentication
+  - `/` (landing page) accessible without auth, redirects to `/tasks` if signed in
+  - Middleware handles redirects: unauthenticated → `/sign-in`, authenticated → `/tasks`
+- Migration Strategy
+  - Existing local data remains in database with `user_id = NULL` (migration phase)
+  - First authenticated user can "claim" null user_id data via migration script
+  - Future users start with empty task list
 
 **Importance v1 (Compatibility Mode)**
 - Priority weight: Low=2, Med=3, High=4, Top=5.

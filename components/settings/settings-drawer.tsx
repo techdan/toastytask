@@ -25,10 +25,25 @@ import type { Settings as SettingsType } from "@/types";
 interface SettingsDrawerProps {
   initialSettings: SettingsType | null;
   onSettingsChange?: (settings: SettingsType) => void;
+  // Optional props for controlled mode (when triggered from dropdown)
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  // Hide trigger when controlled externally
+  hideTrigger?: boolean;
 }
 
-export function SettingsDrawer({ initialSettings, onSettingsChange }: SettingsDrawerProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function SettingsDrawer({
+  initialSettings,
+  onSettingsChange,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  hideTrigger = false,
+}: SettingsDrawerProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+
+  // Use controlled state if provided, otherwise use internal state
+  const isOpen = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setIsOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalOpen;
   const [settings, setSettings] = useState<SettingsType | null>(initialSettings);
 
   const updateSettingsMutation = useUpdateSettings();
@@ -64,11 +79,13 @@ export function SettingsDrawer({ initialSettings, onSettingsChange }: SettingsDr
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetTrigger asChild>
-        <Button variant="outline" size="icon">
-          <Settings className="h-4 w-4" />
-        </Button>
-      </SheetTrigger>
+      {!hideTrigger && (
+        <SheetTrigger asChild>
+          <Button variant="outline" size="icon">
+            <Settings className="h-4 w-4" />
+          </Button>
+        </SheetTrigger>
+      )}
       <SheetContent className="w-[400px] overflow-y-auto px-6 sm:w-[540px]">
         <SheetHeader className="space-y-3 pb-6">
           <SheetTitle className="text-2xl">Settings</SheetTitle>

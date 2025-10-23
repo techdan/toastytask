@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { taskRepository } from "@/lib/db/repositories";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
 
@@ -11,12 +12,17 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await params;
     const taskId = parseInt(id, 10);
     const body = await request.json();
 
-    // Get existing task
-    const existingTask = await taskRepository.findById(taskId);
+    // Get existing task (scoped to user)
+    const existingTask = await taskRepository.findById(taskId, userId);
     if (!existingTask) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
@@ -46,7 +52,7 @@ export async function PATCH(
       updates.importanceV1 = calculateImportanceV1(updatedTask);
     }
 
-    const task = await taskRepository.update(taskId, updates);
+    const task = await taskRepository.update(taskId, updates, userId);
 
     return NextResponse.json({ task });
   } catch (error) {
@@ -61,13 +67,18 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await params;
     const taskId = parseInt(id, 10);
 
-    // Soft delete by setting deletedAt timestamp
+    // Soft delete by setting deletedAt timestamp (scoped to user)
     await taskRepository.update(taskId, {
       deletedAt: new Date(),
-    });
+    }, userId);
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -4,37 +4,37 @@ import type { Bucket } from "@/types";
 // Task Repository Interface
 export interface ITaskRepository {
   // Create
-  create(task: NewTask): Promise<Task>;
-  createMany(tasks: NewTask[]): Promise<Task[]>;
+  create(task: NewTask, userId: string): Promise<Task>;
+  createMany(tasks: NewTask[], userId: string): Promise<Task[]>;
 
   // Read
-  findById(id: number): Promise<Task | undefined>;
-  findAll(options?: TaskQueryOptions): Promise<Task[]>;
-  findByBucket(bucket: Bucket): Promise<Task[]>;
-  findByProject(projectId: number): Promise<Task[]>;
-  findCompleted(): Promise<Task[]>;
-  findArchived(): Promise<Task[]>;
+  findById(id: number, userId: string): Promise<Task | undefined>;
+  findAll(userId: string, options?: TaskQueryOptions): Promise<Task[]>;
+  findByBucket(bucket: Bucket, userId: string): Promise<Task[]>;
+  findByProject(projectId: number, userId: string): Promise<Task[]>;
+  findCompleted(userId: string): Promise<Task[]>;
+  findArchived(userId: string): Promise<Task[]>;
 
   // Update
-  update(id: number, updates: Partial<NewTask>): Promise<Task>;
-  updateMany(ids: number[], updates: Partial<NewTask>): Promise<void>;
+  update(id: number, updates: Partial<NewTask>, userId: string): Promise<Task>;
+  updateMany(ids: number[], updates: Partial<NewTask>, userId: string): Promise<void>;
 
   // Delete (soft delete)
-  softDelete(id: number): Promise<void>;
-  softDeleteMany(ids: number[]): Promise<void>;
+  softDelete(id: number, userId: string): Promise<void>;
+  softDeleteMany(ids: number[], userId: string): Promise<void>;
 
   // Special operations
-  touch(id: number): Promise<Task>;
-  snooze(id: number, untilDate: Date): Promise<Task>;
-  complete(id: number): Promise<Task>;
-  uncomplete(id: number): Promise<Task>;
-  archive(id: number): Promise<Task>;
-  unarchive(id: number): Promise<Task>;
+  touch(id: number, userId: string): Promise<Task>;
+  snooze(id: number, untilDate: Date, userId: string): Promise<Task>;
+  complete(id: number, userId: string): Promise<Task>;
+  uncomplete(id: number, userId: string): Promise<Task>;
+  archive(id: number, userId: string): Promise<Task>;
+  unarchive(id: number, userId: string): Promise<Task>;
 
   // Bulk operations
-  moveToBucket(ids: number[], bucket: Bucket): Promise<void>;
-  updateHeat(id: number, heat: number): Promise<void>;
-  recalculateAllHeat(): Promise<void>;
+  moveToBucket(ids: number[], bucket: Bucket, userId: string): Promise<void>;
+  updateHeat(id: number, heat: number, userId: string): Promise<void>;
+  recalculateAllHeat(userId: string): Promise<void>;
 }
 
 export interface TaskQueryOptions {
@@ -50,29 +50,29 @@ export interface TaskQueryOptions {
 // Project Repository Interface
 export interface IProjectRepository {
   // Create
-  create(project: NewProject): Promise<Project>;
+  create(project: NewProject, userId: string): Promise<Project>;
 
   // Read
-  findById(id: number): Promise<Project | undefined>;
-  findAll(includeArchived?: boolean): Promise<Project[]>;
+  findById(id: number, userId: string): Promise<Project | undefined>;
+  findAll(userId: string, includeArchived?: boolean): Promise<Project[]>;
 
   // Update
-  update(id: number, updates: Partial<NewProject>): Promise<Project>;
+  update(id: number, updates: Partial<NewProject>, userId: string): Promise<Project>;
 
   // Delete
-  archive(id: number): Promise<Project>;
-  unarchive(id: number): Promise<Project>;
-  delete(id: number): Promise<void>;
+  archive(id: number, userId: string): Promise<Project>;
+  unarchive(id: number, userId: string): Promise<Project>;
+  delete(id: number, userId: string): Promise<void>;
 }
 
 // Settings Repository Interface
 export interface ISettingsRepository {
-  // Get current settings (always returns a single row)
-  get(): Promise<Settings>;
+  // Get current settings (always returns a single row for the user)
+  get(userId: string): Promise<Settings>;
 
   // Update settings
-  update(updates: Partial<NewSettings>): Promise<Settings>;
+  update(updates: Partial<NewSettings>, userId: string): Promise<Settings>;
 
   // Reset to defaults
-  reset(): Promise<Settings>;
+  reset(userId: string): Promise<Settings>;
 }

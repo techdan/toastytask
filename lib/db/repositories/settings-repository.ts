@@ -7,20 +7,24 @@ import { getDatabase } from "@/lib/db/client";
 export class SQLiteSettingsRepository implements ISettingsRepository {
   private db = getDatabase();
 
-  async get(): Promise<Settings> {
-    // Always return the first (and only) row
-    const [settingsRow] = await this.db.select().from(settings).limit(1);
+  async get(userId: string): Promise<Settings> {
+    // Get settings for the specific user
+    const [settingsRow] = await this.db
+      .select()
+      .from(settings)
+      .where(eq(settings.userId, userId))
+      .limit(1);
 
-    // If no settings exist, create default settings
+    // If no settings exist for this user, create default settings
     if (!settingsRow) {
-      return this.reset();
+      return this.reset(userId);
     }
 
     return settingsRow;
   }
 
-  async update(updates: Partial<NewSettings>): Promise<Settings> {
-    const existingSettings = await this.get();
+  async update(updates: Partial<NewSettings>, userId: string): Promise<Settings> {
+    const existingSettings = await this.get(userId);
 
     const [updatedSettings] = await this.db
       .update(settings)
@@ -34,14 +38,17 @@ export class SQLiteSettingsRepository implements ISettingsRepository {
     return updatedSettings;
   }
 
-  async reset(): Promise<Settings> {
-    // Delete all existing settings
-    await this.db.delete(settings);
+  async reset(userId: string): Promise<Settings> {
+    // Delete existing settings for this user
+    await this.db
+      .delete(settings)
+      .where(eq(settings.userId, userId));
 
-    // Create new default settings
+    // Create new default settings for this user
     const [defaultSettings] = await this.db
       .insert(settings)
       .values({
+        userId,
         updatedAt: new Date(),
         // All other fields will use schema defaults
       })

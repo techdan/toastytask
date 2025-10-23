@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { taskRepository, noteRepository } from "@/lib/db/repositories";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
 import type { NewTask } from "@/types";
@@ -9,11 +10,16 @@ export const runtime = 'nodejs';
 // GET /api/tasks - List all tasks
 export async function GET(request: Request) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get("projectId");
     const includeCompleted = searchParams.get("includeCompleted") === "true";
 
-    let tasks = await taskRepository.findAll();
+    let tasks = await taskRepository.findAll(userId);
 
     // Filter by project if specified
     if (projectId !== null) {
@@ -93,6 +99,11 @@ export async function GET(request: Request) {
 // POST /api/tasks - Create a new task
 export async function POST(request: Request) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const taskData: NewTask = {
       title: body.title,
@@ -109,7 +120,7 @@ export async function POST(request: Request) {
     // Calculate importance before saving
     taskData.importanceV1 = calculateImportanceV1(taskData as Parameters<typeof calculateImportanceV1>[0]);
 
-    const task = await taskRepository.create(taskData);
+    const task = await taskRepository.create(taskData, userId);
 
     return NextResponse.json({ task }, { status: 201 });
   } catch (error) {
