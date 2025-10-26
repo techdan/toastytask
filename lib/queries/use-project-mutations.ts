@@ -63,15 +63,76 @@ export function useCreateProject() {
 
   return useMutation({
     mutationFn: createProject,
-    onSuccess: () => {
-      // Invalidate projects queries to refetch with new project
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
-      toast.success("Project created successfully");
+    onMutate: async (newProject) => {
+      // Cancel outgoing refetches to avoid overwriting optimistic update
+      await queryClient.cancelQueries({ queryKey: ["projects"] });
+
+      // Snapshot previous values for rollback
+      const previousProjects = queryClient.getQueriesData({
+        queryKey: ["projects"],
+      });
+
+      // Create optimistic project with temporary negative ID
+      const optimisticProject: Project = {
+        id: -Date.now(), // Temporary negative ID (will be replaced by server)
+        name: newProject.name,
+        colorHex: newProject.colorHex ?? "#6b7280",
+        archived: newProject.archived ?? false,
+        userId: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      // Optimistically add project to all project queries
+      queryClient.setQueriesData<Project[]>(
+        { queryKey: ["projects"] },
+        (oldProjects) => {
+          // Don't update if no data exists yet
+          if (!oldProjects || !Array.isArray(oldProjects)) {
+            return oldProjects;
+          }
+
+          // Add the new project at the beginning
+          return [optimisticProject, ...oldProjects];
+        }
+      );
+
+      return { previousProjects, optimisticId: optimisticProject.id };
     },
-    onError: (error) => {
+    onError: (error, _variables, context) => {
+      // Rollback on error
+      if (context?.previousProjects) {
+        context.previousProjects.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
       toast.error("Failed to create project", {
         description: error instanceof Error ? error.message : "Unknown error",
       });
+    },
+    onSuccess: (createdProject, _variables, context) => {
+      // Replace the optimistic project with the real one from the server
+      if (context?.optimisticId) {
+        queryClient.setQueriesData<Project[]>(
+          { queryKey: ["projects"] },
+          (oldProjects) => {
+            if (!oldProjects || !Array.isArray(oldProjects)) {
+              return oldProjects;
+            }
+
+            // Replace the optimistic project with the real one
+            return oldProjects.map((project) =>
+              project.id === context.optimisticId ? createdProject : project
+            );
+          }
+        );
+      }
+
+      toast.success("Project created successfully");
+    },
+    onSettled: () => {
+      // Refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
   });
 }

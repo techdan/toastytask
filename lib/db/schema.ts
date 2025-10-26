@@ -20,6 +20,9 @@ export const projects = pgTable("projects", {
   createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
     .notNull()
     .default(sql`(NOW() AT TIME ZONE 'UTC')`),
+  updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true })
+    .notNull()
+    .default(sql`(NOW() AT TIME ZONE 'UTC')`),
 }, (table) => ({
   // Index for filtering projects by user
   userIdIdx: index("projects_user_id_idx").on(table.userId),

@@ -91,15 +91,86 @@ export function useCreateTask() {
 
   return useMutation({
     mutationFn: createTask,
-    onSuccess: () => {
-      // Invalidate tasks queries to refetch with new task
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      toast.success("Task created successfully");
+    onMutate: async (newTask) => {
+      // Cancel outgoing refetches to avoid overwriting optimistic update
+      await queryClient.cancelQueries({ queryKey: ["tasks"] });
+
+      // Snapshot previous values for rollback
+      const previousTasks = queryClient.getQueriesData({ queryKey: ["tasks"] });
+
+      // Create optimistic task with temporary negative ID
+      const optimisticTask: Task = {
+        id: -Date.now(), // Temporary negative ID (will be replaced by server)
+        title: newTask.title,
+        projectId: newTask.projectId ?? null,
+        userId: null,
+        priority: newTask.priority ?? "medium",
+        star: newTask.star ?? false,
+        dueAt: newTask.dueAt ?? null,
+        bucket: newTask.bucket ?? "todo",
+        repeatType: newTask.repeatType ?? "none",
+        heat: newTask.heat ?? 0.0,
+        touchCount: newTask.touchCount ?? 0,
+        lastTouchedAt: null,
+        nextSurfaceAt: null,
+        importanceV1: newTask.importanceV1 ?? 0,
+        completedAt: null,
+        archivedAt: null,
+        deletedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        notes: [],
+        notesCount: 0,
+        notesLastModified: null,
+      };
+
+      // Recalculate importance client-side for immediate feedback
+      optimisticTask.importanceV1 = calculateImportanceV1(optimisticTask);
+
+      // Optimistically add task to all task queries
+      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
+        // Don't update if no data exists yet
+        if (!oldTasks || !Array.isArray(oldTasks)) {
+          return oldTasks;
+        }
+
+        // Add the new task at the beginning
+        return [optimisticTask, ...oldTasks];
+      });
+
+      return { previousTasks, optimisticId: optimisticTask.id };
     },
-    onError: (error) => {
+    onError: (error, _variables, context) => {
+      // Rollback on error
+      if (context?.previousTasks) {
+        context.previousTasks.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
       toast.error("Failed to create task", {
         description: error instanceof Error ? error.message : "Unknown error",
       });
+    },
+    onSuccess: (createdTask, _variables, context) => {
+      // Replace the optimistic task with the real one from the server
+      if (context?.optimisticId) {
+        queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
+          if (!oldTasks || !Array.isArray(oldTasks)) {
+            return oldTasks;
+          }
+
+          // Replace the optimistic task with the real one
+          return oldTasks.map((task) =>
+            task.id === context.optimisticId ? createdTask : task
+          );
+        });
+      }
+
+      toast.success("Task created successfully");
+    },
+    onSettled: () => {
+      // Refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
 }

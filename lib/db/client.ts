@@ -40,15 +40,6 @@ export function getDatabase() {
     console.error("Unexpected error on idle PostgreSQL client:", err);
   });
 
-  // Connection event logging (development only)
-  if (!isProduction) {
-    pgPool.on("connect", () => {
-      console.log("New PostgreSQL client connected to pool");
-    });
-    pgPool.on("remove", () => {
-      console.log("PostgreSQL client removed from pool");
-    });
-  }
 
   // Create Drizzle instance with PostgreSQL
   dbInstance = drizzlePostgres(pgPool, { schema });

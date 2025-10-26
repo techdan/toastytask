@@ -8,7 +8,8 @@ CREATE TABLE projects (
   name TEXT NOT NULL,
   color_hex TEXT NOT NULL DEFAULT '#6b7280',
   archived BOOLEAN NOT NULL DEFAULT false,
-  created_at TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'UTC')
+  created_at TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'UTC'),
+  updated_at TIMESTAMP NOT NULL DEFAULT (NOW() AT TIME ZONE 'UTC')
 );
 
 -- Create settings table (single row for user preferences)

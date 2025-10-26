@@ -131,12 +131,14 @@ export class SQLiteNoteRepository implements INoteRepository {
 
   async createNoteRow(noteRow: NewNoteRow, text: string): Promise<NoteRowWithVersion> {
     // Create the note row first
+    const now = new Date();
+
     const [newRow] = await this.db
       .insert(noteRows)
       .values({
         ...noteRow,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: now,
+        updatedAt: now,
       })
       .returning();
 
