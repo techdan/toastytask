@@ -21,24 +21,29 @@ import {
 } from "@/lib/queries";
 import type { Task, NewTask, Project } from "@/types";
 
+// Number of days to show completed tasks when visibility is enabled
+const COMPLETED_TASKS_VISIBLE_DAYS = 7;
+
 export default function TasksPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<number | null | "all">("all");
+  const [showCompleted, setShowCompleted] = useState(true);
   const queryClient = useQueryClient();
 
   // Query hooks - TanStack Query handles caching and state
-  // Fetch filtered tasks for display
+  // Always fetch ALL tasks (completed and uncompleted) for instant client-side filtering
   const {
-    data: tasks = [],
+    data: allFetchedTasks = [],
     isLoading: isLoadingTasks,
   } = useTasksQuery({
     projectId: selectedProjectId === "all" ? undefined : selectedProjectId,
-    includeCompleted: false,
+    includeCompleted: true, // Always fetch completed tasks
   });
+
 
   // Always fetch ALL tasks for accurate counts in sidebar
   const { data: allTasks = [] } = useTasksQuery({
     projectId: undefined, // No filter - get all tasks
-    includeCompleted: false,
+    includeCompleted: true, // Fetch completed tasks too for accurate counts
   });
 
   const { data: projects = [] } = useProjectsQuery({
@@ -53,9 +58,9 @@ export default function TasksPage() {
       projects.forEach((project) => {
         // Only pre-fetch if not already in cache
         queryClient.prefetchQuery({
-          queryKey: ["tasks", { projectId: project.id, includeCompleted: false }],
+          queryKey: ["tasks", { projectId: project.id, includeCompleted: true }],
           queryFn: async () => {
-            const response = await fetch(`/api/tasks?projectId=${project.id}&includeCompleted=false`);
+            const response = await fetch(`/api/tasks?projectId=${project.id}&includeCompleted=true`);
             if (!response.ok) return [];
             const data = await response.json();
             return data.tasks;
@@ -65,9 +70,9 @@ export default function TasksPage() {
 
       // Also pre-fetch tasks with no project
       queryClient.prefetchQuery({
-        queryKey: ["tasks", { projectId: null, includeCompleted: false }],
+        queryKey: ["tasks", { projectId: null, includeCompleted: true }],
         queryFn: async () => {
-          const response = await fetch(`/api/tasks?projectId=null&includeCompleted=false`);
+          const response = await fetch(`/api/tasks?projectId=null&includeCompleted=true`);
           if (!response.ok) return [];
           const data = await response.json();
           return data.tasks;
@@ -85,6 +90,30 @@ export default function TasksPage() {
   const createProjectMutation = useCreateProject();
   const updateProjectMutation = useUpdateProject();
   const deleteProjectMutation = useDeleteProject();
+
+  // Client-side filtering for completed tasks with time cutoff
+  // Only show completed tasks from the last N days when toggle is on
+  const tasks = useMemo(() => {
+    if (showCompleted) {
+      // Show all tasks, but filter out old completed tasks
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - COMPLETED_TASKS_VISIBLE_DAYS);
+
+      return allFetchedTasks.filter((task) => {
+        if (!task.completedAt) return true; // Always show uncompleted tasks
+
+        // Only show recently completed tasks (within the configured timeframe)
+        const completedDate = typeof task.completedAt === "number"
+          ? new Date(task.completedAt * 1000)
+          : new Date(task.completedAt);
+
+        return completedDate >= cutoffDate;
+      });
+    } else {
+      // Hide all completed tasks
+      return allFetchedTasks.filter((task) => !task.completedAt);
+    }
+  }, [allFetchedTasks, showCompleted]);
 
   // Client-side sorting (already sorted by server, but apply completed logic)
   const sortedTasks = useMemo(() => {
@@ -127,11 +156,21 @@ export default function TasksPage() {
   };
 
   const handleCompleteTask = async (id: number) => {
+    console.log("DEBUG: handleCompleteTask called", { id });
     completeTaskMutation.mutate(id);
   };
 
   const handleUncompleteTask = async (id: number) => {
+    console.log("DEBUG: handleUncompleteTask called", { id });
     uncompleteTaskMutation.mutate(id);
+  };
+
+  const handleToggleCompleted = () => {
+    console.log("DEBUG: handleToggleCompleted called", {
+      currentShowCompleted: showCompleted,
+      newShowCompleted: !showCompleted
+    });
+    setShowCompleted(!showCompleted);
   };
 
   // Project CRUD handlers
@@ -152,12 +191,15 @@ export default function TasksPage() {
     }
   };
 
-  // Calculate task counts per project from ALL tasks (not filtered)
+  // Calculate task counts per project from ALL tasks (exclude completed)
   const taskCounts = useMemo(() => {
     const counts: Record<number, number> = {};
     allTasks.forEach((task) => {
-      const projectId = task.projectId || 0; // 0 for tasks with no project
-      counts[projectId] = (counts[projectId] || 0) + 1;
+      // Only count uncompleted tasks for sidebar
+      if (!task.completedAt) {
+        const projectId = task.projectId || 0; // 0 for tasks with no project
+        counts[projectId] = (counts[projectId] || 0) + 1;
+      }
     });
     return counts;
   }, [allTasks]);
@@ -209,6 +251,8 @@ export default function TasksPage() {
           ) : (
             <TaskList
               tasks={sortedTasks}
+              showCompleted={showCompleted}
+              onToggleCompleted={handleToggleCompleted}
               onUpdate={handleUpdateTask}
               onDelete={handleDeleteTask}
               onComplete={handleCompleteTask}

@@ -98,7 +98,7 @@ export function TaskRow({ task, onUpdate, onDelete, onComplete, onUncomplete }: 
       {/* Main Task Row */}
       <div
         className={cn(
-          "group grid grid-cols-[auto_auto_auto_auto_1fr_120px_90px_100px_auto] items-center gap-2 rounded border bg-card px-2 py-1.5 transition-colors hover:bg-accent/30",
+          "group grid grid-cols-[auto_auto_auto_auto_1fr_auto_auto_auto_auto] items-center gap-2 rounded border bg-card px-2 py-1.5 transition-colors hover:bg-accent/30",
           isCompleted && "opacity-50"
         )}
       >
@@ -133,7 +133,7 @@ export function TaskRow({ task, onUpdate, onDelete, onComplete, onUncomplete }: 
         </button>
 
         {/* Notes Toggle */}
-        <div className="mr-3">
+        <div className="mr-3 w-4">
           <TaskNotes
             taskId={task.id}
             isExpanded={notesExpanded}

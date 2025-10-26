@@ -19,21 +19,16 @@ export async function GET(request: Request) {
     const projectId = searchParams.get("projectId");
     const includeCompleted = searchParams.get("includeCompleted") === "true";
 
-    let tasks = await taskRepository.findAll(userId);
+    let tasks = await taskRepository.findAll(userId, {
+      includeCompleted,
+      includeDeleted: false,
+    });
 
     // Filter by project if specified
     if (projectId !== null) {
       const pid = projectId === "null" ? null : parseInt(projectId, 10);
       tasks = tasks.filter((task) => task.projectId === pid);
     }
-
-    // Filter out completed tasks unless requested
-    if (!includeCompleted) {
-      tasks = tasks.filter((task) => !task.completedAt);
-    }
-
-    // Filter out deleted tasks
-    tasks = tasks.filter((task) => !task.deletedAt);
 
     // Recalculate importance for each task to ensure freshness
     // (values become stale when due dates pass since we only calculate on write)
