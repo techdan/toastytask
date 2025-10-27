@@ -33,22 +33,31 @@ export function TaskList({
 
   return (
     <div>
-      <TaskListHeader
-        showCompleted={showCompleted}
-        onToggleCompleted={onToggleCompleted}
-      />
-      <div className="space-y-2">
+      <table className="w-full border-separate border-spacing-0">
+        {/* Column definitions: task (checkbox, importance, star, notes, title), due date, priority, recurrence, actions */}
+        <colgroup>
+          <col />
+          <col className="w-[120px]" />
+          <col className="w-[90px]" />
+          <col className="w-[100px]" />
+          <col className="w-10" />
+        </colgroup>
+        <TaskListHeader
+          showCompleted={showCompleted}
+          onToggleCompleted={onToggleCompleted}
+        />
         {tasks.map((task) => (
-          <TaskRow
-            key={task.id}
-            task={task}
-            onUpdate={onUpdate}
-            onDelete={onDelete}
-            onComplete={onComplete}
-            onUncomplete={onUncomplete}
-          />
+          <tbody key={task.id} className="before:content-[''] before:block before:h-2">
+            <TaskRow
+              task={task}
+              onUpdate={onUpdate}
+              onDelete={onDelete}
+              onComplete={onComplete}
+              onUncomplete={onUncomplete}
+            />
+          </tbody>
         ))}
-      </div>
+      </table>
     </div>
   );
 }

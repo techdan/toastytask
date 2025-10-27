@@ -8,9 +8,10 @@ interface DueDateDisplayProps {
   dueAt: Date | number | null;
   onDateChange: (date: Date | null) => void;
   disabled?: boolean;
+  isCompleted?: boolean;
 }
 
-export function DueDateDisplay({ dueAt, onDateChange, disabled }: DueDateDisplayProps) {
+export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted }: DueDateDisplayProps) {
   const [isEditing, setIsEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -37,6 +38,16 @@ export function DueDateDisplay({ dueAt, onDateChange, disabled }: DueDateDisplay
     }
 
     const dueDate = typeof dueAt === "number" ? new Date(dueAt * 1000) : new Date(dueAt);
+
+    // If completed, just show the date without any special formatting
+    if (isCompleted) {
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      return {
+        text: `${monthNames[dueDate.getMonth()]} ${dueDate.getDate()}`,
+        textClassName: "",
+      };
+    }
+
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);

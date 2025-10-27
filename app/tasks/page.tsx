@@ -26,7 +26,14 @@ const COMPLETED_TASKS_VISIBLE_DAYS = 7;
 
 export default function TasksPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<number | null | "all">("all");
-  const [showCompleted, setShowCompleted] = useState(true);
+  const [showCompleted, setShowCompleted] = useState(() => {
+    // Read from localStorage on initial load, default to false (hide completed)
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("toodle:showCompleted");
+      return saved === null ? false : saved === "true";
+    }
+    return false;
+  });
   const queryClient = useQueryClient();
 
   // Query hooks - TanStack Query handles caching and state
@@ -166,11 +173,16 @@ export default function TasksPage() {
   };
 
   const handleToggleCompleted = () => {
+    const newValue = !showCompleted;
     console.log("DEBUG: handleToggleCompleted called", {
       currentShowCompleted: showCompleted,
-      newShowCompleted: !showCompleted
+      newShowCompleted: newValue
     });
-    setShowCompleted(!showCompleted);
+    setShowCompleted(newValue);
+    // Persist to localStorage
+    if (typeof window !== "undefined") {
+      localStorage.setItem("toodle:showCompleted", String(newValue));
+    }
   };
 
   // Project CRUD handlers

@@ -52,13 +52,11 @@ export function RecurrenceSelect({ value, onValueChange, disabled }: RecurrenceS
         disabled={disabled}
         type="button"
       >
-        {showIcon ? (
+        {showIcon && (
           <>
             <Repeat className="h-3 w-3" />
             <span>{recurrenceLabels[currentValue]}</span>
           </>
-        ) : (
-          <span>No repeat</span>
         )}
       </button>
     );

@@ -94,123 +94,139 @@ export function TaskRow({ task, onUpdate, onDelete, onComplete, onUncomplete }: 
   };
 
   return (
-    <div>
-      {/* Main Task Row */}
-      <div
+    <>
+      <tr
         className={cn(
-          "group grid grid-cols-[auto_auto_auto_auto_1fr_auto_auto_auto_auto] items-center gap-2 rounded border bg-card px-2 py-1.5 transition-colors hover:bg-accent/30",
-          isCompleted && "opacity-50"
+          "group bg-card transition-colors hover:bg-accent/30",
+          isCompleted && "text-muted-foreground italic"
         )}
       >
-        {/* Checkbox */}
-        <Checkbox
-          checked={isCompleted}
-          onCheckedChange={handleCheckboxChange}
-          className="h-4 w-4 cursor-pointer"
-        />
-
-        {/* Importance Badge - Compact */}
-        <div
-          className={cn(
-            "flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-bold text-white",
-            getImportanceColor(importance)
-          )}
-          title={`Importance: ${importance}`}
-        >
-          {importance}
-        </div>
-
-        {/* Star Button - Compact */}
-        <button
-          className={cn(
-            "shrink-0 transition-colors cursor-pointer",
-            task.star ? "text-yellow-400" : "text-muted-foreground/40 hover:text-muted-foreground"
-          )}
-          onClick={handleStarClick}
-          disabled={isCompleted}
-        >
-          <Star className={cn("h-4 w-4", task.star && "fill-current")} />
-        </button>
-
-        {/* Notes Toggle */}
-        <div className="mr-3 w-4">
-          <TaskNotes
-            taskId={task.id}
-            isExpanded={notesExpanded}
-            onToggle={() => setNotesExpanded(!notesExpanded)}
-            notesCount={task.notesCount}
-            notesLastModified={task.notesLastModified}
-          />
-        </div>
-
-        {/* Title - More compact */}
-        <div className="flex-1 min-w-0">
-          {isEditing ? (
-            <Input
-              value={editedTitle}
-              onChange={(e) => setEditedTitle(e.target.value)}
-              onBlur={handleTitleBlur}
-              onKeyDown={handleTitleKeyDown}
-              className="h-6 text-sm"
-              autoFocus
+        <td className={cn(
+          "px-2 py-1.5 align-middle border border-r-0",
+          notesExpanded ? "rounded-tl border-b-0" : "first:rounded-l"
+        )}>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={isCompleted}
+              onCheckedChange={handleCheckboxChange}
+              className="h-4 w-4 cursor-pointer shrink-0"
             />
-          ) : (
+            <div
+              className={cn(
+                "flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-bold",
+                isCompleted
+                  ? "bg-muted/40 text-muted-foreground/60"
+                  : "text-white " + getImportanceColor(importance)
+              )}
+              title={`Importance: ${importance}`}
+            >
+              {importance}
+            </div>
             <button
               className={cn(
-                "w-full text-left text-sm hover:text-primary cursor-pointer",
-                priorityStyles[task.priority],
-                isCompleted && "line-through"
+                "shrink-0 transition-colors cursor-pointer",
+                task.star ? "text-yellow-400" : "text-muted-foreground/40 hover:text-muted-foreground"
               )}
-              onClick={handleTitleClick}
+              onClick={handleStarClick}
               disabled={isCompleted}
+              aria-label={task.star ? "Unstar task" : "Star task"}
             >
-              {task.title}
+              <Star className={cn("h-4 w-4", task.star && "fill-current")} />
             </button>
-          )}
-        </div>
+            <div className="shrink-0">
+              <TaskNotes
+                taskId={task.id}
+                isExpanded={notesExpanded}
+                onToggle={() => setNotesExpanded(!notesExpanded)}
+                notesCount={task.notesCount}
+                notesLastModified={task.notesLastModified}
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              {isEditing ? (
+                <Input
+                  value={editedTitle}
+                  onChange={(e) => setEditedTitle(e.target.value)}
+                  onBlur={handleTitleBlur}
+                  onKeyDown={handleTitleKeyDown}
+                  className="h-6 text-sm"
+                  autoFocus
+                />
+              ) : (
+                <button
+                  className={cn(
+                    "w-full text-left text-sm hover:text-primary cursor-pointer",
+                    !isCompleted && priorityStyles[task.priority],
+                    isCompleted && "line-through"
+                  )}
+                  onClick={handleTitleClick}
+                  disabled={isCompleted}
+                >
+                  {task.title}
+                </button>
+              )}
+            </div>
+          </div>
+        </td>
+        <td className={cn(
+          "px-2 py-1.5 align-middle border-y border-r-0",
+          notesExpanded && "border-b-0"
+        )}>
+          <div className={cn(isCompleted && "line-through")}>
+            <DueDateDisplay
+              dueAt={task.dueAt}
+              onDateChange={handleDateChange}
+              disabled={isCompleted}
+              isCompleted={isCompleted}
+            />
+          </div>
+        </td>
+        <td className={cn(
+          "px-2 py-1.5 align-middle border-y border-r-0",
+          notesExpanded && "border-b-0"
+        )}>
+          <div className={cn(isCompleted && "line-through")}>
+            <PrioritySelect
+              value={task.priority}
+              onValueChange={handlePriorityChange}
+              disabled={isCompleted}
+            />
+          </div>
+        </td>
+        <td className={cn(
+          "px-2 py-1.5 align-middle border-y border-r-0",
+          notesExpanded && "border-b-0"
+        )}>
+          <div className={cn(isCompleted && "line-through")}>
+            <RecurrenceSelect
+              value={task.repeatType}
+              onValueChange={handleRecurrenceChange}
+              disabled={isCompleted}
+            />
+          </div>
+        </td>
+        <td className={cn(
+          "px-2 py-1.5 align-middle border-y border-r",
+          notesExpanded ? "rounded-tr border-b-0" : "last:rounded-r"
+        )}>
+          <button
+            className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+            onClick={() => onDelete(task.id)}
+            aria-label="Delete task"
+          >
+            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+          </button>
+        </td>
+      </tr>
 
-        {/* Due Date - Smart Display with fixed width column */}
-        <div className="w-[120px]">
-          <DueDateDisplay
-            dueAt={task.dueAt}
-            onDateChange={handleDateChange}
-            disabled={isCompleted}
-          />
-        </div>
-
-        {/* Priority Select - Compact with fixed width column */}
-        <div className="w-[90px]">
-          <PrioritySelect
-            value={task.priority}
-            onValueChange={handlePriorityChange}
-            disabled={isCompleted}
-          />
-        </div>
-
-        {/* Recurrence Select - Compact with fixed width column */}
-        <div className="w-[100px]">
-          <RecurrenceSelect
-            value={task.repeatType}
-            onValueChange={handleRecurrenceChange}
-            disabled={isCompleted}
-          />
-        </div>
-
-        {/* Delete Button - Compact */}
-        <button
-          className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-          onClick={() => onDelete(task.id)}
-        >
-          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-        </button>
-      </div>
-
-      {/* Notes Panel - Rendered outside grid */}
+      {/* Notes Panel - Expanded row with colspan */}
       {notesExpanded && (
-        <div className="px-2">
-          <TaskNotesPanel taskId={task.id} initialNotes={task.notes} />
-        </div>
+        <tr className="bg-card">
+          <td colSpan={5} className="px-2 py-2 border-x border-b rounded-b">
+            <TaskNotesPanel taskId={task.id} initialNotes={task.notes} />
+          </td>
+        </tr>
       )}
-    </div>
+    </>
   );
 }

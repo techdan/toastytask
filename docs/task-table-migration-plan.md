@@ -31,21 +31,18 @@
 - Define column widths via `<colgroup>` to consolidate width definitions:
   ```tsx
   <colgroup>
-    <col className="w-8" />      // checkbox
-    <col className="w-8" />      // importance
-    <col className="w-8" />      // star
-    <col className="w-8" />      // notes
-    <col className="w-auto" />   // task title
-    <col className="w-[120px]" />
-    <col className="w-[90px]" />
-    <col className="w-[100px]" />
-    <col className="w-10" />     // actions
+    <col className="w-auto" />   // task (checkbox, importance, star, notes, title)
+    <col className="w-[120px]" /> // due date
+    <col className="w-[90px]" />  // priority
+    <col className="w-[100px]" /> // recurrence
+    <col className="w-10" />      // actions
   </colgroup>
   ```
 
 ### Header Row
 - Convert `TaskListHeader` to render `<thead>` with a single `<tr>`.
 - Each column header becomes `<th scope="col" className="px-2 text-xs font-medium text-muted-foreground text-left">`.
+- Column headers: "Task", "Due Date", "Priority", "Recurrence", and Actions (with show/hide completed toggle button).
 - Keep the show/hide completed toggle in the final header cell; ensure buttons remain accessible by wrapping them in `<div>` or `<span>` if needed.
 
 ### Body Rows
@@ -54,10 +51,11 @@
   <tr className={cn("rounded border bg-card transition-colors", hover classes)}>{cells}</tr>
   ```
 - Each column becomes a `<td className="px-2 py-1.5 align-middle">` and hosts the existing interactive components.
+- The Task column (`<td>`) contains a flex layout with: checkbox, importance badge, star button, notes toggle, and title input/button.
 - Use `aria-label` and `title` attributes on icon buttons to ensure table context is clear for screen readers.
 
 ### Expanded Notes Panel
-- When notes are expanded, render a follow-up `<tr>` with one `<td colSpan={columnCount}>` containing `TaskNotesPanel`.
+- When notes are expanded, render a follow-up `<tr>` with one `<td colSpan={5}>` containing `TaskNotesPanel`.
 - Style the expanded row with matching background and border to visually connect it with the parent row.
 
 ### Responsive & Scroll Handling
