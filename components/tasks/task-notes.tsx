@@ -151,7 +151,7 @@ export function TaskNotesPanel({ taskId, initialNotes }: { taskId: number; initi
   };
 
   return (
-    <div className="mt-2 rounded bg-[#FFFACD] dark:bg-[#7a7550] p-3 shadow-sm dark:shadow-[0_1px_3px_rgba(122,117,80,0.3)]">
+    <div className="mt-0 rounded bg-[#FFFACD] dark:bg-[#6b5d4f] p-3 shadow-sm dark:shadow-[0_1px_3px_rgba(120,53,15,0.3)]">
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading notes...</p>
       ) : isEditing ? (
