@@ -82,7 +82,7 @@ export class SQLiteNoteRepository implements INoteRepository {
       .select({
         taskId: noteRows.taskId,
         count: sql<number>`count(*)`,
-        lastModified: sql<number | null>`max(${noteRows.updatedAt})`,
+        lastModified: sql<Date | null>`max(${noteRows.updatedAt})`,
       })
       .from(noteRows)
       .where(inArray(noteRows.taskId, taskIds))
@@ -93,7 +93,7 @@ export class SQLiteNoteRepository implements INoteRepository {
       metadataMap.set(result.taskId, {
         taskId: result.taskId,
         count: result.count,
-        lastModified: result.lastModified ? new Date(result.lastModified * 1000) : null,
+        lastModified: result.lastModified,
       });
     }
 

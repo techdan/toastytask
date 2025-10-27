@@ -168,9 +168,7 @@ export function TaskNotesPanel({ taskId, initialNotes }: { taskId: number; initi
           {noteRows.length > 0 ? (
             <div className="space-y-0">
               {noteRows.map((row, index) => {
-                const updatedDate = typeof row.updatedAt === 'number'
-                  ? new Date(row.updatedAt * 1000)
-                  : new Date(row.updatedAt);
+                const updatedDate = new Date(row.updatedAt);
 
                 return (
                   <div

@@ -46,8 +46,8 @@ export async function GET(request: Request) {
       const taskNotes = allNotesMap.get(task.id) || [];
       const lastModified = taskNotes.length > 0
         ? taskNotes.reduce((latest, note) => {
-            const noteTime = typeof note.updatedAt === 'number' ? note.updatedAt * 1000 : new Date(note.updatedAt).getTime();
-            const latestTime = typeof latest.updatedAt === 'number' ? latest.updatedAt * 1000 : new Date(latest.updatedAt).getTime();
+            const noteTime = new Date(note.updatedAt).getTime();
+            const latestTime = new Date(latest.updatedAt).getTime();
             return noteTime > latestTime ? note : latest;
           }, taskNotes[0]).updatedAt
         : null;
@@ -56,7 +56,7 @@ export async function GET(request: Request) {
         ...task,
         notes: taskNotes,
         notesCount: taskNotes.length,
-        notesLastModified: lastModified ? (typeof lastModified === 'number' ? new Date(lastModified * 1000) : new Date(lastModified)) : null,
+        notesLastModified: lastModified ? new Date(lastModified) : null,
       };
     });
 
