@@ -24,9 +24,16 @@ export function DueDateDisplay({ dueAt, onDateChange, disabled }: DueDateDisplay
     return `${year}-${month}-${day}`;
   };
 
-  const getDisplayText = (): { text: string; className: string } => {
+  const getDisplayText = (): {
+    text: string;
+    textClassName: string;
+    wrapperClassName?: string;
+  } => {
     if (!dueAt) {
-      return { text: "No Due Date", className: "text-muted-foreground/50" };
+      return {
+        text: "No Due Date",
+        textClassName: "text-muted-foreground/50",
+      };
     }
 
     const dueDate = typeof dueAt === "number" ? new Date(dueAt * 1000) : new Date(dueAt);
@@ -47,27 +54,28 @@ export function DueDateDisplay({ dueAt, onDateChange, disabled }: DueDateDisplay
       const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       return {
         text: `${monthNames[dueDate.getMonth()]} ${dueDate.getDate()}`,
-        className: "bg-red-500 text-white px-2 py-0.5 rounded font-medium",
+        textClassName: "text-white font-medium",
+        wrapperClassName: "rounded bg-red-500 px-2 py-0.5",
       };
     }
 
     if (isToday) {
-      return { text: "Today", className: "font-bold text-foreground" };
+      return { text: "Today", textClassName: "font-bold text-foreground" };
     }
 
     if (isTomorrow) {
-      return { text: "Tomorrow", className: "font-bold text-foreground" };
+      return { text: "Tomorrow", textClassName: "font-bold text-foreground" };
     }
 
     // Future date
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     return {
       text: `${monthNames[dueDate.getMonth()]} ${dueDate.getDate()}`,
-      className: "text-foreground",
+      textClassName: "text-foreground",
     };
   };
 
-  const { text, className } = getDisplayText();
+  const { text, textClassName, wrapperClassName } = getDisplayText();
 
   const handleClick = () => {
     if (!disabled) {
@@ -120,13 +128,15 @@ export function DueDateDisplay({ dueAt, onDateChange, disabled }: DueDateDisplay
       onClick={handleClick}
       disabled={disabled}
       className={cn(
-        "flex items-center gap-1 text-xs transition-opacity hover:opacity-70 cursor-pointer",
-        className,
+        "flex h-6 w-full items-center gap-1 text-left text-xs transition-opacity hover:opacity-70",
+        "cursor-pointer px-0",
         disabled && "cursor-not-allowed opacity-50"
       )}
     >
       <Calendar className="h-3 w-3" />
-      <span>{text}</span>
+      <span className={cn("whitespace-nowrap", wrapperClassName)}>
+        <span className={textClassName}>{text}</span>
+      </span>
     </button>
   );
 }

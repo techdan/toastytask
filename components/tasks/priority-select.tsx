@@ -47,7 +47,8 @@ export function PrioritySelect({ value, onValueChange, disabled }: PrioritySelec
     return (
       <button
         className={cn(
-          "text-xs hover:underline transition-colors px-2 py-1 rounded cursor-pointer",
+          "flex h-6 w-full items-center text-left text-xs transition-colors hover:underline",
+          "cursor-pointer px-0",
           priorityStyles[value],
           disabled && "opacity-50 cursor-not-allowed hover:no-underline"
         )}

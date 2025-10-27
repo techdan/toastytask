@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, EyeOff } from "lucide-react";
+import { Calendar, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -45,23 +45,24 @@ export function TaskListHeader({
 
         {/* Due Date column */}
         <div className="w-[120px]">
-          <span className="text-xs font-medium text-muted-foreground">
-            Due Date
-          </span>
+          <div className="flex h-6 w-full items-center gap-1 text-left text-xs font-medium text-muted-foreground">
+            <Calendar className="h-3 w-3 opacity-0" aria-hidden="true" />
+            <span>Due Date</span>
+          </div>
         </div>
 
         {/* Priority column */}
         <div className="w-[90px]">
-          <span className="text-xs font-medium text-muted-foreground">
+          <div className="flex h-6 items-center text-left text-xs font-medium text-muted-foreground">
             Priority
-          </span>
+          </div>
         </div>
 
         {/* Recurrence column */}
         <div className="w-[100px]">
-          <span className="text-xs font-medium text-muted-foreground">
+          <div className="flex h-6 items-center text-left text-xs font-medium text-muted-foreground">
             Recurrence
-          </span>
+          </div>
         </div>
 
         {/* Actions/Controls column */}

@@ -43,7 +43,8 @@ export function RecurrenceSelect({ value, onValueChange, disabled }: RecurrenceS
     return (
       <button
         className={cn(
-          "flex items-center gap-1 text-xs hover:underline transition-colors px-2 py-1 rounded cursor-pointer",
+          "flex h-6 w-full items-center gap-1 text-left text-xs transition-colors hover:underline",
+          "cursor-pointer px-0",
           !showIcon && "text-muted-foreground/60",
           disabled && "opacity-50 cursor-not-allowed hover:no-underline"
         )}
