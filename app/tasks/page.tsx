@@ -10,6 +10,7 @@ import { UserAccountDropdown } from "@/components/auth/user-account-dropdown";
 import {
   useTasksQuery,
   useProjectsQuery,
+  useSettingsQuery,
   useCreateTask,
   useUpdateTask,
   useDeleteTask,
@@ -18,8 +19,9 @@ import {
   useCreateProject,
   useUpdateProject,
   useDeleteProject,
+  useUpdateSettings,
 } from "@/lib/queries";
-import type { Task, NewTask, Project } from "@/types";
+import type { Task, NewTask, Project, SortMode } from "@/types";
 
 // Number of days to show completed tasks when visibility is enabled
 const COMPLETED_TASKS_VISIBLE_DAYS = 7;
@@ -56,6 +58,8 @@ export default function TasksPage() {
   const { data: projects = [] } = useProjectsQuery({
     includeArchived: true,
   });
+
+  const { data: settings } = useSettingsQuery();
 
   // Background pre-fetching for better perceived performance
   useEffect(() => {
@@ -97,6 +101,7 @@ export default function TasksPage() {
   const createProjectMutation = useCreateProject();
   const updateProjectMutation = useUpdateProject();
   const deleteProjectMutation = useDeleteProject();
+  const updateSettingsMutation = useUpdateSettings();
 
   // Client-side filtering for completed tasks with time cutoff
   // Only show completed tasks from the last N days when toggle is on
@@ -129,9 +134,37 @@ export default function TasksPage() {
       if (a.completedAt && !b.completedAt) return 1;
       if (!a.completedAt && b.completedAt) return -1;
 
-      // Sort by importance (desc: 12→2)
-      if (b.importanceV1 !== a.importanceV1) {
-        return b.importanceV1 - a.importanceV1;
+      // HEAT V2: Untouched tasks (both counters = 0) always sort to top
+      // This applies to BOTH Importance and Heat modes (toodle-163)
+      const aIsUntouched = a.heatTouchCount === 0 && a.otherTouchCount === 0;
+      const bIsUntouched = b.heatTouchCount === 0 && b.otherTouchCount === 0;
+
+      if (aIsUntouched && !bIsUntouched) return -1;
+      if (!aIsUntouched && bIsUntouched) return 1;
+
+      // If both are untouched, sort by importance/heat (depending on mode)
+      if (aIsUntouched && bIsUntouched) {
+        const sortValue = settings?.sortMode === "heat" ? a.importanceV1 : a.importanceV1; // Placeholder: same for both
+        const sortValueB = settings?.sortMode === "heat" ? b.importanceV1 : b.importanceV1; // Placeholder: same for both
+
+        if (sortValueB !== sortValue) {
+          return sortValueB - sortValue; // desc: 12→2
+        }
+
+        // Then by creation date (newest first)
+        const aCreated = typeof a.createdAt === "number" ? a.createdAt * 1000 : new Date(a.createdAt).getTime();
+        const bCreated = typeof b.createdAt === "number" ? b.createdAt * 1000 : new Date(b.createdAt).getTime();
+        return bCreated - aCreated;
+      }
+
+      // Sort by importance or heat based on settings
+      // NOTE: Heat mode currently uses importanceV1 as placeholder until heat system is built (toodle-170)
+      // Both modes use the same sorting initially - heat will be updated in toodle-40
+      const sortValue = settings?.sortMode === "heat" ? a.importanceV1 : a.importanceV1; // Placeholder: same for both
+      const sortValueB = settings?.sortMode === "heat" ? b.importanceV1 : b.importanceV1; // Placeholder: same for both
+
+      if (sortValueB !== sortValue) {
+        return sortValueB - sortValue; // desc: 12→2
       }
 
       // Then by due date (earlier is better, nulls last)
@@ -148,7 +181,7 @@ export default function TasksPage() {
       const bCreated = typeof b.createdAt === "number" ? b.createdAt * 1000 : new Date(b.createdAt).getTime();
       return bCreated - aCreated;
     });
-  }, [tasks]);
+  }, [tasks, settings?.sortMode]);
 
   const handleAddTask = async (taskData: Omit<NewTask, "createdAt" | "updatedAt">) => {
     createTaskMutation.mutate(taskData as NewTask);
@@ -201,6 +234,11 @@ export default function TasksPage() {
     if (selectedProjectId === id) {
       setSelectedProjectId("all");
     }
+  };
+
+  // Settings handlers
+  const handleSortModeChange = (sortMode: SortMode) => {
+    updateSettingsMutation.mutate({ sortMode });
   };
 
   // Calculate task counts per project from ALL tasks (exclude completed)
@@ -265,6 +303,8 @@ export default function TasksPage() {
               tasks={sortedTasks}
               showCompleted={showCompleted}
               onToggleCompleted={handleToggleCompleted}
+              sortMode={settings?.sortMode || "importance"}
+              onSortModeChange={handleSortModeChange}
               onUpdate={handleUpdateTask}
               onDelete={handleDeleteTask}
               onComplete={handleCompleteTask}

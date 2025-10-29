@@ -53,10 +53,21 @@ export const tasks = pgTable("tasks", {
     .default("none"),
 
   // Heat model fields (Phase 3)
-  heat: real("heat").notNull().default(0.0),
-  touchCount: integer("touch_count").notNull().default(0),
+  heat: real("heat").notNull().default(0.5),
+  heatCalculatedAt: timestamp("heat_calculated_at", { mode: "date", withTimezone: true }),
+
+  // Split touch tracking (Heat v2)
+  heatTouchCount: real("heat_touch_count").notNull().default(0),
+  otherTouchCount: integer("other_touch_count").notNull().default(0),
+  lastHeatTouchedAt: timestamp("last_heat_touched_at", { mode: "date", withTimezone: true }),
   lastTouchedAt: timestamp("last_touched_at", { mode: "date", withTimezone: true }),
+
+  // Snooze and cold storage
   nextSurfaceAt: timestamp("next_surface_at", { mode: "date", withTimezone: true }),
+  coldStorageAt: timestamp("cold_storage_at", { mode: "date", withTimezone: true }),
+
+  // Legacy field (deprecated, use heatTouchCount + otherTouchCount)
+  touchCount: integer("touch_count").notNull().default(0),
 
   // Calculated fields
   importanceV1: integer("importance_v1").notNull().default(0),
@@ -93,6 +104,15 @@ export const tasks = pgTable("tasks", {
   completedAtIdx: index("tasks_completed_at_idx").on(table.completedAt),
   // Composite index for active tasks sorted by importance
   activeImportanceIdx: index("tasks_active_importance_idx").on(table.deletedAt, table.importanceV1),
+  // Heat v2 indexes
+  // Index for heat sorting (active tasks, excluding cold storage)
+  heatSortIdx: index("tasks_heat_sort_idx").on(table.heat, table.completedAt, table.coldStorageAt),
+  // Index for cold storage queries
+  coldStorageIdx: index("tasks_cold_storage_idx").on(table.coldStorageAt, table.lastTouchedAt),
+  // Index for resurfacing queries (snoozed tasks)
+  resurfacingIdx: index("tasks_resurfacing_idx").on(table.nextSurfaceAt),
+  // Index for new task queries (both counters = 0)
+  newTaskIdx: index("tasks_new_task_idx").on(table.heatTouchCount, table.otherTouchCount, table.completedAt),
 }));
 
 // Settings table (single row for user preferences)
@@ -157,6 +177,9 @@ export const settings = pgTable("settings", {
   })
     .notNull()
     .default("ungrouped"),
+  sortMode: text("sort_mode", { enum: ["importance", "heat"] })
+    .notNull()
+    .default("importance"),
 
   updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true })
     .notNull()

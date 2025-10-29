@@ -33,6 +33,13 @@ export const GroupingMode = {
 
 export type GroupingMode = (typeof GroupingMode)[keyof typeof GroupingMode];
 
+export const SortMode = {
+  IMPORTANCE: "importance",
+  HEAT: "heat",
+} as const;
+
+export type SortMode = (typeof SortMode)[keyof typeof SortMode];
+
 // Re-export types from schema for convenience
 export type { Task as BaseTask, NewTask, Project, NewProject, Settings, NewSettings } from "@/lib/db/schema";
 

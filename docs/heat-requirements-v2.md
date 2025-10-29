@@ -7,6 +7,7 @@
    - Exception: Snooze auto-drops task position immediately
 2. **Bold Green Styling** - New tasks shown in bold green text (not badge), fades after any touch
 3. **Visible Snooze** - Snoozed tasks remain visible, heat up as resurface date approaches
+   - **Snooze applies projected decay** - Cooling scales naturally with snooze duration
 4. **Split Touch Tracking** - Heat icon (🔥) vs general edits tracked separately
 5. **Heat Icon Power** - 20 heat clicks pushes task to top (30% weight)
 6. **Due Proximity Explicit** - Impending due dates get 15% weight boost
@@ -16,6 +17,7 @@
 **Rationale:**
 - Manual refresh prevents disorientation during multi-task editing
 - Split tracking gives heat icon explicit override power
+- Projected decay on snooze: natural time-based cooling, scales with duration
 - Due proximity ensures deadlines don't get buried
 - New task override guarantees visibility without relying on formula alone
 - Heat breakdown provides transparency and learning
@@ -63,83 +65,113 @@ Heat is calculated as a weighted sum, clamped to [0, 1]:
 
 ```typescript
 heat = clamp(
-  0.20 * base_importance +      // Foundation from priority/star
-  0.25 * recency +               // Exponential decay from last touch (any touch)
-  0.30 * heat_touches +          // NEW: explicit heat icon clicks (powerful override)
-  0.15 * due_proximity +         // NEW: sigmoid function of days to due date
-  0.05 * activity +              // Logarithmic scaling of other touches (edits)
-  0.05 * creation_recency,       // Minimal weight (relies on sort override)
+  0.50 * base_importance +      // PRIMARY DRIVER from priority/star (was 20%)
+  0.05 * recency +               // Exponential decay from last touch - minor boost (was 25%)
+  0.30 * heat_touches +          // Explicit heat icon clicks (powerful override) - UNCHANGED
+  0.05 * due_proximity +         // Sigmoid function of days to due date (was 15%)
+  0.05 * activity +              // Logarithmic scaling of other touches (edits) - UNCHANGED
+  0.05 * creation_recency,       // Minimal weight (relies on sort override) - UNCHANGED
   0, 1
 )
 ```
+
+**Algorithm Refinement (2025-01-28)**: Weights adjusted based on analysis (see [docs/heat-algorithm-analysis.md](heat-algorithm-analysis.md)):
+- Base importance increased 20% → 50% to make priority the primary driver
+- Recency decreased 25% → 5% to prevent snooze from increasing heat
+- Due proximity decreased 15% → 5% to avoid double-counting with importanceV1
 
 **Note on New Tasks:** Untouched tasks (both counters = 0) use a **manual sort override** to always appear at top of list, regardless of calculated heat. This guarantees visibility without relying solely on the creation_recency component.
 
 ### Component Definitions
 
-#### 1. Base Importance (20% weight)
+#### 1. Base Importance (50% weight - PRIMARY DRIVER, was 20%)
 - Maps importance_v1 (2-12 range) → 0.0-1.0 linearly
 - Formula: `(importance_v1 - 2) / 10`
 - Provides foundation from priority and star
+- **PRIMARY DRIVER**: Ensures high-priority tasks always have high base heat
 - **Note:** Due date now in separate component (see #4 below)
 
-#### 2. Recency Score (25% weight)
+#### 2. Recency Score (5% weight - minor boost, was 25%)
 - Exponential decay based on time since **any touch** (heat or other)
 - Formula: `exp(-hours_since_touch / H)`
 - **Default half-life (H): 168 hours (7 days)**
 - Configurable as constant: `HEAT_DECAY_HALF_LIFE_HOURS = 168`
 - Future: User-configurable in Settings
+- **CRITICAL FIX**: Returns 0 when task is snoozed (prevents snooze from increasing heat)
 
 **Decay behavior:**
-- Fresh touch (any type) → recency = 1.0
-- After 7 days untouched → recency = 0.5
-- After 14 days untouched → recency = 0.25
-- After 21 days untouched → recency = 0.125
+- Fresh touch (any type) → recency = 1.0 → 5% contribution
+- After 7 days untouched → recency = 0.5 → 2.5% contribution
+- After 14 days untouched → recency = 0.25 → 1.25% contribution
+- After 21 days untouched → recency = 0.125 → 0.625% contribution
+- **Snoozed task → recency = 0 → 0% contribution** (prevents snooze heat increase)
 
 #### 3. Heat Touches (30% weight) - NEW
 **The "Override" Component** - gives user explicit control to push tasks to top
 
 - Linear scaling of heat icon clicks only (🔥)
-- Formula: `min(heat_touch_count / 20, 1.0) * exp(-hours_since_last_heat_touch / 168)`
-- Caps at **20 clicks** for maximum power
-- Decays with 7-day half-life (same as general recency)
+- Formula: `min(heat_touch_count / 20, 1.0) * 0.30`
+- Caps at **20 equivalent clicks** for maximum power
+- **Decay-on-touch:** Counter decays before each new touch added
+
+**Decay-on-Touch Mechanism (Prevents Zombie Heat):**
+```typescript
+// When user clicks heat icon
+const hours_since_last = (now - last_heat_touched_at) / 3600000
+const decay_factor = exp(-hours_since_last / 168)  // 7-day half-life
+
+// Apply decay to existing touches BEFORE adding new one
+heat_touch_count = (heat_touch_count * decay_factor) + 1
+last_heat_touched_at = now
+```
+
+**Why decay-on-touch:**
+- Solves "zombie heat" problem: Old touches fade when new touch added
+- Without this: 20 ancient touches + 1 fresh touch = instant 100% (wrong!)
+- With this: (20 * decay_factor) + 1 = natural progression (correct!)
+- Counter represents "equivalent fresh touches"
 
 **Heat touch behavior:**
-- 5 clicks (fresh) → 25% of scale → 7.5% total heat boost
-- 10 clicks (fresh) → 50% of scale → 15% total heat boost
-- 15 clicks (fresh) → 75% of scale → 22.5% total heat boost
-- 20 clicks (fresh) → 100% of scale → 30% total heat boost
-- After 7 days: heat contribution halved (decay)
-- After 14 days: heat contribution quartered
+- 5 fresh equivalent touches → 25% of scale → 7.5% total heat boost
+- 10 fresh equivalent touches → 50% of scale → 15% total heat boost
+- 15 fresh equivalent touches → 75% of scale → 22.5% total heat boost
+- 20 fresh equivalent touches → 100% of scale → 30% total heat boost
+
+**Decay examples:**
+- Touch 20x, wait 7 days, touch once: counter becomes (20 * 0.5) + 1 = 11
+- Touch 20x, wait 14 days, touch once: counter becomes (20 * 0.25) + 1 = 6
+- Touch 20x, wait 30 days, touch once: counter becomes (20 * 0.06) + 1 = 2.2
 
 **Power analysis:**
-- 20 heat clicks + fresh recency (25%) = **0.55 base heat**
+- 20 fresh touches + fresh recency (25%) = **0.55 base heat**
 - Most tasks hover around 0.30-0.45 heat
 - 0.55+ puts task in top tier
 - Combined with any due date or importance → 0.70-0.80 (near top guaranteed)
 
 **What counts as heat touch:**
 - Only clicking 🔥 flame icon increments `heat_touch_count`
+- Applies decay before incrementing
 - Updates `last_heat_touched_at` timestamp
 - Also updates `last_touched_at` (contributes to recency)
 
-#### 4. Due Proximity (15% weight) - NEW
+#### 4. Due Proximity (5% weight, was 15%)
 **Ensures impending deadlines bubble up**
 
 - Sigmoid function of days until due date
 - Formula: `1 / (1 + exp(days_to_due))` if due_date exists, else `0`
 - Smooth curve: minimal effect far out, dramatic effect as date approaches
+- **Reduced to 5%** to avoid double-counting with importanceV1 (which already includes due date)
 
 **Due proximity behavior:**
-| Days to Due | Proximity Score | Heat Contribution (15% weight) |
+| Days to Due | Proximity Score | Heat Contribution (5% weight) |
 |-------------|----------------|-------------------------------|
 | 7+ days | ~0.00 | ~0% (minimal) |
-| 3 days | 0.047 | 0.7% |
-| 1 day | 0.269 | 4.0% |
-| Today (0) | 0.500 | 7.5% |
-| 1 day overdue | 0.731 | 11.0% |
-| 3 days overdue | 0.953 | 14.3% |
-| 7+ days overdue | ~1.00 | ~15% (max) |
+| 3 days | 0.047 | 0.24% |
+| 1 day | 0.269 | 1.35% |
+| Today (0) | 0.500 | 2.5% |
+| 1 day overdue | 0.731 | 3.66% |
+| 3 days overdue | 0.953 | 4.77% |
+| 7+ days overdue | ~1.00 | ~5% (max) |
 
 **Key insight:** Past-due tasks get **increasing** heat to stay visible, not penalized for being late.
 
@@ -186,13 +218,13 @@ const HEAT_TOUCH_CAP = 20;                     // 20 heat clicks = maximum power
 const ACTIVITY_CAP = 20;                       // 20 other touches = maximum
 const CREATION_DECAY_DAYS = 60;                // Creation boost diminishes over 60 days
 
-// Component weights
-const WEIGHT_BASE = 0.20;            // Base importance (priority + star)
-const WEIGHT_RECENCY = 0.25;         // Time since any touch
-const WEIGHT_HEAT_TOUCHES = 0.30;    // Heat icon clicks (powerful override)
-const WEIGHT_DUE_PROXIMITY = 0.15;   // Due date urgency
-const WEIGHT_ACTIVITY = 0.05;        // Other touches (edits)
-const WEIGHT_CREATION = 0.05;        // Creation recency (minimal, uses sort override)
+// Component weights (REFINED - see docs/heat-algorithm-analysis.md)
+const WEIGHT_BASE = 0.50;            // Base importance (priority + star) - PRIMARY DRIVER (was 20%)
+const WEIGHT_RECENCY = 0.05;         // Time since any touch - minor boost (was 25%)
+const WEIGHT_HEAT_TOUCHES = 0.30;    // Heat icon clicks (powerful override) - UNCHANGED
+const WEIGHT_DUE_PROXIMITY = 0.05;   // Due date urgency (was 15%)
+const WEIGHT_ACTIVITY = 0.05;        // Other touches (edits) - UNCHANGED
+const WEIGHT_CREATION = 0.05;        // Creation recency (minimal, uses sort override) - UNCHANGED
 
 // Cold storage thresholds
 const COLD_STORAGE_HEAT_THRESHOLD = 0.05;
@@ -354,6 +386,8 @@ Hover (or click on mobile) shows detailed breakdown:
 2. User selects "resurface date" (when task should return to top)
 3. System applies cooling and sets resurface date:
    - Sets `next_surface_at` to selected date
+   - **Applies projected decay to `heat_touch_count`** (NEW: natural cooling)
+   - Updates `last_heat_touched_at` to now
    - Applies initial cooling (drops heat significantly)
    - Task remains visible in list (not hidden)
 4. **Exception to manual refresh:** Task **immediately drops** to new position
@@ -361,6 +395,33 @@ Hover (or click on mobile) shows detailed breakdown:
    - Provides instant feedback that snooze worked
 5. As resurface date approaches, task gradually heats up (visible after refresh)
 6. On resurface date, task reaches peak heat (~0.80+) and appears at/near top (after refresh)
+
+**Projected Decay on Snooze:**
+```typescript
+// Calculate how much snooze duration would naturally decay touches
+const days_snoozed = (next_surface_at - now) / 86400000
+const hours_snoozed = days_snoozed * 24
+const decay_factor = exp(-hours_snoozed / 168)  // 7-day half-life
+
+// Apply projected decay immediately
+heat_touch_count = heat_touch_count * decay_factor
+last_heat_touched_at = now
+```
+
+**Snooze decay examples:**
+- 1 day snooze: 20 touches → 20 * 0.86 = 17.2 (86% retained)
+- 3 day snooze: 20 touches → 20 * 0.64 = 12.8 (64% retained)
+- 7 day snooze: 20 touches → 20 * 0.37 = 7.4 (37% retained)
+- 14 day snooze: 20 touches → 20 * 0.14 = 2.8 (14% retained)
+- 30 day snooze: 20 touches → 20 * 0.06 = 1.2 (6% retained)
+
+**Rationale for Projected Decay:**
+- Natural and predictable: Decay matches time passing
+- Scales appropriately: Longer snooze = more cooling
+- Preserves partial history: Some touches remain
+- Consistent: Uses same 7-day half-life as general decay
+- Sufficient drop: Task moves down far enough to be "out of sight"
+- Allows early unsnooze: If user changes mind, partial touches remain
 
 **Date Picker Options:**
 - Quick presets: +1 day, +3 days, +1 week, +2 weeks, +1 month
@@ -372,7 +433,7 @@ Hover (or click on mobile) shows detailed breakdown:
 **Heat Calculation with Snooze:**
 When `next_surface_at` is set, heat formula includes proximity boost:
 ```typescript
-// Standard heat calculation
+// Standard heat calculation (note: heat_touch_count = 0 when snoozed)
 let heat = calculateBaseHeat(task);
 
 // If snoozed, add proximity boost as resurface date approaches
@@ -394,12 +455,15 @@ if (task.next_surface_at) {
   if (hours_until_resurface <= 0) {
     task.next_surface_at = null;
     task.last_touched_at = now;  // Fresh touch on resurface
+    // Note: heat_touch_count retains decayed value (user can re-heat to boost further)
     heat = Math.min(1.0, heat + 0.30);
   }
 }
 
 return clamp(heat, 0, 1);
 ```
+
+**Key Point:** Because `heat_touch_count` is reduced via projected decay on snooze, the heat_touches component (30% weight) contributes minimally while snoozed. Task relies primarily on base importance, due proximity, and activity for natural heat.
 
 **Visual Indicator for Snoozed Tasks:**
 - Small clock/calendar icon next to task title: 🕐
@@ -572,7 +636,8 @@ Tasks move to Cold Storage when:
 
 | Action | heat_touch_count | other_touch_count | last_heat_touched_at | last_touched_at |
 |--------|-----------------|-------------------|---------------------|----------------|
-| Click 🔥 heat icon | ✓ increment | - | ✓ update | ✓ update |
+| Click 🔥 heat icon | ✓ decay + increment | - | ✓ update | ✓ update |
+| Click ❄️ snooze icon | **✓ apply projected decay** | - | ✓ update | ✓ update |
 | Edit title | - | ✓ increment | - | ✓ update |
 | Change priority | - | ✓ increment | - | ✓ update |
 | Change due date | - | ✓ increment | - | ✓ update |
@@ -585,6 +650,13 @@ Tasks move to Cold Storage when:
 - Counters **preserved** (not reset) for history
 - Heat recalculated but frozen (no further changes until uncompleted)
 - Task moves to completed section at bottom
+
+**On Snooze:**
+- `heat_touch_count` **reduced via projected decay** (scales with snooze duration)
+- `last_heat_touched_at` updated to now (time-based decay starting point)
+- `other_touch_count` preserved (keeps edit history)
+- `last_touched_at` updated (general activity tracked)
+- Rationale: Natural cooling that scales with time, preserves partial history
 
 ### Database Migration
 
@@ -805,8 +877,14 @@ Body: {
 
 Response: {
   data: {
-    task: Task,           // Updated task with next_surface_at set and cooling applied
+    task: Task,           // Updated task with:
+                          //   - next_surface_at set
+                          //   - heat_touch_count reduced (PROJECTED DECAY)
+                          //   - last_heat_touched_at updated to now
+                          //   - cooling applied
     heatDelta: number,    // Change in heat (typically negative, e.g., -0.40)
+    heatTouchDecayFactor: number,  // Decay factor applied (e.g., 0.37 for 7 days)
+    touchesRetained: number,       // Equivalent touches after decay (e.g., 7.4)
     resurfaceDate: Date,  // Confirmed resurface date
     daysUntilResurface: number  // Days until task heats back up
   }
@@ -1064,10 +1142,13 @@ Heat is time-dependent (recency decay) and becomes stale as hours pass.
 ✅ **Cool Interaction:**
 - Clicking snowflake opens date picker
 - Selecting date sets next_surface_at and cools task
+- **Applies projected decay to heat_touch_count** (scales with snooze duration)
+- Updates last_heat_touched_at to now (decay starting point)
 - **Exception:** Task immediately drops to new position (auto-sort)
 - Task remains visible with clock icon 🕐
 - Task gradually heats up as resurface date approaches
-- On resurface date, task has high heat (~0.80+)
+- On resurface date, task has high heat (~0.80+) from proximity boost
+- heat_touch_count retains decayed value after resurface (partial history preserved)
 
 ✅ **New Task Behavior:**
 - New tasks (both counters = 0) always appear at top via sort override

@@ -1,15 +1,39 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
+import { calculateHeat } from "@/lib/scoring/heat-v2";
 import type { Task, NewTask } from "@/types";
+import type { HeatBreakdown } from "@/lib/scoring/heat-v2";
 
 interface TaskResponse {
   task: Task;
 }
 
+interface TouchTaskResponse {
+  task: Task;
+  heatDelta: number;
+  heatBreakdown: HeatBreakdown;
+  decayFactor: number;
+}
+
+interface SnoozeTaskResponse {
+  task: Task;
+  heatDelta: number;
+  heatBreakdown: HeatBreakdown;
+  decayFactor: number;
+  touchesRetained: number;
+  resurfaceDate: Date;
+  daysUntilResurface: number;
+}
+
 interface UpdateTaskData {
   id: number;
   updates: Partial<Task>;
+}
+
+interface SnoozeTaskData {
+  id: number;
+  nextSurfaceAt: Date;
 }
 
 // Create task
@@ -109,10 +133,15 @@ export function useCreateTask() {
         dueAt: newTask.dueAt ?? null,
         bucket: newTask.bucket ?? "todo",
         repeatType: newTask.repeatType ?? "none",
-        heat: newTask.heat ?? 0.0,
-        touchCount: newTask.touchCount ?? 0,
+        heat: newTask.heat ?? 0.5,
+        heatCalculatedAt: null,
+        heatTouchCount: 0,
+        otherTouchCount: 0,
+        lastHeatTouchedAt: null,
         lastTouchedAt: null,
         nextSurfaceAt: null,
+        coldStorageAt: null,
+        touchCount: newTask.touchCount ?? 0,
         importanceV1: newTask.importanceV1 ?? 0,
         completedAt: null,
         archivedAt: null,
@@ -199,7 +228,12 @@ export function useUpdateTask() {
           if (task.id !== id) return task;
 
           // Apply updates
-          const updatedTask = { ...task, ...updates };
+          const updatedTask = {
+            ...task,
+            ...updates,
+            // Increment otherTouchCount to remove green styling on any edit
+            otherTouchCount: task.otherTouchCount + 1,
+          };
 
           // INSTANT IMPORTANCE: Recalculate client-side if relevant fields changed
           // This provides immediate UI feedback while server confirms
@@ -408,6 +442,190 @@ export function useUncompleteTask() {
       }
       toast.error("Failed to uncomplete task", {
         description: error instanceof Error ? error.message : "Unknown error",
+      });
+    },
+    onSettled: () => {
+      // Refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
+}
+
+// Touch task (heat warm interaction)
+async function touchTask(id: number): Promise<TouchTaskResponse> {
+  const response = await fetch(`/api/tasks/${id}/touch`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to touch task");
+  }
+
+  return response.json();
+}
+
+// Snooze task (cool interaction)
+async function snoozeTask({ id, nextSurfaceAt }: SnoozeTaskData): Promise<SnoozeTaskResponse> {
+  const response = await fetch(`/api/tasks/${id}/snooze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nextSurfaceAt }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to snooze task");
+  }
+
+  return response.json();
+}
+
+// Hook: Touch task (warm interaction with decay-on-touch)
+export function useTouchTask() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: touchTask,
+    onMutate: async (taskId) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["tasks"] });
+
+      // Snapshot previous values
+      const previousTasks = queryClient.getQueriesData({ queryKey: ["tasks"] });
+
+      // Optimistically update the task (approximate heat calculation)
+      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
+        if (!oldTasks || !Array.isArray(oldTasks)) {
+          return oldTasks;
+        }
+
+        return oldTasks.map((task) => {
+          if (task.id !== taskId) return task;
+
+          // Optimistic updates:
+          // 1. Remove green styling if first touch (increment heatTouchCount)
+          // 2. Update heat (recalculate client-side)
+          // 3. Position stays stable (no re-sort)
+          const now = new Date();
+          const updatedTask = {
+            ...task,
+            heatTouchCount: task.heatTouchCount + 1, // Increment to remove green styling
+            lastTouchedAt: now,
+            lastHeatTouchedAt: now,
+          };
+
+          // Recalculate heat client-side for immediate feedback
+          updatedTask.heat = calculateHeat(updatedTask, now);
+
+          return updatedTask;
+        });
+      });
+
+      return { previousTasks };
+    },
+    onError: (error, _variables, context) => {
+      // Rollback on error
+      if (context?.previousTasks) {
+        context.previousTasks.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
+      toast.error("Failed to touch task", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    },
+    onSuccess: (response) => {
+      // Update with server response
+      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
+        if (!oldTasks || !Array.isArray(oldTasks)) {
+          return oldTasks;
+        }
+
+        return oldTasks.map((task) =>
+          task.id === response.task.id ? response.task : task
+        );
+      });
+    },
+    onSettled: () => {
+      // Refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
+}
+
+// Hook: Snooze task (cool interaction with projected decay)
+export function useSnoozeTask() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: snoozeTask,
+    onMutate: async ({ id, nextSurfaceAt }) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["tasks"] });
+
+      // Snapshot previous values
+      const previousTasks = queryClient.getQueriesData({ queryKey: ["tasks"] });
+
+      // Optimistically update the task
+      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
+        if (!oldTasks || !Array.isArray(oldTasks)) {
+          return oldTasks;
+        }
+
+        return oldTasks.map((task) => {
+          if (task.id !== id) return task;
+
+          // Optimistic updates:
+          // 1. Set next_surface_at
+          // 2. Increment heatTouchCount to remove green styling
+          // 3. Update heat (recalculate with new snooze date)
+          // 4. Task will drop to new position (exception to manual refresh)
+          const now = new Date();
+          const updatedTask = {
+            ...task,
+            nextSurfaceAt: nextSurfaceAt,
+            heatTouchCount: task.heatTouchCount + 1, // Increment to remove green styling
+            lastTouchedAt: now,
+            lastHeatTouchedAt: now,
+          };
+
+          // Recalculate heat client-side for immediate feedback
+          updatedTask.heat = calculateHeat(updatedTask, now);
+
+          return updatedTask;
+        });
+      });
+
+      return { previousTasks };
+    },
+    onError: (error, _variables, context) => {
+      // Rollback on error
+      if (context?.previousTasks) {
+        context.previousTasks.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
+      toast.error("Failed to snooze task", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    },
+    onSuccess: (response) => {
+      // Update with server response and re-sort
+      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
+        if (!oldTasks || !Array.isArray(oldTasks)) {
+          return oldTasks;
+        }
+
+        // Replace the updated task and re-sort by heat
+        const updatedTasks = oldTasks.map((task) =>
+          task.id === response.task.id ? response.task : task
+        );
+
+        // Exception: Auto-resort on snooze
+        return updatedTasks.sort((a, b) => b.heat - a.heat);
+      });
+
+      toast.success("Task snoozed", {
+        description: `Will resurface in ${Math.round(response.daysUntilResurface)} days`,
       });
     },
     onSettled: () => {

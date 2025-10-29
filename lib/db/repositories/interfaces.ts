@@ -25,6 +25,7 @@ export interface ITaskRepository {
 
   // Special operations
   touch(id: number, userId: string): Promise<Task>;
+  incrementOtherTouchCount(id: number, userId: string): Promise<Task>;
   snooze(id: number, untilDate: Date, userId: string): Promise<Task>;
   complete(id: number, userId: string): Promise<Task>;
   uncomplete(id: number, userId: string): Promise<Task>;

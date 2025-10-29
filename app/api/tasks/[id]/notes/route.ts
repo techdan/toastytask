@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { noteRepository } from "@/lib/db/repositories";
+import { auth } from "@clerk/nextjs/server";
+import { noteRepository, taskRepository } from "@/lib/db/repositories";
 
 // Force Node.js runtime for better-sqlite3 compatibility
 export const runtime = 'nodejs';
@@ -32,6 +33,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await params;
     const taskId = parseInt(id);
     if (isNaN(taskId)) {
@@ -55,6 +61,9 @@ export async function POST(
     // Split text into lines
     const lines = text.split("\n");
 
+    // Track if any notes were actually changed (for touch tracking)
+    let notesChanged = false;
+
     // Update or create note rows - only update if text actually changed
     const updatedNotes = [];
 
@@ -66,6 +75,7 @@ export async function POST(
         if (existingNotes[i].currentText !== lineText) {
           const updated = await noteRepository.updateNoteRow(existingNotes[i].id, lineText);
           updatedNotes.push(updated);
+          notesChanged = true;
         } else {
           // No change - keep existing note row as-is
           updatedNotes.push(existingNotes[i]);
@@ -81,12 +91,21 @@ export async function POST(
           lineText
         );
         updatedNotes.push(created);
+        notesChanged = true;
       }
     }
 
     // Delete any extra rows
-    for (let i = lines.length; i < existingNotes.length; i++) {
-      await noteRepository.deleteNoteRow(existingNotes[i].id);
+    if (lines.length < existingNotes.length) {
+      for (let i = lines.length; i < existingNotes.length; i++) {
+        await noteRepository.deleteNoteRow(existingNotes[i].id);
+      }
+      notesChanged = true;
+    }
+
+    // Track note edit engagement for Heat v2
+    if (notesChanged) {
+      await taskRepository.incrementOtherTouchCount(taskId, userId);
     }
 
     return NextResponse.json({ notes: updatedNotes });

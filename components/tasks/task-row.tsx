@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { Star, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Star, Trash2, Flame } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { PrioritySelect } from "./priority-select";
 import { RecurrenceSelect } from "./recurrence-select";
 import { DueDateDisplay } from "./due-date-display";
 import { TaskNotes, TaskNotesPanel } from "./task-notes";
-import { calculateImportanceV1, getImportanceColor } from "@/lib/scoring/importance-v1";
-import type { Task, Priority } from "@/types";
+import { HeatBadge } from "./heat-badge";
+import { SnoozePopover } from "./snooze-popover";
+import { useTouchTask, useSnoozeTask } from "@/lib/queries/use-task-mutations";
+import type { Task, Priority, SortMode } from "@/types";
 import { cn } from "@/lib/utils";
 
 const priorityStyles: Record<Priority, string> = {
@@ -21,29 +23,23 @@ const priorityStyles: Record<Priority, string> = {
 
 interface TaskRowProps {
   task: Task;
+  sortMode: SortMode;
   onUpdate: (id: number, updates: Partial<Task>) => void;
   onDelete: (id: number) => void;
   onComplete: (id: number) => void;
   onUncomplete: (id: number) => void;
 }
 
-export function TaskRow({ task, onUpdate, onDelete, onComplete, onUncomplete }: TaskRowProps) {
+export function TaskRow({ task, sortMode, onUpdate, onDelete, onComplete, onUncomplete }: TaskRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(task.title);
   const [notesExpanded, setNotesExpanded] = useState(false);
 
-  // Use server-calculated importance from task.importanceV1 as source of truth
-  // Only recalculate client-side for optimistic UI updates (will be overwritten by server response)
-  const importance = useMemo(() => {
-    // If the task has a server-calculated importance, use it
-    if (task.importanceV1 !== undefined && task.importanceV1 !== null) {
-      return task.importanceV1;
-    }
-    // Fallback: calculate on client (only happens for brand new tasks before server response)
-    return calculateImportanceV1(task);
-  }, [task]);
+  const touchTaskMutation = useTouchTask();
+  const snoozeTaskMutation = useSnoozeTask();
 
   const isCompleted = !!task.completedAt;
+  const isUntouched = task.heatTouchCount === 0 && task.otherTouchCount === 0;
 
   const handleTitleClick = () => {
     if (!isCompleted) {
@@ -93,6 +89,18 @@ export function TaskRow({ task, onUpdate, onDelete, onComplete, onUncomplete }: 
     onUpdate(task.id, { repeatType });
   };
 
+  const handleTouchClick = () => {
+    if (!isCompleted) {
+      touchTaskMutation.mutate(task.id);
+    }
+  };
+
+  const handleSnooze = (nextSurfaceAt: Date) => {
+    if (!isCompleted) {
+      snoozeTaskMutation.mutate({ id: task.id, nextSurfaceAt });
+    }
+  };
+
   return (
     <>
       <tr
@@ -111,17 +119,7 @@ export function TaskRow({ task, onUpdate, onDelete, onComplete, onUncomplete }: 
               onCheckedChange={handleCheckboxChange}
               className="h-4 w-4 cursor-pointer shrink-0"
             />
-            <div
-              className={cn(
-                "flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-bold",
-                isCompleted
-                  ? "bg-muted/40 text-muted-foreground/60"
-                  : "text-white " + getImportanceColor(importance)
-              )}
-              title={`Importance: ${importance}`}
-            >
-              {importance}
-            </div>
+            <HeatBadge task={task} mode={sortMode} isCompleted={isCompleted} />
             <button
               className={cn(
                 "shrink-0 transition-colors cursor-pointer",
@@ -142,6 +140,28 @@ export function TaskRow({ task, onUpdate, onDelete, onComplete, onUncomplete }: 
                 notesLastModified={task.notesLastModified}
               />
             </div>
+            {sortMode === "heat" && (
+              <>
+                <button
+                  className={cn(
+                    "shrink-0 transition-colors",
+                    isCompleted
+                      ? "opacity-50 cursor-not-allowed"
+                      : "text-orange-400/60 hover:text-orange-400 cursor-pointer"
+                  )}
+                  onClick={handleTouchClick}
+                  disabled={isCompleted}
+                  aria-label="Touch task (warm)"
+                  title="Touch task (T)"
+                >
+                  <Flame className="h-4 w-4" />
+                </button>
+                <SnoozePopover
+                  onSnooze={handleSnooze}
+                  disabled={isCompleted}
+                />
+              </>
+            )}
             <div className="flex-1 min-w-0">
               {isEditing ? (
                 <Input
@@ -155,8 +175,9 @@ export function TaskRow({ task, onUpdate, onDelete, onComplete, onUncomplete }: 
               ) : (
                 <button
                   className={cn(
-                    "w-full text-left text-sm hover:text-primary cursor-pointer",
-                    !isCompleted && priorityStyles[task.priority],
+                    "w-full text-left text-sm hover:text-primary cursor-pointer transition-all duration-200",
+                    !isCompleted && !isUntouched && priorityStyles[task.priority],
+                    !isCompleted && isUntouched && "font-bold text-green-600 dark:text-green-400",
                     isCompleted && "line-through"
                   )}
                   onClick={handleTitleClick}

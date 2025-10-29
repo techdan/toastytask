@@ -1,21 +1,28 @@
 "use client";
 
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import type { SortMode } from "@/types";
 
 interface TaskListHeaderProps {
   showCompleted: boolean;
   onToggleCompleted: () => void;
-  // Future: sorting props
-  // sortBy?: "importance" | "dueDate" | "priority" | "title";
-  // sortDirection?: "asc" | "desc";
-  // onSort?: (column: string) => void;
+  sortMode: SortMode;
+  onSortModeChange: (mode: SortMode) => void;
 }
 
 export function TaskListHeader({
   showCompleted,
   onToggleCompleted,
+  sortMode,
+  onSortModeChange,
 }: TaskListHeaderProps) {
   return (
     <thead>
@@ -27,6 +34,37 @@ export function TaskListHeader({
             <div className="w-4"></div>
             <div className="w-4"></div>
             <span>Task</span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 px-1.5 text-xs gap-1"
+                  title="Sort mode"
+                >
+                  <span className="capitalize">{sortMode}</span>
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem
+                  onClick={() => onSortModeChange("importance")}
+                  className={cn(
+                    sortMode === "importance" && "bg-accent"
+                  )}
+                >
+                  Importance
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => onSortModeChange("heat")}
+                  className={cn(
+                    sortMode === "heat" && "bg-accent"
+                  )}
+                >
+                  Heat
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </th>
         <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0">

@@ -2,12 +2,14 @@
 
 import { TaskRow } from "./task-row";
 import { TaskListHeader } from "./task-list-header";
-import type { Task } from "@/types";
+import type { Task, SortMode } from "@/types";
 
 interface TaskListProps {
   tasks: Task[];
   showCompleted: boolean;
   onToggleCompleted: () => void;
+  sortMode: SortMode;
+  onSortModeChange: (mode: SortMode) => void;
   onUpdate: (id: number, updates: Partial<Task>) => void;
   onDelete: (id: number) => void;
   onComplete: (id: number) => void;
@@ -18,6 +20,8 @@ export function TaskList({
   tasks,
   showCompleted,
   onToggleCompleted,
+  sortMode,
+  onSortModeChange,
   onUpdate,
   onDelete,
   onComplete,
@@ -45,11 +49,14 @@ export function TaskList({
         <TaskListHeader
           showCompleted={showCompleted}
           onToggleCompleted={onToggleCompleted}
+          sortMode={sortMode}
+          onSortModeChange={onSortModeChange}
         />
         {tasks.map((task) => (
           <tbody key={task.id} className="before:content-[''] before:block before:h-2">
             <TaskRow
               task={task}
+              sortMode={sortMode}
               onUpdate={onUpdate}
               onDelete={onDelete}
               onComplete={onComplete}

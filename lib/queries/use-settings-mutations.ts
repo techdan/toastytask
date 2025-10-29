@@ -45,8 +45,11 @@ export function useUpdateSettings() {
 
       return { previousSettings };
     },
-    onSuccess: () => {
-      toast.success("Settings updated successfully");
+    onSuccess: (_data, variables) => {
+      // Don't show toast for sort mode changes (too frequent/distracting)
+      if (!('sortMode' in variables)) {
+        toast.success("Settings updated successfully");
+      }
     },
     onError: (error, _variables, context) => {
       // Rollback on error

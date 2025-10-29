@@ -1,4 +1,4 @@
-import { eq, and, isNull, desc, asc, inArray, sql, or } from "drizzle-orm";
+import { eq, and, isNull, desc, asc, inArray, sql } from "drizzle-orm";
 import type { ITaskRepository, TaskQueryOptions } from "./interfaces";
 import type { Task, NewTask } from "@/lib/db/schema";
 import type { Bucket } from "@/types";
@@ -235,6 +235,24 @@ export class SQLiteTaskRepository implements ITaskRepository {
       .update(tasks)
       .set({
         touchCount: sql`${tasks.touchCount} + 1`,
+        lastTouchedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
+      .returning();
+    return updatedTask;
+  }
+
+  /**
+   * Increment other_touch_count for field edits (Heat v2)
+   * This tracks user engagement with task fields (title, priority, due date, notes, etc.)
+   * Does NOT apply decay - that only happens on heat icon clicks
+   */
+  async incrementOtherTouchCount(id: number, userId: string): Promise<Task> {
+    const [updatedTask] = await this.db
+      .update(tasks)
+      .set({
+        otherTouchCount: sql`${tasks.otherTouchCount} + 1`,
         lastTouchedAt: new Date(),
         updatedAt: new Date(),
       })

@@ -42,6 +42,20 @@ export async function PATCH(
         : null;
     }
 
+    // Track field edits for Heat v2 (increment other_touch_count)
+    // Fields that count as "engagement": title, priority, dueAt, star, projectId, bucket
+    const isFieldEdit =
+      updates.title !== undefined ||
+      updates.priority !== undefined ||
+      updates.dueAt !== undefined ||
+      updates.star !== undefined ||
+      updates.projectId !== undefined ||
+      updates.bucket !== undefined;
+
+    if (isFieldEdit) {
+      await taskRepository.incrementOtherTouchCount(taskId, userId);
+    }
+
     // Recalculate importance if relevant fields changed
     if (
       updates.priority !== undefined ||
