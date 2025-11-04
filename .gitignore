@@ -45,3 +45,10 @@ next-env.d.ts
 /data/*.db
 /data/*.db-shm
 /data/*.db-wal
+
+# beads daemon runtime files
+.beads/bd.sock
+.beads/daemon.log
+.beads/daemon.pid
+.beads/daemon.lock
+.beads/*.tmp.*
