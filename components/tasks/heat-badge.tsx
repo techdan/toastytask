@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { Clock } from "lucide-react";
+import { useMemo, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Tooltip,
   TooltipContent,
@@ -10,11 +10,16 @@ import {
 } from "@/components/ui/tooltip";
 import {
   calculateHeatWithBreakdown,
-  getHeatColor,
-  getHeatLabel,
-  type HeatBreakdown,
-} from "@/lib/scoring/heat-v2";
-import { getImportanceColor } from "@/lib/scoring/importance-v1";
+  isHeatStale,
+  type HeatV3Breakdown,
+} from "@/lib/scoring/heat-v3";
+import { calculateImportanceV1WithFactors } from "@/lib/scoring/importance-v1";
+import {
+  getImportanceColorFromConfig,
+  getHeatColorFromConfig,
+  getHeatLabelFromConfig,
+} from "@/lib/scoring/importance-colors";
+import { HEAT_CONFIG } from "@/lib/scoring/heat-config";
 import type { Task, SortMode } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -27,19 +32,53 @@ interface HeatBadgeProps {
 /**
  * Dual-mode badge component that displays either Importance or Heat
  *
- * Importance Mode: Shows numeric value 2-12 with color
- * Heat Mode: Shows numeric value 1-100 with color and breakdown tooltip
+ * Importance Mode: Shows numeric value 2-14 with color
+ * Heat Mode: Shows numeric value 0-145 (points) with color and breakdown tooltip
+ *
+ * Heat v4: Updated to display 0-145 point scale instead of 0-100 percentage
  */
 export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
-  // Calculate heat breakdown for tooltip (only when in heat mode)
+  const queryClient = useQueryClient();
+  const invalidatedTasksRef = useRef<Set<number>>(new Set());
+
+  // Calculate heat breakdown for tooltip (always calculated, but only used in heat mode)
   const breakdown = useMemo(() => {
-    if (mode !== "heat") return null;
     return calculateHeatWithBreakdown(task);
-  }, [task, mode]);
+  }, [task]);
+
+  // Calculate importance factors (always calculated for consistency with React hooks rules)
+  const importanceFactors = useMemo(() => calculateImportanceV1WithFactors(task), [task]);
+
+  // Check if heat is stale and trigger refresh if needed
+  useEffect(() => {
+    if (mode !== "heat" || !breakdown) return;
+
+    const storedHeat = task.heat || 0;
+    const freshHeat = breakdown.totalHeat;
+    const heatDiff = Math.abs(freshHeat - storedHeat);
+    const isStale = isHeatStale(task.heatCalculatedAt);
+
+    // If heat is stale or differs significantly (>1%), invalidate query to trigger server refresh
+    if (isStale || heatDiff > 0.5) {
+      // Only invalidate once per task (until it's been updated)
+      if (!invalidatedTasksRef.current.has(task.id)) {
+        invalidatedTasksRef.current.add(task.id);
+        // Invalidate asynchronously to trigger refetch
+        setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        }, 100);
+      }
+    } else {
+      // Heat is fresh - clear the invalidation flag
+      invalidatedTasksRef.current.delete(task.id);
+    }
+  }, [task.id, task.heat, task.heatCalculatedAt, breakdown, mode, queryClient]);
 
   if (mode === "importance") {
-    // Importance Mode: Simple numeric badge (2-12)
+    // Importance Mode: Detailed breakdown tooltip
     const importance = task.importanceV1 || 0;
+    const starLabels = ['None', 'Blue (+1)', 'Yellow (+2)', 'Orange (+3)'];
+
     return (
       <TooltipProvider>
         <Tooltip>
@@ -49,25 +88,51 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
                 "flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-bold",
                 isCompleted
                   ? "bg-muted/40 text-muted-foreground/60"
-                  : "text-white " + getImportanceColor(importance)
+                  : "text-white " + getImportanceColorFromConfig(importance)
               )}
             >
               {importance}
             </div>
           </TooltipTrigger>
-          <TooltipContent>
-            <p>Importance: {importance}</p>
+          <TooltipContent className="max-w-sm">
+            <div className="space-y-2 py-1">
+              <div className="border-b pb-2">
+                <div className="font-semibold">Importance Breakdown ({importance}/14)</div>
+              </div>
+              <div className="space-y-1.5 text-xs">
+                <div className="flex justify-between items-center gap-4">
+                  <span className="text-muted-foreground">Priority ({task.priority}):</span>
+                  <span className="font-mono tabular-nums">{importanceFactors.priorityWeight} pts</span>
+                </div>
+                <div className="flex justify-between items-center gap-4">
+                  <span className="text-muted-foreground">Due Date:</span>
+                  <span className="font-mono tabular-nums">{importanceFactors.dueWeight} pts</span>
+                </div>
+                {importanceFactors.starBonus > 0 && (
+                  <div className="flex justify-between items-center gap-4">
+                    <span className="text-muted-foreground">Star ({starLabels[task.starLevel ?? 0]}):</span>
+                    <span className="font-mono tabular-nums">{importanceFactors.starBonus} pts</span>
+                  </div>
+                )}
+              </div>
+              <div className="border-t pt-2">
+                <div className="flex justify-between items-center text-xs font-semibold gap-4">
+                  <span>Total Importance:</span>
+                  <span className="font-mono tabular-nums">{importance}/14 ({Math.round((importance / 14) * 100)}%)</span>
+                </div>
+              </div>
+            </div>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
     );
   }
 
-  // Heat Mode: Display heat as 1-100 with breakdown tooltip
-  // Use calculated heat from breakdown (always fresh) instead of stored task.heat
+  // Heat Mode: Display heat as 0-145 points with breakdown tooltip
+  // Heat v4: Display raw point value instead of percentage
   const heat = breakdown?.totalHeat || 0;
-  const heatDisplay = Math.round(heat * 100); // Convert 0.0-1.0 to 1-100
-  const stageLabel = getHeatLabel(heat);
+  const heatDisplay = Math.round(heat); // Display as integer (0-145)
+  const stageLabel = getHeatLabelFromConfig(heat);
 
   return (
     <TooltipProvider>
@@ -76,17 +141,14 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
           <div className="flex items-center gap-1">
             <div
               className={cn(
-                "flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-bold",
+                "flex h-5 w-6 shrink-0 items-center justify-center rounded text-[10px] font-bold",
                 isCompleted
                   ? "bg-muted/40 text-muted-foreground/60"
-                  : "text-white " + getHeatColor(heat)
+                  : "text-white " + getHeatColorFromConfig(heat)
               )}
             >
               {heatDisplay}
             </div>
-            {task.nextSurfaceAt && (
-              <Clock className="h-3 w-3 text-muted-foreground" />
-            )}
           </div>
         </TooltipTrigger>
         <TooltipContent className="max-w-sm">
@@ -102,29 +164,25 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
 }
 
 interface HeatBreakdownTooltipProps {
-  breakdown: HeatBreakdown;
+  breakdown: HeatV3Breakdown;
   task: Task;
   stageLabel: string;
 }
 
 /**
- * Detailed heat breakdown for tooltip
- * Shows contribution from each of 6 components with context
+ * Detailed heat breakdown for tooltip (Heat V3/V4)
+ * Shows contribution from 3 components: base importance, heat adjustment, recency
+ * Heat v4: Updated to display points instead of percentages
  */
 function HeatBreakdownTooltip({
   breakdown,
   task,
   stageLabel,
 }: HeatBreakdownTooltipProps) {
-  const heatDisplay = Math.round(breakdown.totalHeat * 100);
+  const heatDisplay = Math.round(breakdown.totalHeat); // V4: Display as points (0-145)
+  const starLabels = ['None', 'Blue (+1)', 'Yellow (+2)', 'Orange (+3)'];
 
   // Format dates for display
-  const formatDate = (date: Date | number | string | null | undefined) => {
-    if (!date) return "Never";
-    const d = date instanceof Date ? date : new Date(date);
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  };
-
   const formatTimeAgo = (date: Date | number | string | null | undefined) => {
     if (!date) return "Never";
     const d = date instanceof Date ? date : new Date(date);
@@ -137,44 +195,6 @@ function HeatBreakdownTooltip({
     if (diffHours > 0) return `${diffHours}h ago`;
     return "Just now";
   };
-
-  const getDaysUntilDue = (dueAt: Date | number | string | null | undefined) => {
-    if (!dueAt) return null;
-    const d = dueAt instanceof Date ? dueAt : new Date(dueAt);
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const dueStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const diffMs = dueStart.getTime() - todayStart.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffDays < 0) return `${Math.abs(diffDays)}d overdue`;
-    if (diffDays === 0) return "Today";
-    if (diffDays === 1) return "Tomorrow";
-    return `In ${diffDays}d`;
-  };
-
-  const getDaysUntilResurface = (
-    nextSurfaceAt: Date | number | string | null | undefined
-  ) => {
-    if (!nextSurfaceAt) return null;
-    const d = nextSurfaceAt instanceof Date ? nextSurfaceAt : new Date(nextSurfaceAt);
-    const now = new Date();
-    const diffMs = d.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffDays <= 0) return "Ready to resurface";
-    if (diffDays === 1) return "Resurfaces tomorrow";
-    return `Resurfaces in ${diffDays}d`;
-  };
-
-  // Calculate total for verification (sum of weighted components)
-  const calculatedTotal =
-    breakdown.baseImportanceWeighted +
-    breakdown.recencyWeighted +
-    breakdown.heatTouchesWeighted +
-    breakdown.dueProximityWeighted +
-    breakdown.activityWeighted +
-    breakdown.creationWeighted;
 
   return (
     <div className="space-y-3 py-1">
@@ -192,11 +212,77 @@ function HeatBreakdownTooltip({
           <div className="flex justify-between items-center gap-4">
             <span className="text-muted-foreground">Base Importance:</span>
             <span className="font-mono tabular-nums">
-              {(breakdown.baseImportanceWeighted * 100).toFixed(1)} (50%)
+              {breakdown.importancePoints.toFixed(0)} pts ({task.importanceV1}/14)
             </span>
           </div>
-          <div className="text-muted-foreground/80 text-[10px] ml-2">
-            Priority: {task.priority}, {task.star ? "Starred" : "Not starred"}
+          <div className="text-muted-foreground/80 text-[10px] ml-2 space-y-0.5">
+            <div>Priority ({task.priority}): {task.priority === 'low' ? 2 : task.priority === 'medium' ? 3 : task.priority === 'high' ? 4 : 5} pts</div>
+            {task.dueAt && (
+              <div>
+                Due ({task.dueAt ? (() => {
+                  const dueDate = new Date(task.dueAt);
+                  const today = new Date();
+                  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                  const dueStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+                  const diffDays = Math.floor((dueStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
+                  return diffDays < 0 ? "Overdue" : diffDays === 0 ? "Today" : "Future";
+                })() : "None"}): {task.dueAt ? (() => {
+                  const dueDate = new Date(task.dueAt);
+                  const today = new Date();
+                  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                  const dueStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+                  const diffDays = Math.floor((dueStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
+                  return diffDays < 0 ? 6 : diffDays === 0 ? 5 : 3;
+                })() : 0} pts
+              </div>
+            )}
+            {(task.starLevel ?? 0) > 0 && (
+              <div>Star: {starLabels[task.starLevel ?? 0]}</div>
+            )}
+          </div>
+        </div>
+
+        {/* Heat Adjustment */}
+        <div>
+          <div className="flex justify-between items-center gap-4">
+            <span className="text-muted-foreground">Heat Adjustment:</span>
+            <span className="font-mono tabular-nums">
+              {breakdown.adjustmentPoints >= 0 ? '+' : ''}{breakdown.adjustmentPoints.toFixed(0)} pts
+            </span>
+          </div>
+          {breakdown.heatAdjustment !== 0 && (
+            <div className="mt-1 ml-2">
+              {/* Progress bar visualization */}
+              <div className="h-1.5 w-24 bg-muted rounded-full overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full transition-all",
+                    breakdown.heatAdjustment > 0 ? "bg-orange-400" : "bg-blue-400"
+                  )}
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      (Math.abs(breakdown.heatAdjustment) / HEAT_CONFIG.MAX_ADJUSTMENT_POINTS) * 100
+                    )}%`,
+                    marginLeft: breakdown.heatAdjustment < 0 ? 'auto' : '0'
+                  }}
+                />
+              </div>
+            </div>
+          )}
+          <div className="text-muted-foreground/80 text-[10px] ml-2 mt-1">
+            {breakdown.heatAdjustment === 0 ? (
+              "No manual adjustments"
+            ) : (
+              <>
+                {breakdown.heatAdjustment > 0 ? "Heated" : "Cooled"} {formatTimeAgo(task.lastHeatTouchedAt)}
+                {breakdown.decayInfo && breakdown.decayInfo.daysSinceHeatTouch > 1 && (
+                  <div className="mt-0.5">
+                    Decayed from {breakdown.decayInfo.originalAdjustment >= 0 ? '+' : ''}{breakdown.decayInfo.originalAdjustment.toFixed(0)} pts
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
 
@@ -205,98 +291,24 @@ function HeatBreakdownTooltip({
           <div className="flex justify-between items-center gap-4">
             <span className="text-muted-foreground">Recency:</span>
             <span className="font-mono tabular-nums">
-              {(breakdown.recencyWeighted * 100).toFixed(1)} (5%)
+              {breakdown.recencyPoints.toFixed(1)} pts
             </span>
           </div>
           <div className="text-muted-foreground/80 text-[10px] ml-2">
-            {task.nextSurfaceAt ? (
-              <span className="italic">Snoozed (recency = 0)</span>
-            ) : (
-              `Last touched: ${formatTimeAgo(task.lastTouchedAt)}`
-            )}
-          </div>
-        </div>
-
-        {/* Heat Touches */}
-        <div>
-          <div className="flex justify-between items-center gap-4">
-            <span className="text-muted-foreground">Heat Touches:</span>
-            <span className="font-mono tabular-nums">
-              {(breakdown.heatTouchesWeighted * 100).toFixed(1)} (30%)
-            </span>
-          </div>
-          <div className="text-muted-foreground/80 text-[10px] ml-2">
-            {task.heatTouchCount === 0
-              ? "No heat touches yet"
-              : `${task.heatTouchCount.toFixed(1)} clicks, last: ${formatTimeAgo(
-                  task.lastHeatTouchedAt
-                )}`}
-          </div>
-        </div>
-
-        {/* Due Proximity */}
-        <div>
-          <div className="flex justify-between items-center gap-4">
-            <span className="text-muted-foreground">Due Proximity:</span>
-            <span className="font-mono tabular-nums">
-              {(breakdown.dueProximityWeighted * 100).toFixed(1)} (5%)
-            </span>
-          </div>
-          <div className="text-muted-foreground/80 text-[10px] ml-2">
-            {task.dueAt
-              ? `Due: ${formatDate(task.dueAt)} (${getDaysUntilDue(task.dueAt)})`
-              : "No due date"}
-          </div>
-        </div>
-
-        {/* Activity */}
-        <div>
-          <div className="flex justify-between items-center gap-4">
-            <span className="text-muted-foreground">Activity:</span>
-            <span className="font-mono tabular-nums">
-              {(breakdown.activityWeighted * 100).toFixed(1)} (5%)
-            </span>
-          </div>
-          <div className="text-muted-foreground/80 text-[10px] ml-2">
-            {task.otherTouchCount === 0
-              ? "No edits yet"
-              : `${task.otherTouchCount} edits`}
-          </div>
-        </div>
-
-        {/* Creation Recency */}
-        <div>
-          <div className="flex justify-between items-center gap-4">
-            <span className="text-muted-foreground">Creation:</span>
-            <span className="font-mono tabular-nums">
-              {(breakdown.creationWeighted * 100).toFixed(1)} (5%)
-            </span>
-          </div>
-          <div className="text-muted-foreground/80 text-[10px] ml-2">
-            Created: {formatDate(task.createdAt)}
+            Last touched {formatTimeAgo(task.lastTouchedAt)}
           </div>
         </div>
       </div>
 
-      {/* Total Verification */}
+      {/* Total */}
       <div className="border-t pt-2">
         <div className="flex justify-between items-center text-xs font-semibold gap-4">
-          <span>Total:</span>
+          <span>Total Heat:</span>
           <span className="font-mono tabular-nums">
-            {(calculatedTotal * 100).toFixed(1)}
+            {heatDisplay} pts (of 145)
           </span>
         </div>
       </div>
-
-      {/* Snooze Info */}
-      {task.nextSurfaceAt && (
-        <div className="border-t pt-2 text-xs">
-          <div className="flex items-center gap-1 text-muted-foreground">
-            <Clock className="h-3 w-3" />
-            <span>{getDaysUntilResurface(task.nextSurfaceAt)}</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

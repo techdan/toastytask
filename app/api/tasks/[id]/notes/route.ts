@@ -100,13 +100,10 @@ export async function POST(
       for (let i = lines.length; i < existingNotes.length; i++) {
         await noteRepository.deleteNoteRow(existingNotes[i].id);
       }
-      notesChanged = true;
     }
 
-    // Track note edit engagement for Heat v2
-    if (notesChanged) {
-      await taskRepository.incrementOtherTouchCount(taskId, userId);
-    }
+    // V3: Note edits no longer tracked for engagement (removed otherTouchCount)
+    // Heat V3 relies on manual heat/cool adjustments only
 
     return NextResponse.json({ notes: updatedNotes });
   } catch (error) {

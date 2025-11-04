@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Star, Trash2, Flame } from "lucide-react";
+import { Star, Trash2, Flame, Snowflake } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { PrioritySelect } from "./priority-select";
@@ -9,8 +9,8 @@ import { RecurrenceSelect } from "./recurrence-select";
 import { DueDateDisplay } from "./due-date-display";
 import { TaskNotes, TaskNotesPanel } from "./task-notes";
 import { HeatBadge } from "./heat-badge";
-import { SnoozePopover } from "./snooze-popover";
-import { useTouchTask, useSnoozeTask } from "@/lib/queries/use-task-mutations";
+import { useTouchTask, useCoolTask } from "@/lib/queries/use-task-mutations";
+import { getGlowLevel } from "@/lib/scoring/heat-v3";
 import type { Task, Priority, SortMode } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -24,22 +24,23 @@ const priorityStyles: Record<Priority, string> = {
 interface TaskRowProps {
   task: Task;
   sortMode: SortMode;
+  allVisibleTasks: Task[];
   onUpdate: (id: number, updates: Partial<Task>) => void;
   onDelete: (id: number) => void;
   onComplete: (id: number) => void;
   onUncomplete: (id: number) => void;
 }
 
-export function TaskRow({ task, sortMode, onUpdate, onDelete, onComplete, onUncomplete }: TaskRowProps) {
+export function TaskRow({ task, sortMode, allVisibleTasks, onUpdate, onDelete, onComplete, onUncomplete }: TaskRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(task.title);
   const [notesExpanded, setNotesExpanded] = useState(false);
 
   const touchTaskMutation = useTouchTask();
-  const snoozeTaskMutation = useSnoozeTask();
+  const coolTaskMutation = useCoolTask();
 
   const isCompleted = !!task.completedAt;
-  const isUntouched = task.heatTouchCount === 0 && task.otherTouchCount === 0;
+  const isNew = task.lastTouchedAt === null && task.lastHeatTouchedAt === null;
 
   const handleTitleClick = () => {
     if (!isCompleted) {
@@ -73,8 +74,22 @@ export function TaskRow({ task, sortMode, onUpdate, onDelete, onComplete, onUnco
     }
   };
 
-  const handleStarClick = () => {
-    onUpdate(task.id, { star: !task.star });
+  const handleStarClick = async () => {
+    // Use the star endpoint to cycle through levels
+    try {
+      const response = await fetch(`/api/tasks/${task.id}/star`, {
+        method: "POST",
+      });
+      if (!response.ok) throw new Error("Failed to cycle star");
+
+      await response.json();
+      // The mutation will be handled by query invalidation
+      // For now, optimistically update
+      const newStarLevel = (task.starLevel ?? 0) + 1;
+      onUpdate(task.id, { starLevel: newStarLevel % 4 });
+    } catch (error) {
+      console.error("Failed to cycle star:", error);
+    }
   };
 
   const handlePriorityChange = (priority: Priority) => {
@@ -91,13 +106,23 @@ export function TaskRow({ task, sortMode, onUpdate, onDelete, onComplete, onUnco
 
   const handleTouchClick = () => {
     if (!isCompleted) {
-      touchTaskMutation.mutate(task.id);
+      // Prepare visible tasks for context-aware calculation
+      const visibleTasks = allVisibleTasks
+        .filter(t => !t.completedAt) // Exclude completed tasks from context
+        .map(t => ({ id: t.id, heat: t.heat }));
+
+      touchTaskMutation.mutate({ taskId: task.id, visibleTasks });
     }
   };
 
-  const handleSnooze = (nextSurfaceAt: Date) => {
+  const handleCoolClick = () => {
     if (!isCompleted) {
-      snoozeTaskMutation.mutate({ id: task.id, nextSurfaceAt });
+      // Prepare visible tasks for context-aware calculation
+      const visibleTasks = allVisibleTasks
+        .filter(t => !t.completedAt) // Exclude completed tasks from context
+        .map(t => ({ id: t.id, heat: t.heat }));
+
+      coolTaskMutation.mutate({ taskId: task.id, visibleTasks });
     }
   };
 
@@ -122,14 +147,16 @@ export function TaskRow({ task, sortMode, onUpdate, onDelete, onComplete, onUnco
             <HeatBadge task={task} mode={sortMode} isCompleted={isCompleted} />
             <button
               className={cn(
-                "shrink-0 transition-colors cursor-pointer",
-                task.star ? "text-yellow-400" : "text-muted-foreground/40 hover:text-muted-foreground"
+                "shrink-0 transition-all cursor-pointer star-button",
+                isCompleted && "opacity-50 cursor-not-allowed"
               )}
+              data-level={task.starLevel ?? 0}
               onClick={handleStarClick}
               disabled={isCompleted}
-              aria-label={task.star ? "Unstar task" : "Star task"}
+              aria-label={`Star level ${task.starLevel ?? 0}`}
+              title={`Star: ${['None', 'Blue (+1)', 'Yellow (+2)', 'Orange (+3)'][task.starLevel ?? 0]}`}
             >
-              <Star className={cn("h-4 w-4", task.star && "fill-current")} />
+              <Star className={cn("h-4 w-4", (task.starLevel ?? 0) > 0 && "fill-current")} />
             </button>
             <div className="shrink-0">
               <TaskNotes
@@ -144,22 +171,34 @@ export function TaskRow({ task, sortMode, onUpdate, onDelete, onComplete, onUnco
               <>
                 <button
                   className={cn(
-                    "shrink-0 transition-colors",
+                    "shrink-0 transition-colors heat-button",
                     isCompleted
                       ? "opacity-50 cursor-not-allowed"
                       : "text-orange-400/60 hover:text-orange-400 cursor-pointer"
                   )}
+                  data-level={(task.heatAdjustment ?? 0) > 0 ? getGlowLevel(task.heatAdjustment ?? 0) : 0}
                   onClick={handleTouchClick}
                   disabled={isCompleted}
-                  aria-label="Touch task (warm)"
-                  title="Touch task (T)"
+                  aria-label="Heat task (move up)"
+                  title="Heat (move up 1 position)"
                 >
                   <Flame className="h-4 w-4" />
                 </button>
-                <SnoozePopover
-                  onSnooze={handleSnooze}
+                <button
+                  className={cn(
+                    "shrink-0 transition-colors cool-button",
+                    isCompleted
+                      ? "opacity-50 cursor-not-allowed"
+                      : "text-blue-400/60 hover:text-blue-400 cursor-pointer"
+                  )}
+                  data-level={(task.heatAdjustment ?? 0) < 0 ? getGlowLevel(task.heatAdjustment ?? 0) : 0}
+                  onClick={handleCoolClick}
                   disabled={isCompleted}
-                />
+                  aria-label="Cool task (move down)"
+                  title="Cool (move down 3 positions)"
+                >
+                  <Snowflake className="h-4 w-4" />
+                </button>
               </>
             )}
             <div className="flex-1 min-w-0">
@@ -176,8 +215,8 @@ export function TaskRow({ task, sortMode, onUpdate, onDelete, onComplete, onUnco
                 <button
                   className={cn(
                     "w-full text-left text-sm hover:text-primary cursor-pointer transition-all duration-200",
-                    !isCompleted && !isUntouched && priorityStyles[task.priority],
-                    !isCompleted && isUntouched && "font-bold text-green-600 dark:text-green-400",
+                    !isCompleted && !isNew && priorityStyles[task.priority],
+                    !isCompleted && isNew && "font-bold text-green-600 dark:text-green-400",
                     isCompleted && "line-through"
                   )}
                   onClick={handleTitleClick}

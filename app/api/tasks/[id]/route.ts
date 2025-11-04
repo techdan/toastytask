@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { taskRepository } from "@/lib/db/repositories";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
+import { calculateHeat } from "@/lib/scoring/heat-v3";
 
 // Force Node.js runtime for better-sqlite3 compatibility
 export const runtime = 'nodejs';
@@ -42,24 +43,10 @@ export async function PATCH(
         : null;
     }
 
-    // Track field edits for Heat v2 (increment other_touch_count)
-    // Fields that count as "engagement": title, priority, dueAt, star, projectId, bucket
-    const isFieldEdit =
-      updates.title !== undefined ||
-      updates.priority !== undefined ||
-      updates.dueAt !== undefined ||
-      updates.star !== undefined ||
-      updates.projectId !== undefined ||
-      updates.bucket !== undefined;
-
-    if (isFieldEdit) {
-      await taskRepository.incrementOtherTouchCount(taskId, userId);
-    }
-
-    // Recalculate importance if relevant fields changed
+    // Recalculate importance if relevant fields changed (V3: uses starLevel)
     if (
       updates.priority !== undefined ||
-      updates.star !== undefined ||
+      updates.starLevel !== undefined ||
       updates.dueAt !== undefined
     ) {
       const updatedTask = { ...existingTask, ...updates };
@@ -68,7 +55,14 @@ export async function PATCH(
 
     const task = await taskRepository.update(taskId, updates, userId);
 
-    return NextResponse.json({ task });
+    // Recalculate heat to keep cache and database in sync when context-changing fields update
+    const now = new Date();
+    const recalculatedHeat = calculateHeat(task, now);
+    await taskRepository.updateHeat(taskId, recalculatedHeat, userId);
+
+    const finalTask = await taskRepository.findById(taskId, userId);
+
+    return NextResponse.json({ task: finalTask ?? task });
   } catch (error) {
     console.error("Failed to update task:", error);
     return NextResponse.json({ error: "Failed to update task" }, { status: 500 });

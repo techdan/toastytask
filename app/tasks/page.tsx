@@ -21,6 +21,7 @@ import {
   useDeleteProject,
   useUpdateSettings,
 } from "@/lib/queries";
+import { calculateHeat } from "@/lib/scoring/heat-v3";
 import type { Task, NewTask, Project, SortMode } from "@/types";
 
 // Number of days to show completed tasks when visibility is enabled
@@ -105,13 +106,17 @@ export default function TasksPage() {
 
   // Client-side filtering for completed tasks with time cutoff
   // Only show completed tasks from the last N days when toggle is on
+  // Also recalculate fresh heat for all tasks
   const tasks = useMemo(() => {
+    const now = new Date();
+    let filteredTasks = allFetchedTasks;
+
     if (showCompleted) {
       // Show all tasks, but filter out old completed tasks
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - COMPLETED_TASKS_VISIBLE_DAYS);
 
-      return allFetchedTasks.filter((task) => {
+      filteredTasks = allFetchedTasks.filter((task) => {
         if (!task.completedAt) return true; // Always show uncompleted tasks
 
         // Only show recently completed tasks (within the configured timeframe)
@@ -123,29 +128,39 @@ export default function TasksPage() {
       });
     } else {
       // Hide all completed tasks
-      return allFetchedTasks.filter((task) => !task.completedAt);
+      filteredTasks = allFetchedTasks.filter((task) => !task.completedAt);
     }
+
+    // Calculate fresh heat for all tasks (used for sorting)
+    return filteredTasks.map((task) => ({
+      ...task,
+      // Store fresh heat in a computed property for sorting
+      _freshHeat: calculateHeat(task, now),
+    }));
   }, [allFetchedTasks, showCompleted]);
+
+  // Type for task with computed heat
+  type TaskWithFreshHeat = Task & { _freshHeat: number };
 
   // Client-side sorting (already sorted by server, but apply completed logic)
   const sortedTasks = useMemo(() => {
-    return [...tasks].sort((a, b) => {
+    return [...tasks].sort((a: TaskWithFreshHeat, b: TaskWithFreshHeat) => {
       // Completed tasks always go to bottom
       if (a.completedAt && !b.completedAt) return 1;
       if (!a.completedAt && b.completedAt) return -1;
 
-      // HEAT V2: Untouched tasks (both counters = 0) always sort to top
+      // HEAT V3: Untouched tasks (never heated/cooled or touched) always sort to top
       // This applies to BOTH Importance and Heat modes (toodle-163)
-      const aIsUntouched = a.heatTouchCount === 0 && a.otherTouchCount === 0;
-      const bIsUntouched = b.heatTouchCount === 0 && b.otherTouchCount === 0;
+      const aIsUntouched = !a.lastHeatTouchedAt && !a.lastTouchedAt;
+      const bIsUntouched = !b.lastHeatTouchedAt && !b.lastTouchedAt;
 
       if (aIsUntouched && !bIsUntouched) return -1;
       if (!aIsUntouched && bIsUntouched) return 1;
 
       // If both are untouched, sort by importance/heat (depending on mode)
       if (aIsUntouched && bIsUntouched) {
-        const sortValue = settings?.sortMode === "heat" ? a.importanceV1 : a.importanceV1; // Placeholder: same for both
-        const sortValueB = settings?.sortMode === "heat" ? b.importanceV1 : b.importanceV1; // Placeholder: same for both
+        const sortValue = settings?.sortMode === "heat" ? (a._freshHeat || 0) : a.importanceV1;
+        const sortValueB = settings?.sortMode === "heat" ? (b._freshHeat || 0) : b.importanceV1;
 
         if (sortValueB !== sortValue) {
           return sortValueB - sortValue; // desc: 12→2
@@ -158,10 +173,8 @@ export default function TasksPage() {
       }
 
       // Sort by importance or heat based on settings
-      // NOTE: Heat mode currently uses importanceV1 as placeholder until heat system is built (toodle-170)
-      // Both modes use the same sorting initially - heat will be updated in toodle-40
-      const sortValue = settings?.sortMode === "heat" ? a.importanceV1 : a.importanceV1; // Placeholder: same for both
-      const sortValueB = settings?.sortMode === "heat" ? b.importanceV1 : b.importanceV1; // Placeholder: same for both
+      const sortValue = settings?.sortMode === "heat" ? (a._freshHeat || 0) : a.importanceV1;
+      const sortValueB = settings?.sortMode === "heat" ? (b._freshHeat || 0) : b.importanceV1;
 
       if (sortValueB !== sortValue) {
         return sortValueB - sortValue; // desc: 12→2

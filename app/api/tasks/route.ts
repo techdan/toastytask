@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { taskRepository, noteRepository } from "@/lib/db/repositories";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
+import { calculateHeat, isHeatStale } from "@/lib/scoring/heat-v3";
 import type { NewTask } from "@/types";
 
 // Force Node.js runtime for better-sqlite3 compatibility
@@ -32,9 +33,28 @@ export async function GET(request: Request) {
 
     // Recalculate importance for each task to ensure freshness
     // (values become stale when due dates pass since we only calculate on write)
-    tasks = tasks.map((task) => ({
-      ...task,
-      importanceV1: calculateImportanceV1(task),
+    const now = new Date();
+    tasks = await Promise.all(tasks.map(async (task) => {
+      const freshImportance = calculateImportanceV1(task);
+
+      // Always recompute heat using latest data
+      const freshHeat = calculateHeat(task, now);
+      const storedHeat = typeof task.heat === "number" ? task.heat : 0;
+      const requiresUpdate =
+        !Number.isFinite(storedHeat) ||
+        Math.abs(freshHeat - storedHeat) > 0.0001 ||
+        isHeatStale(task.heatCalculatedAt, now);
+
+      if (requiresUpdate) {
+        await taskRepository.updateHeat(task.id, freshHeat, userId);
+      }
+
+      return {
+        ...task,
+        importanceV1: freshImportance,
+        heat: freshHeat,
+        heatCalculatedAt: now,
+      };
     }));
 
     // Fetch all notes for all tasks in one query
@@ -104,16 +124,19 @@ export async function POST(request: Request) {
       title: body.title,
       priority: body.priority || "medium",
       bucket: body.bucket || "todo",
-      star: body.star || false,
+      starLevel: body.starLevel ?? 0, // V3: 0=none, 1=blue, 2=yellow, 3=orange
       dueAt: body.dueAt ? new Date(body.dueAt) : null,
       projectId: body.projectId || null,
-      heat: 0.0,
-      touchCount: 0,
       importanceV1: 0, // Will calculate below
     };
 
     // Calculate importance before saving
     taskData.importanceV1 = calculateImportanceV1(taskData as Parameters<typeof calculateImportanceV1>[0]);
+
+    // Calculate initial heat using V3 algorithm
+    const now = new Date();
+    taskData.heat = calculateHeat(taskData as Parameters<typeof calculateHeat>[0], now);
+    taskData.heatCalculatedAt = now;
 
     const task = await taskRepository.create(taskData, userId);
 

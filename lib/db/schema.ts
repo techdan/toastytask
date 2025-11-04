@@ -39,7 +39,8 @@ export const tasks = pgTable("tasks", {
   priority: text("priority", { enum: ["low", "medium", "high", "top"] })
     .notNull()
     .default("medium"),
-  star: boolean("star").notNull().default(false),
+  star: boolean("star").notNull().default(false), // DEPRECATED: Use starLevel (Heat v3)
+  starLevel: integer("star_level").notNull().default(0), // Heat v3: 0=none, 1=blue, 2=yellow, 3=orange
   dueAt: timestamp("due_at", { mode: "date", withTimezone: true }),
 
   // Bucket (Phase 2)
@@ -52,22 +53,21 @@ export const tasks = pgTable("tasks", {
     .notNull()
     .default("none"),
 
-  // Heat model fields (Phase 3)
-  heat: real("heat").notNull().default(0.5),
+  // Heat model fields (Heat v3)
+  heat: real("heat").notNull().default(0.5), // Calculated heat score (0.0-1.0)
   heatCalculatedAt: timestamp("heat_calculated_at", { mode: "date", withTimezone: true }),
-
-  // Split touch tracking (Heat v2)
-  heatTouchCount: real("heat_touch_count").notNull().default(0),
-  otherTouchCount: integer("other_touch_count").notNull().default(0),
+  heatAdjustment: real("heat_adjustment").notNull().default(0), // V4: Direct adjustment (-45 to +45 points)
   lastHeatTouchedAt: timestamp("last_heat_touched_at", { mode: "date", withTimezone: true }),
   lastTouchedAt: timestamp("last_touched_at", { mode: "date", withTimezone: true }),
 
-  // Snooze and cold storage
-  nextSurfaceAt: timestamp("next_surface_at", { mode: "date", withTimezone: true }),
-  coldStorageAt: timestamp("cold_storage_at", { mode: "date", withTimezone: true }),
+  // Cold storage (may be removed in V3 - simplified model doesn't need snooze/cold storage)
+  nextSurfaceAt: timestamp("next_surface_at", { mode: "date", withTimezone: true }), // V2: Snooze feature
+  coldStorageAt: timestamp("cold_storage_at", { mode: "date", withTimezone: true }), // V2: Auto-archival
 
-  // Legacy field (deprecated, use heatTouchCount + otherTouchCount)
-  touchCount: integer("touch_count").notNull().default(0),
+  // DEPRECATED V2 fields (kept for migration safety, will be removed after V3 is stable)
+  heatTouchCount: real("heat_touch_count").notNull().default(0), // V2: Click counter (replaced by heatAdjustment)
+  otherTouchCount: integer("other_touch_count").notNull().default(0), // V2: Activity tracking (removed in V3)
+  touchCount: integer("touch_count").notNull().default(0), // V1: Legacy counter (unused)
 
   // Calculated fields
   importanceV1: integer("importance_v1").notNull().default(0),

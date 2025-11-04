@@ -57,6 +57,7 @@ export function TaskList({
             <TaskRow
               task={task}
               sortMode={sortMode}
+              allVisibleTasks={tasks}
               onUpdate={onUpdate}
               onDelete={onDelete}
               onComplete={onComplete}

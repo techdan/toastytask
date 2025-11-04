@@ -127,6 +127,18 @@ export class SQLiteTaskRepository implements ITaskRepository {
     return query;
   }
 
+  async findManyByIds(ids: number[], userId: string): Promise<Task[]> {
+    const uniqueIds = Array.from(new Set(ids));
+    if (uniqueIds.length === 0) {
+      return [];
+    }
+
+    return this.db
+      .select()
+      .from(tasks)
+      .where(and(inArray(tasks.id, uniqueIds), eq(tasks.userId, userId)));
+  }
+
   async findByBucket(bucket: Bucket, userId: string): Promise<Task[]> {
     return this.db
       .select()
@@ -243,24 +255,6 @@ export class SQLiteTaskRepository implements ITaskRepository {
     return updatedTask;
   }
 
-  /**
-   * Increment other_touch_count for field edits (Heat v2)
-   * This tracks user engagement with task fields (title, priority, due date, notes, etc.)
-   * Does NOT apply decay - that only happens on heat icon clicks
-   */
-  async incrementOtherTouchCount(id: number, userId: string): Promise<Task> {
-    const [updatedTask] = await this.db
-      .update(tasks)
-      .set({
-        otherTouchCount: sql`${tasks.otherTouchCount} + 1`,
-        lastTouchedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
-      .returning();
-    return updatedTask;
-  }
-
   async snooze(id: number, untilDate: Date, userId: string): Promise<Task> {
     const [updatedTask] = await this.db
       .update(tasks)
@@ -350,9 +344,10 @@ export class SQLiteTaskRepository implements ITaskRepository {
   }
 
   async updateHeat(id: number, heat: number, userId: string): Promise<void> {
+    const now = new Date();
     await this.db
       .update(tasks)
-      .set({ heat, updatedAt: new Date() })
+      .set({ heat, heatCalculatedAt: now, updatedAt: now })
       .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
   }
 

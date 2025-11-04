@@ -1,9 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
-import { calculateHeat } from "@/lib/scoring/heat-v2";
+import { calculateHeat, calculateHeatBoost, calculateCoolDrop, applyAsymmetricDecay, resolveAdjustmentForTargetHeat } from "@/lib/scoring/heat-v3";
+import { HEAT_CONFIG } from "@/lib/scoring/heat-config";
 import type { Task, NewTask } from "@/types";
-import type { HeatBreakdown } from "@/lib/scoring/heat-v2";
+import type { HeatV3Breakdown } from "@/lib/scoring/heat-v3";
 
 interface TaskResponse {
   task: Task;
@@ -12,18 +13,21 @@ interface TaskResponse {
 interface TouchTaskResponse {
   task: Task;
   heatDelta: number;
-  heatBreakdown: HeatBreakdown;
-  decayFactor: number;
+  adjustmentDelta: number;
+  heatBreakdown: HeatV3Breakdown;
+  baselineHeat: number;
+  boost: number;
+  targetHeat: number;
 }
 
-interface SnoozeTaskResponse {
+interface CoolTaskResponse {
   task: Task;
   heatDelta: number;
-  heatBreakdown: HeatBreakdown;
-  decayFactor: number;
-  touchesRetained: number;
-  resurfaceDate: Date;
-  daysUntilResurface: number;
+  adjustmentDelta: number;
+  heatBreakdown: HeatV3Breakdown;
+  drop: number;
+  baselineHeat: number;
+  targetHeat: number;
 }
 
 interface UpdateTaskData {
@@ -31,10 +35,6 @@ interface UpdateTaskData {
   updates: Partial<Task>;
 }
 
-interface SnoozeTaskData {
-  id: number;
-  nextSurfaceAt: Date;
-}
 
 // Create task
 async function createTask(taskData: NewTask): Promise<Task> {
@@ -129,19 +129,21 @@ export function useCreateTask() {
         projectId: newTask.projectId ?? null,
         userId: null,
         priority: newTask.priority ?? "medium",
-        star: newTask.star ?? false,
+        star: false, // Deprecated V2 - kept for schema compatibility
+        starLevel: newTask.starLevel ?? 0, // V3: 0=none, 1=blue, 2=yellow, 3=orange
         dueAt: newTask.dueAt ?? null,
         bucket: newTask.bucket ?? "todo",
         repeatType: newTask.repeatType ?? "none",
         heat: newTask.heat ?? 0.5,
-        heatCalculatedAt: null,
-        heatTouchCount: 0,
-        otherTouchCount: 0,
+        heatCalculatedAt: new Date(),
+        heatAdjustment: 0, // V3: Direct heat adjustment
+        heatTouchCount: 0, // Deprecated V2 - kept for schema compatibility
+        otherTouchCount: 0, // Deprecated V2 - kept for schema compatibility
         lastHeatTouchedAt: null,
         lastTouchedAt: null,
-        nextSurfaceAt: null,
+        nextSurfaceAt: null, // Deprecated V2 - kept for schema compatibility
         coldStorageAt: null,
-        touchCount: newTask.touchCount ?? 0,
+        touchCount: 0, // Deprecated V1 - kept for schema compatibility
         importanceV1: newTask.importanceV1 ?? 0,
         completedAt: null,
         archivedAt: null,
@@ -231,18 +233,29 @@ export function useUpdateTask() {
           const updatedTask = {
             ...task,
             ...updates,
-            // Increment otherTouchCount to remove green styling on any edit
-            otherTouchCount: task.otherTouchCount + 1,
           };
 
           // INSTANT IMPORTANCE: Recalculate client-side if relevant fields changed
-          // This provides immediate UI feedback while server confirms
-          if (
-            updates.priority !== undefined ||
-            updates.star !== undefined ||
-            updates.dueAt !== undefined
-          ) {
+          // This provides immediate UI feedback while server confirms (V3: uses starLevel)
+          const priorityChanged = updates.priority !== undefined;
+          const starChanged = updates.starLevel !== undefined;
+          const dueChanged = updates.dueAt !== undefined;
+          if (priorityChanged || starChanged || dueChanged) {
             updatedTask.importanceV1 = calculateImportanceV1(updatedTask);
+          }
+
+          const heatAffectingChange =
+            priorityChanged ||
+            starChanged ||
+            dueChanged ||
+            updates.heatAdjustment !== undefined ||
+            updates.lastTouchedAt !== undefined ||
+            updates.lastHeatTouchedAt !== undefined;
+
+          if (heatAffectingChange) {
+            const now = new Date();
+            updatedTask.heat = calculateHeat(updatedTask, now);
+            updatedTask.heatCalculatedAt = now;
           }
 
           return updatedTask;
@@ -451,41 +464,44 @@ export function useUncompleteTask() {
   });
 }
 
-// Touch task (heat warm interaction)
-async function touchTask(id: number): Promise<TouchTaskResponse> {
-  const response = await fetch(`/api/tasks/${id}/touch`, {
-    method: "POST",
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to touch task");
-  }
-
-  return response.json();
-}
-
-// Snooze task (cool interaction)
-async function snoozeTask({ id, nextSurfaceAt }: SnoozeTaskData): Promise<SnoozeTaskResponse> {
-  const response = await fetch(`/api/tasks/${id}/snooze`, {
+// Heat task (V3 - warm interaction)
+async function heatTask(id: number, visibleTasks?: Array<{id: number; heat: number}>): Promise<TouchTaskResponse> {
+  const response = await fetch(`/api/tasks/${id}/heat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ nextSurfaceAt }),
+    body: JSON.stringify({ visibleTasks }),
   });
 
   if (!response.ok) {
-    throw new Error("Failed to snooze task");
+    throw new Error("Failed to heat task");
   }
 
   return response.json();
 }
 
-// Hook: Touch task (warm interaction with decay-on-touch)
+// Cool task (V3 - simplified from snooze)
+async function coolTask(id: number, visibleTasks?: Array<{id: number; heat: number}>): Promise<CoolTaskResponse> {
+  const response = await fetch(`/api/tasks/${id}/cool`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ visibleTasks }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to cool task");
+  }
+
+  return response.json();
+}
+
+// Hook: Heat task (V3 - warm interaction with context-aware positioning)
 export function useTouchTask() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: touchTask,
-    onMutate: async (taskId) => {
+    mutationFn: ({ taskId, visibleTasks }: { taskId: number; visibleTasks?: Array<{id: number; heat: number}> }) =>
+      heatTask(taskId, visibleTasks),
+    onMutate: async ({ taskId, visibleTasks }) => {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ["tasks"] });
 
@@ -498,17 +514,50 @@ export function useTouchTask() {
           return oldTasks;
         }
 
+        const contextTasks =
+          visibleTasks && visibleTasks.length > 0
+            ? visibleTasks
+            : oldTasks
+                .filter(t => !t.completedAt)
+                .map(t => ({ id: t.id, heat: t.heat }));
+
         return oldTasks.map((task) => {
           if (task.id !== taskId) return task;
 
           // Optimistic updates:
-          // 1. Remove green styling if first touch (increment heatTouchCount)
-          // 2. Update heat (recalculate client-side)
-          // 3. Position stays stable (no re-sort)
+          // 1. Update last touched timestamps
+          // 2. Update adjustment using shared helper
+          // 3. Update heat (recalculate client-side)
           const now = new Date();
+          const { newAdjustment: decayedAdjustment } = applyAsymmetricDecay(
+            task.heatAdjustment ?? 0,
+            task.lastHeatTouchedAt,
+            now
+          );
+          const currentHeat = task.heat ?? 0;
+          const heatDelta = calculateHeatBoost(
+            { id: task.id, heat: currentHeat },
+            contextTasks
+          );
+          const targetHeat = Math.min(
+            Math.max(currentHeat + heatDelta, HEAT_CONFIG.MIN_FINAL_SCORE),
+            HEAT_CONFIG.MAX_FINAL_SCORE
+          );
+
+          const { newAdjustment } = resolveAdjustmentForTargetHeat(
+            targetHeat,
+            {
+              importanceV1: task.importanceV1,
+              heatAdjustment: decayedAdjustment,
+              lastTouchedAt: task.lastTouchedAt,
+              lastHeatTouchedAt: task.lastHeatTouchedAt,
+            },
+            now
+          );
+
           const updatedTask = {
             ...task,
-            heatTouchCount: task.heatTouchCount + 1, // Increment to remove green styling
+            heatAdjustment: newAdjustment,
             lastTouchedAt: now,
             lastHeatTouchedAt: now,
           };
@@ -529,7 +578,7 @@ export function useTouchTask() {
           queryClient.setQueryData(queryKey, data);
         });
       }
-      toast.error("Failed to touch task", {
+      toast.error("Failed to heat task", {
         description: error instanceof Error ? error.message : "Unknown error",
       });
     },
@@ -544,6 +593,10 @@ export function useTouchTask() {
           task.id === response.task.id ? response.task : task
         );
       });
+
+      toast.success("Task heated", {
+        description: `Heat adjustment: ${response.adjustmentDelta >= 0 ? "+" : ""}${response.adjustmentDelta.toFixed(0)} pts`,
+      });
     },
     onSettled: () => {
       // Refetch to ensure consistency
@@ -552,38 +605,70 @@ export function useTouchTask() {
   });
 }
 
-// Hook: Snooze task (cool interaction with projected decay)
-export function useSnoozeTask() {
+// Hook: Cool task (V3 - simplified with context-aware positioning)
+export function useCoolTask() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: snoozeTask,
-    onMutate: async ({ id, nextSurfaceAt }) => {
+    mutationFn: ({ taskId, visibleTasks }: { taskId: number; visibleTasks?: Array<{id: number; heat: number}> }) =>
+      coolTask(taskId, visibleTasks),
+    onMutate: async ({ taskId, visibleTasks }) => {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ["tasks"] });
 
       // Snapshot previous values
       const previousTasks = queryClient.getQueriesData({ queryKey: ["tasks"] });
 
-      // Optimistically update the task
+      // Optimistically update the task (approximate heat calculation)
       queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
         if (!oldTasks || !Array.isArray(oldTasks)) {
           return oldTasks;
         }
 
+        const contextTasks =
+          visibleTasks && visibleTasks.length > 0
+            ? visibleTasks
+            : oldTasks
+                .filter(t => !t.completedAt)
+                .map(t => ({ id: t.id, heat: t.heat }));
+
         return oldTasks.map((task) => {
-          if (task.id !== id) return task;
+          if (task.id !== taskId) return task;
 
           // Optimistic updates:
-          // 1. Set next_surface_at
-          // 2. Increment heatTouchCount to remove green styling
-          // 3. Update heat (recalculate with new snooze date)
-          // 4. Task will drop to new position (exception to manual refresh)
+          // 1. Update last touched timestamps
+          // 2. Update adjustment using shared helper
+          // 3. Update heat (recalculate client-side)
           const now = new Date();
+          const { newAdjustment: decayedAdjustment } = applyAsymmetricDecay(
+            task.heatAdjustment ?? 0,
+            task.lastHeatTouchedAt,
+            now
+          );
+          const currentHeat = task.heat ?? 0;
+          const heatDelta = calculateCoolDrop(
+            { id: task.id, heat: currentHeat },
+            contextTasks
+          );
+          const targetHeat = Math.min(
+            Math.max(currentHeat + heatDelta, HEAT_CONFIG.MIN_FINAL_SCORE),
+            HEAT_CONFIG.MAX_FINAL_SCORE
+          );
+
+          const { newAdjustment } = resolveAdjustmentForTargetHeat(
+            targetHeat,
+            {
+              importanceV1: task.importanceV1,
+              heatAdjustment: decayedAdjustment,
+              lastTouchedAt: task.lastTouchedAt,
+              lastHeatTouchedAt: task.lastHeatTouchedAt,
+            },
+            now
+          );
+
           const updatedTask = {
             ...task,
-            nextSurfaceAt: nextSurfaceAt,
-            heatTouchCount: task.heatTouchCount + 1, // Increment to remove green styling
+            heatAdjustment: newAdjustment,
             lastTouchedAt: now,
             lastHeatTouchedAt: now,
           };
@@ -604,7 +689,7 @@ export function useSnoozeTask() {
           queryClient.setQueryData(queryKey, data);
         });
       }
-      toast.error("Failed to snooze task", {
+      toast.error("Failed to cool task", {
         description: error instanceof Error ? error.message : "Unknown error",
       });
     },
@@ -620,12 +705,12 @@ export function useSnoozeTask() {
           task.id === response.task.id ? response.task : task
         );
 
-        // Exception: Auto-resort on snooze
+        // Cool causes re-sort (move down 3 positions)
         return updatedTasks.sort((a, b) => b.heat - a.heat);
       });
 
-      toast.success("Task snoozed", {
-        description: `Will resurface in ${Math.round(response.daysUntilResurface)} days`,
+      toast.success("Task cooled", {
+        description: `Heat adjustment: ${response.adjustmentDelta >= 0 ? "+" : ""}${response.adjustmentDelta.toFixed(0)} pts`,
       });
     },
     onSettled: () => {

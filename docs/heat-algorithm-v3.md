@@ -28,15 +28,15 @@ WEIGHT_RECENCY = 0.05     // 5% - Time since last interaction
 
 heat = clamp(
   0.50 * (baseImportance / 14) +
-  heatAdjustment +                 // Direct contribution, no normalization needed
+  heatAdjustmentPoints +                 // Direct contribution (points)
   0.05 * exp(-daysSinceLastTouch / 7),
-  0, 1
+  0, 14545
 )
 ```
 
 **Key Change from V2:** Track heat adjustment DIRECTLY instead of counting clicks
 - OLD: `heatTouchCount` (-20 to +20) → convert to percentage
-- NEW: `heatAdjustment` (-0.45 to +0.45) → direct heat contribution
+- NEW: `heatAdjustment` (-45 to +45 pts) → direct heat contribution
 - Why: No arbitrary constants, perfect for context-aware and drag & drop
 
 **Removed Components:**
@@ -56,18 +56,18 @@ export const HEAT_CONFIG = {
   WEIGHT_ADJUSTMENT: 0.45,  // Also serves as min/max cap
   WEIGHT_RECENCY: 0.05,
 
-  // Heat adjustment bounds
-  MIN_HEAT_ADJUSTMENT: -0.45,
-  MAX_HEAT_ADJUSTMENT: 0.45,
+  // Heat adjustment bounds (points)
+  MIN_HEAT_ADJUSTMENT: -45,
+  MAX_HEAT_ADJUSTMENT: 45,
 
   // Decay rates (in days)
   HEAT_HALF_LIFE_DAYS: 7,   // Heat decays slowly (persistent preference)
   COOL_HALF_LIFE_DAYS: 3,   // Cool decays quickly (temporary deferral)
 
   // Context-aware increment caps
-  MAX_BOOST_PER_CLICK: 0.05,  // Max heat increase per click (5%)
-  MAX_DROP_PER_CLICK: 0.05,   // Max heat decrease per click (5%)
-  COOL_SKIP_POSITIONS: 3,     // Number of positions to skip when cooling
+  MAX_BOOST_PER_CLICK: 5,   // Max heat increase per click
+  MAX_DROP_PER_CLICK: 10,   // Max heat decrease per click
+  COOL_SKIP_POSITIONS: 3,   // Number of positions to skip when cooling
 
   // Base importance scale
   BASE_IMPORTANCE_MAX: 14,  // Max base importance (priority 5 + star 3 + due 6)
@@ -148,15 +148,19 @@ function calculateHeatBoost(currentTask, visibleTasks) {
     .filter(t => t.heat > currentTask.heat)
     .sort((a, b) => a.heat - b.heat)
 
-  if (tasksAbove.length === 0) {
-    return 0.01  // At top, small absolute boost
-  }
+  const maxTarget = Math.min(
+    currentTask.heat + HEAT_CONFIG.MAX_BOOST_PER_CLICK,
+    HEAT_CONFIG.MAX_FINAL_SCORE
+  )
 
   const nextTask = tasksAbove[0]
-  const gap = nextTask.heat - currentTask.heat
-  const boost = gap + 0.01  // Just above next task
+  const contextTarget = nextTask
+    ? Math.min(nextTask.heat + 1, HEAT_CONFIG.MAX_FINAL_SCORE)
+    : maxTarget
 
-  return Math.min(boost, HEAT_CONFIG.MAX_BOOST_PER_CLICK)  // Cap at 5%
+  const targetHeat = Math.min(maxTarget, contextTarget)
+
+  return targetHeat - currentTask.heat  // Positive heat delta
 }
 
 // Update task
@@ -167,7 +171,7 @@ heatAdjustment = Math.min(
 ```
 
 **Behavior:**
-- Single click moves task up 1 position (or +1% if at top)
+- Single click moves task up 1 position (or +5 pts if already hottest)
 - Bottom to top: ~9 clicks (vs 20 in simple increment model)
 - Cap prevents mega-jumps in sparse distributions
 
@@ -181,18 +185,20 @@ function calculateCoolDrop(currentTask, visibleTasks) {
     .filter(t => t.heat < currentTask.heat)
     .sort((a, b) => b.heat - a.heat)
 
-  if (tasksBelow.length === 0) {
-    return -0.01  // At bottom, small absolute drop
-  }
+  const minTarget = Math.max(
+    currentTask.heat - HEAT_CONFIG.MAX_DROP_PER_CLICK,
+    HEAT_CONFIG.MIN_FINAL_SCORE
+  )
 
-  // Skip 2 tasks (land at 3rd position below)
-  const targetIndex = Math.min(2, tasksBelow.length - 1)
+  const targetIndex = Math.min(2, Math.max(tasksBelow.length - 1, 0))
   const targetTask = tasksBelow[targetIndex]
+  const contextTarget = targetTask
+    ? Math.max(targetTask.heat - 1, HEAT_CONFIG.MIN_FINAL_SCORE)
+    : minTarget
 
-  const gap = currentTask.heat - targetTask.heat
-  const drop = -(gap + 0.01)  // Just below target
+  const targetHeat = Math.max(minTarget, contextTarget)
 
-  return Math.max(drop, -HEAT_CONFIG.MAX_DROP_PER_CLICK)  // Cap at -5%
+  return targetHeat - currentTask.heat  // Negative heat delta
 }
 
 // Update task (always negative)
@@ -203,14 +209,14 @@ heatAdjustment = Math.max(
 ```
 
 **Behavior:**
-- Single click moves task down 3 positions (or -1% if at bottom)
+- Single click moves task down 3 positions (or -10 pts if already coldest)
 - Skipping 2 tasks prevents one-up-one-down cycling
 - Cooled tasks naturally bubble back up due to fast decay
 
 **Sign Convention:**
-- Heat adjustment: Always positive value added
-- Cool adjustment: Always negative value added
-- Display: Heat shows +X%, Cool shows -X%
+- Heat adjustment: Always positive value added (points)
+- Cool adjustment: Always negative value added (points)
+- Display: Heat shows +X pts, Cool shows -X pts
 
 ## Asymmetric Decay
 

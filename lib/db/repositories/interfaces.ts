@@ -10,6 +10,7 @@ export interface ITaskRepository {
   // Read
   findById(id: number, userId: string): Promise<Task | undefined>;
   findAll(userId: string, options?: TaskQueryOptions): Promise<Task[]>;
+  findManyByIds(ids: number[], userId: string): Promise<Task[]>;
   findByBucket(bucket: Bucket, userId: string): Promise<Task[]>;
   findByProject(projectId: number, userId: string): Promise<Task[]>;
   findCompleted(userId: string): Promise<Task[]>;
@@ -25,7 +26,6 @@ export interface ITaskRepository {
 
   // Special operations
   touch(id: number, userId: string): Promise<Task>;
-  incrementOtherTouchCount(id: number, userId: string): Promise<Task>;
   snooze(id: number, untilDate: Date, userId: string): Promise<Task>;
   complete(id: number, userId: string): Promise<Task>;
   uncomplete(id: number, userId: string): Promise<Task>;

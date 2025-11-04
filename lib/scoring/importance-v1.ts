@@ -1,7 +1,7 @@
 import type { Priority, Task } from "@/types";
 
 /**
- * Importance v1 - Toodledo-compatible scoring algorithm
+ * Importance v1 - Toodledo-compatible scoring algorithm (updated for Heat v3)
  *
  * ⚠️ SINGLE SOURCE OF TRUTH ⚠️
  * This is the ONLY place where importance calculation logic should exist.
@@ -17,22 +17,47 @@ import type { Priority, Task } from "@/types";
  * 2. The change will automatically apply to both server and client optimistic updates
  * 3. No other files should contain importance calculation logic
  *
- * Score range: 2-12
+ * Score range: 2-14 (Heat v3: increased from 2-12 due to enhanced star system)
  *
  * Components:
  * - Priority weight: Low=2, Medium=3, High=4, Top=5
  * - Due date weight: None=0, Future=3, Today=5, Past=6
- * - Star bonus: +1 if starred
+ * - Star bonus (Heat v3): None=0, Blue=+1, Yellow=+2, Orange=+3
  *
- * Formula: (priority_weight + due_weight) + (star ? 1 : 0)
+ * Formula: priority_weight + due_weight + star_level
  */
 
 export interface ImportanceV1Factors {
   priorityWeight: number;
   dueWeight: number;
-  starBonus: number;
+  starBonus: number; // Heat v3: 0-3 (star level points)
   totalScore: number;
 }
+
+/**
+ * Importance configuration constants
+ * Heat v4: Centralized for dynamic calculations
+ */
+export const IMPORTANCE_CONFIG = {
+  PRIORITY_WEIGHTS: {
+    low: 2,
+    medium: 3,
+    high: 4,
+    top: 5,
+  },
+  DUE_WEIGHTS: {
+    none: 0,      // No due date
+    future: 3,    // >= 1 day away
+    today: 5,     // Due today
+    overdue: 6,   // Past due
+  },
+  STAR_POINTS: {
+    0: 0,  // None
+    1: 1,  // Blue
+    2: 2,  // Yellow
+    3: 3,  // Orange
+  },
+} as const;
 
 /**
  * Get priority weight for importance calculation
@@ -40,15 +65,15 @@ export interface ImportanceV1Factors {
 function getPriorityWeight(priority: Priority): number {
   switch (priority) {
     case "low":
-      return 2;
+      return IMPORTANCE_CONFIG.PRIORITY_WEIGHTS.low;
     case "medium":
-      return 3;
+      return IMPORTANCE_CONFIG.PRIORITY_WEIGHTS.medium;
     case "high":
-      return 4;
+      return IMPORTANCE_CONFIG.PRIORITY_WEIGHTS.high;
     case "top":
-      return 5;
+      return IMPORTANCE_CONFIG.PRIORITY_WEIGHTS.top;
     default:
-      return 3; // Default to medium
+      return IMPORTANCE_CONFIG.PRIORITY_WEIGHTS.medium; // Default to medium
   }
 }
 
@@ -100,24 +125,37 @@ function getDueWeight(dueAt: Date | number | string | null | undefined): number 
 
 /**
  * Calculate importance v1 score for a task
+ * Heat v3: Uses starLevel (0-3) instead of star boolean
+ * Backwards compatible: Falls back to star boolean if starLevel not present
  */
-export function calculateImportanceV1(task: Pick<Task, "priority" | "star" | "dueAt">): number {
+export function calculateImportanceV1(task: Pick<Task, "priority" | "dueAt"> & Partial<Pick<Task, "star" | "starLevel">>): number {
   const priorityWeight = getPriorityWeight(task.priority);
   const dueWeight = getDueWeight(task.dueAt);
-  const starBonus = task.star ? 1 : 0;
+
+  // Heat v3: Use starLevel if available, otherwise fall back to star boolean
+  const starBonus = task.starLevel !== undefined
+    ? task.starLevel
+    : (task.star ? 1 : 0);
 
   return priorityWeight + dueWeight + starBonus;
 }
 
 /**
  * Calculate importance v1 score with detailed breakdown
+ * Heat v3: Uses starLevel (0-3) instead of star boolean
+ * Backwards compatible: Falls back to star boolean if starLevel not present
  */
 export function calculateImportanceV1WithFactors(
-  task: Pick<Task, "priority" | "star" | "dueAt">
+  task: Pick<Task, "priority" | "dueAt"> & Partial<Pick<Task, "star" | "starLevel">>
 ): ImportanceV1Factors {
   const priorityWeight = getPriorityWeight(task.priority);
   const dueWeight = getDueWeight(task.dueAt);
-  const starBonus = task.star ? 1 : 0;
+
+  // Heat v3: Use starLevel if available, otherwise fall back to star boolean
+  const starBonus = task.starLevel !== undefined
+    ? task.starLevel
+    : (task.star ? 1 : 0);
+
   const totalScore = priorityWeight + dueWeight + starBonus;
 
   return {
@@ -130,23 +168,75 @@ export function calculateImportanceV1WithFactors(
 
 /**
  * Get a color class based on importance score
- * Maps 2-12 range to visual indicators
+ * Maps 2-14 range to visual indicators (Heat v3: updated for new range)
  */
 export function getImportanceColor(score: number): string {
   if (score <= 3) return "bg-blue-400"; // Low importance (2-3)
   if (score <= 5) return "bg-green-400"; // Medium-low (4-5)
-  if (score <= 7) return "bg-yellow-400"; // Medium (6-7)
-  if (score <= 9) return "bg-orange-400"; // Medium-high (8-9)
-  return "bg-red-400"; // High importance (10-12)
+  if (score <= 8) return "bg-yellow-400"; // Medium (6-8)
+  if (score <= 11) return "bg-orange-400"; // Medium-high (9-11)
+  return "bg-red-400"; // High importance (12-14)
 }
 
 /**
  * Get a label for importance score
+ * Heat v3: Updated for 2-14 range
  */
 export function getImportanceLabel(score: number): string {
   if (score <= 3) return "Low";
   if (score <= 5) return "Medium-Low";
-  if (score <= 7) return "Medium";
-  if (score <= 9) return "Medium-High";
+  if (score <= 8) return "Medium";
+  if (score <= 11) return "Medium-High";
   return "High";
+}
+
+// ============================================================================
+// Dynamic Min/Max Calculations (Heat v4)
+// ============================================================================
+
+/**
+ * Get theoretical minimum importance value
+ * Heat v4: Dynamically calculated from IMPORTANCE_CONFIG
+ *
+ * Calculation: min(priority) + min(due) + min(star)
+ * Currently: 2 + 0 + 0 = 2
+ *
+ * @returns Minimum possible importance score
+ */
+export function getMinImportance(): number {
+  const minPriority = Math.min(...Object.values(IMPORTANCE_CONFIG.PRIORITY_WEIGHTS));
+  const minDue = Math.min(...Object.values(IMPORTANCE_CONFIG.DUE_WEIGHTS));
+  const minStar = Math.min(...Object.values(IMPORTANCE_CONFIG.STAR_POINTS));
+
+  return minPriority + minDue + minStar;
+}
+
+/**
+ * Get theoretical maximum importance value
+ * Heat v4: Dynamically calculated from IMPORTANCE_CONFIG
+ *
+ * Calculation: max(priority) + max(due) + max(star)
+ * Currently: 5 + 6 + 3 = 14
+ *
+ * @returns Maximum possible importance score
+ */
+export function getMaxImportance(): number {
+  const maxPriority = Math.max(...Object.values(IMPORTANCE_CONFIG.PRIORITY_WEIGHTS));
+  const maxDue = Math.max(...Object.values(IMPORTANCE_CONFIG.DUE_WEIGHTS));
+  const maxStar = Math.max(...Object.values(IMPORTANCE_CONFIG.STAR_POINTS));
+
+  return maxPriority + maxDue + maxStar;
+}
+
+/**
+ * Get importance range (max - min)
+ * Heat v4: Dynamically calculated from IMPORTANCE_CONFIG
+ *
+ * Calculation: max - min
+ * Currently: 14 - 2 = 12
+ *
+ * @returns Range of importance scores
+ */
+export function getImportanceRange(): number {
+  return getMaxImportance() - getMinImportance();
 }
