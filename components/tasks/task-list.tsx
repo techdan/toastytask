@@ -4,8 +4,11 @@ import { TaskRow } from "./task-row";
 import { TaskListHeader } from "./task-list-header";
 import type { Task, SortMode } from "@/types";
 
+// Task with computed fresh heat for accurate context-aware positioning
+type TaskWithFreshHeat = Task & { _freshHeat: number };
+
 interface TaskListProps {
-  tasks: Task[];
+  tasks: TaskWithFreshHeat[];
   showCompleted: boolean;
   onToggleCompleted: () => void;
   sortMode: SortMode;

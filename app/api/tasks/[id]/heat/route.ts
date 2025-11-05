@@ -2,24 +2,27 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { taskRepository } from "@/lib/db/repositories";
 import { calculateHeat, calculateHeatWithBreakdown, calculateHeatBoost, applyAsymmetricDecay, resolveAdjustmentForTargetHeat } from "@/lib/scoring/heat-v3";
+import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
 import { HEAT_CONFIG } from "@/lib/scoring/heat-config";
 
 // Force Node.js runtime for better-sqlite3 compatibility
 export const runtime = 'nodejs';
 
 /**
- * POST /api/tasks/[id]/heat - Apply heat (Heat V3)
+ * POST /api/tasks/[id]/heat - Apply heat
  *
- * Behavior (Heat V3):
+ * Behavior:
  * - Context-aware: Calculates boost to move task up 1 position
  * - Updates heatAdjustment (capped at ±45 pts)
  * - Updates last_heat_touched_at and last_touched_at
- * - Recalculates heat immediately
- * - Returns updated task with heat delta and breakdown
+ * - Returns task with recalculated heat (never stored, always fresh)
+ * - Returns heat delta and breakdown for UI feedback
  *
  * Request body (optional):
  * - increment?: number - Manual increment override (for context-aware from client)
- * - visibleTasks?: Array<{id, heat}> - For context-aware calculation on server
+ * - visibleTaskIds?: number[] - Task IDs for context-aware calculation (server calculates fresh heat)
+ *
+ * See: docs/current-heat-algorithm.md
  */
 export async function POST(
   request: Request,
@@ -36,7 +39,7 @@ export async function POST(
 
     // Parse request body (optional)
     const body = await request.json().catch(() => ({}));
-    const { increment, visibleTasks } = body;
+    const { increment, visibleTaskIds } = body;
 
     // Get existing task
     const existingTask = await taskRepository.findById(taskId, userId);
@@ -55,71 +58,57 @@ export async function POST(
       now
     );
 
-    // Determine target heat using client-visible heat values
-    let contextTasks = Array.isArray(visibleTasks) ? visibleTasks : undefined;
+    // Determine target heat using fresh calculations (never trust stored heat)
+    let contextTasks: Array<{id: number; heat: number}> = [];
 
-    if (contextTasks && contextTasks.length > 0) {
-      const neighborIds = Array.from(new Set(contextTasks.map((t) => t.id))).filter((id) => id !== existingTask.id);
+    // CRITICAL FIX: Recalculate fresh importance for current task
+    // importanceV1 can become stale in database (time-dependent calculation)
+    const currentTaskFreshImportance = calculateImportanceV1(existingTask);
+    const contextCurrentHeat = calculateHeat(
+      { ...existingTask, importanceV1: currentTaskFreshImportance },
+      now
+    );
+
+    // Build context from client-sent task IDs or fetch all tasks
+    if (visibleTaskIds && Array.isArray(visibleTaskIds) && visibleTaskIds.length > 0) {
+      // Client sent context IDs - fetch these tasks and calculate fresh heat
+      const neighborIds = Array.from(new Set(visibleTaskIds)).filter((id) => id !== existingTask.id);
+
       if (neighborIds.length > 0) {
         const neighborRecords = await taskRepository.findManyByIds(neighborIds, userId);
-        const recalculated = await Promise.all(
-          neighborRecords.map(async (neighbor) => {
-            const freshHeat = calculateHeat(neighbor, now);
-            const storedHeat = typeof neighbor.heat === "number" ? neighbor.heat : 0;
-            if (!Number.isFinite(storedHeat) || Math.abs(freshHeat - storedHeat) > 0.001) {
-              await taskRepository.updateHeat(neighbor.id, freshHeat, userId);
-            }
-            return { id: neighbor.id, heat: freshHeat };
-          })
-        );
 
-        const recalculatedMap = new Map(recalculated.map((entry) => [entry.id, entry.heat]));
-        contextTasks = contextTasks.map((entry) => {
-          const updatedHeat = recalculatedMap.get(entry.id);
-          return updatedHeat !== undefined ? { id: entry.id, heat: updatedHeat } : entry;
+        contextTasks = neighborRecords.map((neighbor) => {
+          // Recalculate importanceV1 fresh (don't trust DB value)
+          // importanceV1 is time-dependent and can become stale in the database
+          const freshImportance = calculateImportanceV1(neighbor);
+          const freshHeat = calculateHeat({ ...neighbor, importanceV1: freshImportance }, now);
+          return { id: neighbor.id, heat: freshHeat };
         });
       }
-    }
-
-    if (contextTasks) {
-      contextTasks = contextTasks.filter((entry) => entry.id !== existingTask.id);
-    }
-
-    const contextCurrentHeat = Number.isFinite(existingTask.heat)
-      ? (existingTask.heat as number)
-      : calculateHeat(existingTask, now);
-
-    const needsHotterNeighbor =
-      !contextTasks ||
-      !contextTasks.some((t) => Number.isFinite(t.heat) && t.heat > contextCurrentHeat);
-
-    if (needsHotterNeighbor) {
+    } else {
+      // No context provided by client - fetch ALL active tasks and calculate fresh heat
+      // Note: Must fetch all tasks because stored heat is stale - can't rely on DB sort
       const dbTasks = await taskRepository.findAll(userId, {
         includeCompleted: false,
         includeArchived: false,
         includeDeleted: false,
-        sortBy: "heat",
-        sortOrder: "desc",
-        limit: 25,
       });
 
-      const recalculated = await Promise.all(
-        dbTasks
-          .filter((t) => !t.completedAt)
-          .map(async (t) => {
-            const freshHeat = calculateHeat(t, now);
-            const storedHeat = typeof t.heat === "number" ? t.heat : 0;
-            if (!Number.isFinite(storedHeat) || Math.abs(freshHeat - storedHeat) > 0.001) {
-              await taskRepository.updateHeat(t.id, freshHeat, userId);
-            }
-            return { id: t.id, heat: freshHeat };
-          })
-      );
-
-      contextTasks = recalculated;
+      // Calculate fresh heat for all tasks and sort by it
+      contextTasks = dbTasks
+        .filter((t) => !t.completedAt && t.id !== existingTask.id)
+        .map((t) => {
+          // Recalculate importanceV1 fresh (don't trust DB value)
+          const freshImportance = calculateImportanceV1(t);
+          const freshHeat = calculateHeat({ ...t, importanceV1: freshImportance }, now);
+          return { id: t.id, heat: freshHeat };
+        })
+        .sort((a, b) => b.heat - a.heat) // Sort by fresh heat (the ONLY accurate sort)
+        .slice(0, 30); // Take top 30 by fresh heat for context
     }
 
-    let boostHeatDelta =
+    // Calculate context-aware boost (move up 1 position)
+    const boostHeatDelta =
       increment !== undefined
         ? Math.min(Math.max(increment, 1), HEAT_CONFIG.MAX_BOOST_PER_CLICK)
         : calculateHeatBoost(
@@ -127,20 +116,10 @@ export async function POST(
             contextTasks
           );
 
-    let targetHeat = Math.min(
+    const targetHeat = Math.min(
       Math.max(contextCurrentHeat + boostHeatDelta, HEAT_CONFIG.MIN_FINAL_SCORE),
       HEAT_CONFIG.MAX_FINAL_SCORE
     );
-
-    const hotterNeighbors = (contextTasks ?? [])
-      .filter((t) => t.heat > contextCurrentHeat)
-      .sort((a, b) => a.heat - b.heat);
-
-    if (hotterNeighbors.length > 0) {
-      const nextNeighborHeat = hotterNeighbors[0].heat;
-      targetHeat = Math.min(Math.max(nextNeighborHeat + 1, HEAT_CONFIG.MIN_FINAL_SCORE), targetHeat);
-      boostHeatDelta = targetHeat - contextCurrentHeat;
-    }
 
     const {
       newAdjustment,
@@ -149,7 +128,7 @@ export async function POST(
     } = resolveAdjustmentForTargetHeat(
       targetHeat,
       {
-        importanceV1: existingTask.importanceV1,
+        importanceV1: currentTaskFreshImportance, // CRITICAL: Use fresh importance, not stale DB value!
         heatAdjustment: decayedAdjustment,
         lastTouchedAt: existingTask.lastTouchedAt,
         lastHeatTouchedAt: existingTask.lastHeatTouchedAt,
@@ -157,33 +136,25 @@ export async function POST(
       now
     );
 
-    // Update task with new values
+    // Update task with new adjustment AND fresh importance to prevent staleness
     const updatedTask = await taskRepository.update(taskId, {
       heatAdjustment: newAdjustment,
+      importanceV1: currentTaskFreshImportance, // Keep DB in sync with fresh calculation
       lastHeatTouchedAt: now,
       lastTouchedAt: now,
     }, userId);
 
-    // Recalculate heat
+    // Calculate fresh heat (not stored, only returned to client)
     const newHeat = calculateHeat(updatedTask, now);
 
-    // Update heat in database
-    await taskRepository.updateHeat(taskId, newHeat, userId);
-
-    // Get final task with updated heat
-    const finalTask = await taskRepository.findById(taskId, userId);
-    if (!finalTask) {
-      return NextResponse.json({ error: "Task not found after update" }, { status: 404 });
-    }
-
     // Calculate heat breakdown for tooltip
-    const heatBreakdown = calculateHeatWithBreakdown(finalTask, now);
+    const heatBreakdown = calculateHeatWithBreakdown(updatedTask, now);
 
     // Calculate deltas
     const heatDelta = newHeat - baselineHeat;
 
     return NextResponse.json({
-      task: finalTask,
+      task: updatedTask,
       heatDelta,
       adjustmentDelta,
       heatBreakdown,

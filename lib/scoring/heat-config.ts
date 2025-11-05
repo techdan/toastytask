@@ -53,7 +53,7 @@ export const HEAT_CONFIG = {
   // Context-aware increment caps (expressed directly in points)
   MAX_BOOST_PER_CLICK: 5,    // Max heat increase per click
   MAX_DROP_PER_CLICK: 10,    // Max heat decrease per click
-  COOL_SKIP_POSITIONS: 3,     // Number of positions to skip when cooling
+  COOL_SKIP_POSITIONS: 3,     // Number of positions to skip when cooling (up to 3, capped by MAX_DROP_PER_CLICK)
 
   // Base importance scale (deprecated - use getMaxImportance() from importance-v1.ts)
   BASE_IMPORTANCE_MAX: 14,  // Max base importance (priority 5 + star 3 + due 6)

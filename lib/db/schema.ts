@@ -39,8 +39,8 @@ export const tasks = pgTable("tasks", {
   priority: text("priority", { enum: ["low", "medium", "high", "top"] })
     .notNull()
     .default("medium"),
-  star: boolean("star").notNull().default(false), // DEPRECATED: Use starLevel (Heat v3)
-  starLevel: integer("star_level").notNull().default(0), // Heat v3: 0=none, 1=blue, 2=yellow, 3=orange
+  star: boolean("star").notNull().default(false), // DEPRECATED: Use starLevel instead
+  starLevel: integer("star_level").notNull().default(0), // 0=none, 1=blue, 2=yellow, 3=orange
   dueAt: timestamp("due_at", { mode: "date", withTimezone: true }),
 
   // Bucket (Phase 2)
@@ -53,21 +53,21 @@ export const tasks = pgTable("tasks", {
     .notNull()
     .default("none"),
 
-  // Heat model fields (Heat v3)
-  heat: real("heat").notNull().default(0.5), // Calculated heat score (0.0-1.0)
-  heatCalculatedAt: timestamp("heat_calculated_at", { mode: "date", withTimezone: true }),
-  heatAdjustment: real("heat_adjustment").notNull().default(0), // V4: Direct adjustment (-45 to +45 points)
+  // Heat model fields - See docs/current-heat-algorithm.md
+  heat: real("heat").notNull().default(0.5), // DEPRECATED: Heat is now calculated, not stored (kept for migration)
+  heatCalculatedAt: timestamp("heat_calculated_at", { mode: "date", withTimezone: true }), // DEPRECATED
+  heatAdjustment: real("heat_adjustment").notNull().default(0), // Direct adjustment (-45 to +45 points)
   lastHeatTouchedAt: timestamp("last_heat_touched_at", { mode: "date", withTimezone: true }),
   lastTouchedAt: timestamp("last_touched_at", { mode: "date", withTimezone: true }),
 
-  // Cold storage (may be removed in V3 - simplified model doesn't need snooze/cold storage)
-  nextSurfaceAt: timestamp("next_surface_at", { mode: "date", withTimezone: true }), // V2: Snooze feature
-  coldStorageAt: timestamp("cold_storage_at", { mode: "date", withTimezone: true }), // V2: Auto-archival
+  // DEPRECATED: Cold storage fields (removed in current algorithm)
+  nextSurfaceAt: timestamp("next_surface_at", { mode: "date", withTimezone: true }), // DEPRECATED: Snooze removed
+  coldStorageAt: timestamp("cold_storage_at", { mode: "date", withTimezone: true }), // DEPRECATED: Auto-archival removed
 
-  // DEPRECATED V2 fields (kept for migration safety, will be removed after V3 is stable)
-  heatTouchCount: real("heat_touch_count").notNull().default(0), // V2: Click counter (replaced by heatAdjustment)
-  otherTouchCount: integer("other_touch_count").notNull().default(0), // V2: Activity tracking (removed in V3)
-  touchCount: integer("touch_count").notNull().default(0), // V1: Legacy counter (unused)
+  // DEPRECATED: Legacy heat tracking fields (kept for migration safety)
+  heatTouchCount: real("heat_touch_count").notNull().default(0), // DEPRECATED: Click counter (replaced by heatAdjustment)
+  otherTouchCount: integer("other_touch_count").notNull().default(0), // DEPRECATED: Activity tracking removed
+  touchCount: integer("touch_count").notNull().default(0), // DEPRECATED: Legacy counter (unused)
 
   // Calculated fields
   importanceV1: integer("importance_v1").notNull().default(0),
@@ -104,8 +104,7 @@ export const tasks = pgTable("tasks", {
   completedAtIdx: index("tasks_completed_at_idx").on(table.completedAt),
   // Composite index for active tasks sorted by importance
   activeImportanceIdx: index("tasks_active_importance_idx").on(table.deletedAt, table.importanceV1),
-  // Heat v2 indexes
-  // Index for heat sorting (active tasks, excluding cold storage)
+  // DEPRECATED: Heat sorting index (heat is now calculated, not stored)
   heatSortIdx: index("tasks_heat_sort_idx").on(table.heat, table.completedAt, table.coldStorageAt),
   // Index for cold storage queries
   coldStorageIdx: index("tasks_cold_storage_idx").on(table.coldStorageAt, table.lastTouchedAt),

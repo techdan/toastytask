@@ -16,6 +16,7 @@ For tech stack, architecture, and development commands, see [AGENTS.md](AGENTS.m
 - Requirements: [docs/requirements.md](docs/requirements.md)
 - Database schema: [lib/db/schema.ts](lib/db/schema.ts)
 - Scoring algorithms: [lib/scoring/](lib/scoring/)
+- Heat algorithm: [docs/current-heat-algorithm.md](docs/current-heat-algorithm.md)
 
 ### Development Commands
 

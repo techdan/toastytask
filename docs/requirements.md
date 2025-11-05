@@ -19,7 +19,7 @@
 **Core Concepts**
 - Buckets: `Todo` (daily), `Watch` (weekly), `Later` (monthly/long tail).
 - Importance v1: deterministic score compatible with Toodledo.
-- Heat v2: dynamic score that rises with interaction/urgency and decays with time.
+- Heat: dynamic score calculated from base importance + manual adjustments + recency (see [docs/current-heat-algorithm.md](current-heat-algorithm.md)).
 - Touch vs. Snooze:
   - Touch: explicitly makes a task hotter; bumps position. No date change required.
   - Snooze: cools/hides a task until a future date; the opposite of touch.
@@ -253,14 +253,15 @@
     - Simple formula (O(1) per task) = negligible overhead for 1k-5k tasks
     - Guarantees freshness: due date passing overnight = correct importance next day
     - Implementation: [lib/scoring/importance-v1.ts](lib/scoring/importance-v1.ts)
-  - **Heat v2**: Lazy Refresh Pattern (Phase 3)
-    - Store `heat` and `heat_calculated_at` timestamp
-    - On read: if stale (now - heat_calculated_at > threshold), recalculate
-    - Thresholds vary by bucket (Todo: 1h, Watch: 6h, Later: 24h)
-    - Complex formula (exponential decay, activity scoring) = acceptable cost when amortized
-    - Allows DB-side sorting by slightly-stale heat (acceptable trade-off)
-    - Bulk refresh endpoint for manual/scheduled updates
-    - Implementation: [lib/scoring/heat-v2.ts](lib/scoring/heat-v2.ts) (future)
+  - **Heat**: Pure Calculation Pattern (Current)
+    - Heat is NEVER stored, only calculated on demand from base properties + adjustments
+    - Always recalculate before returning to client (GET endpoints)
+    - Simple formula (O(1) per task) = negligible overhead for 1k-5k tasks
+    - Guarantees freshness: no staleness issues, always current values
+    - Store only `heatAdjustment` (manual heat/cool actions) in DB
+    - Client and server use identical calculation = predictable optimistic updates
+    - Implementation: [lib/scoring/heat-v3.ts](lib/scoring/heat-v3.ts)
+    - Architecture: [docs/current-heat-algorithm.md](current-heat-algorithm.md)
 - Rationale:
   - Performance: Avoid recalculating complex formulas on every read
   - Accuracy: Ensure time-sensitive values (due dates) don't cause stale displays

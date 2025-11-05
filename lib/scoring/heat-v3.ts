@@ -4,34 +4,27 @@ import { getMinImportance, getMaxImportance, getImportanceRange } from "./import
 import { getHeatColorFromConfig, getHeatLabelFromConfig } from "./importance-colors";
 
 /**
- * Heat v3/v4 - Simplified 3-Component Model with Point-Based Normalization
+ * Current Heat Algorithm - Simplified 3-Component Model with Point-Based Normalization
  *
  * ⚠️ SINGLE SOURCE OF TRUTH ⚠️
- * This is the ONLY place where Heat v3/v4 calculation logic should exist.
+ * This is the ONLY place where the current heat calculation logic should exist.
  *
- * Radical simplification from V2:
- * - 3 components (vs 6 in V2): base importance (95 pts), heat adjustment (±45 pts), recency (5 pts)
- * - Direct heat tracking: heatAdjustment (-45 to +45) tracked in points
- * - Context-aware positioning: Heat moves up 1, Cool moves down 3 positions
- * - Asymmetric decay: Cool decays 2x faster (3-day vs 7-day half-life)
- * - Enhanced star: 3 levels (blue/yellow/orange) = +1/+2/+3 to base importance
- * - Removed: activity touches, due proximity, creation recency, snooze workflow
- *
- * V4 Formula (Point-Based):
+ * Current Formula (Point-Based, 0-145 scale):
  * importancePoints = ((importance - min) / range) * BASE_IMPORTANCE_POINTS (0-95)
  * recencyPoints = recencyScore * RECENCY_POINTS (0-5)
  * adjustmentPoints = heatAdjustment (±45)
  * heat = clamp(importancePoints + recencyPoints + adjustmentPoints, 0, 145)
  *
- * V3 Formula (Legacy, 0-1 scale):
- * heat = clamp(
- *   0.50 * (baseImportance / 14) +
- *   heatAdjustment +
- *   0.05 * exp(-daysSinceTouch / 7),
- *   0, 1
- * )
+ * Key Features:
+ * - 3 components: base importance (95 pts), heat adjustment (±45 pts), recency (5 pts)
+ * - Direct heat tracking: heatAdjustment (-45 to +45) tracked in points
+ * - Context-aware positioning: Heat moves up 1, Cool moves down 3 positions
+ * - Asymmetric decay: Cool decays 2x faster (3-day vs 7-day half-life)
+ * - Enhanced star: 3 levels (blue/yellow/orange) = +1/+2/+3 to base importance
+ * - Pure calculation: Heat is NEVER stored, only calculated from base properties + adjustments
+ * - No time skew: Server calculates fresh heat from task IDs, not client-sent values
  *
- * See: docs/heat-algorithm-v3.md
+ * See: docs/current-heat-algorithm.md
  */
 
 // ============================================================================
@@ -40,7 +33,7 @@ import { getHeatColorFromConfig, getHeatLabelFromConfig } from "./importance-col
 
 /**
  * Breakdown of heat components for tooltip display
- * Heat v4: Updated to use point-based system (0-145)
+ * Uses point-based system (0-145)
  */
 export interface HeatV3Breakdown {
   // Raw component values (normalized 0-1 scores)
@@ -388,29 +381,36 @@ export function calculateHeatBoost(
     HEAT_CONFIG.MAX_FINAL_SCORE
   );
 
-  const tasksAbove = tasks
-    .filter((t) => t.heat > currentTask.heat)
-    .sort((a, b) => a.heat - b.heat); // nearest higher heat first
+  // Include tasks at same heat level (ties) OR above
+  const tasksAboveOrEqual = tasks
+    .filter((t) => t.heat >= currentTask.heat)
+    .sort((a, b) => a.heat - b.heat); // nearest first
 
-  const contextTarget =
-    tasksAbove.length > 0
-      ? clamp(
-          tasksAbove[0].heat + 1,
-          HEAT_CONFIG.MIN_FINAL_SCORE,
-          HEAT_CONFIG.MAX_FINAL_SCORE
-        )
-      : maxTarget;
+  let contextTarget: number;
+  if (tasksAboveOrEqual.length > 0) {
+    // Found tasks at same level or above - move just above the nearest one
+    contextTarget = clamp(
+      tasksAboveOrEqual[0].heat + 1,
+      HEAT_CONFIG.MIN_FINAL_SCORE,
+      HEAT_CONFIG.MAX_FINAL_SCORE
+    );
+  } else {
+    // No context - use max boost
+    contextTarget = maxTarget;
+  }
 
+  // Apply cap: move to the LESSER of (context target) or (current + 5)
   const targetHeat = Math.min(maxTarget, contextTarget);
+  const boost = targetHeat - currentTask.heat;
 
-  return targetHeat - currentTask.heat;
+  return boost;
 }
 
 /**
- * Calculate cool drop to move task down 3 positions
+ * Calculate cool drop to move task down (context-aware)
  *
- * Goal: Decisive cooling - skip 2 tasks to prevent ping-pong cycling
- * Clamped by configuration to avoid runaway adjustments
+ * Goal: Move down up to 3 positions, but only within the -10 cap range
+ * Prevents hitting the max drop cap when there are closer tasks available
  *
  * @param currentTask - The task being cooled
  * @param visibleTasks - All visible tasks sorted by heat (descending)
@@ -430,27 +430,37 @@ export function calculateCoolDrop(
     HEAT_CONFIG.MAX_FINAL_SCORE
   );
 
-  const tasksBelow = tasks
-    .filter((t) => t.heat < currentTask.heat)
-    .sort((a, b) => b.heat - a.heat); // nearest lower heat first
+  // Include tasks at same heat level (ties) OR below
+  const tasksBelowOrEqual = tasks
+    .filter((t) => t.heat <= currentTask.heat)
+    .sort((a, b) => b.heat - a.heat); // nearest first (highest to lowest)
 
-  const targetIndex = Math.min(
-    HEAT_CONFIG.COOL_SKIP_POSITIONS - 1,
-    Math.max(tasksBelow.length - 1, 0)
-  );
+  // CRITICAL FIX: Only consider tasks within the drop cap range
+  // This ensures we don't skip over nearby tasks when trying to move 3 positions
+  const tasksInRange = tasksBelowOrEqual.filter((t) => t.heat >= minTarget);
 
-  const contextTarget =
-    tasksBelow.length > 0
-      ? clamp(
-          tasksBelow[targetIndex].heat - 1,
-          HEAT_CONFIG.MIN_FINAL_SCORE,
-          HEAT_CONFIG.MAX_FINAL_SCORE
-        )
-      : minTarget;
+  let contextTarget: number;
+  if (tasksInRange.length > 0) {
+    // Move down up to 3 positions, but only from tasks within range
+    const targetIndex = Math.min(
+      HEAT_CONFIG.COOL_SKIP_POSITIONS - 1,
+      tasksInRange.length - 1
+    );
+    contextTarget = clamp(
+      tasksInRange[targetIndex].heat - 1,
+      HEAT_CONFIG.MIN_FINAL_SCORE,
+      HEAT_CONFIG.MAX_FINAL_SCORE
+    );
+  } else {
+    // No tasks in range - use max drop
+    contextTarget = minTarget;
+  }
 
+  // Apply cap: move to the GREATER of (context target) or (current - 10)
   const targetHeat = Math.max(minTarget, contextTarget);
+  const drop = targetHeat - currentTask.heat;
 
-  return targetHeat - currentTask.heat;
+  return drop;
 }
 
 /**

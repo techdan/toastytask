@@ -1,8 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
-import { calculateHeat, calculateHeatBoost, calculateCoolDrop, applyAsymmetricDecay, resolveAdjustmentForTargetHeat } from "@/lib/scoring/heat-v3";
-import { HEAT_CONFIG } from "@/lib/scoring/heat-config";
+import { calculateHeat } from "@/lib/scoring/heat-v3";
 import type { Task, NewTask } from "@/types";
 import type { HeatV3Breakdown } from "@/lib/scoring/heat-v3";
 
@@ -275,9 +274,17 @@ export function useUpdateTask() {
         description: error instanceof Error ? error.message : "Unknown error",
       });
     },
-    onSettled: () => {
-      // Refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    onSuccess: (updatedTask) => {
+      // CRITICAL: Replace optimistic update with authoritative server response
+      // This ensures ALL queries have correct importanceV1 and other server-calculated fields
+      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
+        if (!oldTasks || !Array.isArray(oldTasks)) {
+          return oldTasks;
+        }
+        return oldTasks.map((task) =>
+          task.id === updatedTask.id ? updatedTask : task
+        );
+      });
     },
   });
 }
@@ -464,12 +471,12 @@ export function useUncompleteTask() {
   });
 }
 
-// Heat task (V3 - warm interaction)
-async function heatTask(id: number, visibleTasks?: Array<{id: number; heat: number}>): Promise<TouchTaskResponse> {
+// Heat task - Apply heat adjustment
+async function heatTask(id: number, visibleTaskIds?: number[]): Promise<TouchTaskResponse> {
   const response = await fetch(`/api/tasks/${id}/heat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ visibleTasks }),
+    body: JSON.stringify({ visibleTaskIds }),
   });
 
   if (!response.ok) {
@@ -479,12 +486,12 @@ async function heatTask(id: number, visibleTasks?: Array<{id: number; heat: numb
   return response.json();
 }
 
-// Cool task (V3 - simplified from snooze)
-async function coolTask(id: number, visibleTasks?: Array<{id: number; heat: number}>): Promise<CoolTaskResponse> {
+// Cool task - Apply cool adjustment
+async function coolTask(id: number, visibleTaskIds?: number[]): Promise<CoolTaskResponse> {
   const response = await fetch(`/api/tasks/${id}/cool`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ visibleTasks }),
+    body: JSON.stringify({ visibleTaskIds }),
   });
 
   if (!response.ok) {
@@ -494,80 +501,18 @@ async function coolTask(id: number, visibleTasks?: Array<{id: number; heat: numb
   return response.json();
 }
 
-// Hook: Heat task (V3 - warm interaction with context-aware positioning)
+// Hook: Heat task - Context-aware positioning (moves up 1 position)
 export function useTouchTask() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ taskId, visibleTasks }: { taskId: number; visibleTasks?: Array<{id: number; heat: number}> }) =>
-      heatTask(taskId, visibleTasks),
-    onMutate: async ({ taskId, visibleTasks }) => {
-      // Cancel outgoing refetches
+    mutationFn: ({ taskId, visibleTaskIds }: { taskId: number; visibleTaskIds?: number[] }) =>
+      heatTask(taskId, visibleTaskIds),
+    onMutate: async () => {
+      // No optimistic updates - server is source of truth
+      // Cancel pending queries to avoid race conditions
       await queryClient.cancelQueries({ queryKey: ["tasks"] });
-
-      // Snapshot previous values
       const previousTasks = queryClient.getQueriesData({ queryKey: ["tasks"] });
-
-      // Optimistically update the task (approximate heat calculation)
-      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
-        if (!oldTasks || !Array.isArray(oldTasks)) {
-          return oldTasks;
-        }
-
-        const contextTasks =
-          visibleTasks && visibleTasks.length > 0
-            ? visibleTasks
-            : oldTasks
-                .filter(t => !t.completedAt)
-                .map(t => ({ id: t.id, heat: t.heat }));
-
-        return oldTasks.map((task) => {
-          if (task.id !== taskId) return task;
-
-          // Optimistic updates:
-          // 1. Update last touched timestamps
-          // 2. Update adjustment using shared helper
-          // 3. Update heat (recalculate client-side)
-          const now = new Date();
-          const { newAdjustment: decayedAdjustment } = applyAsymmetricDecay(
-            task.heatAdjustment ?? 0,
-            task.lastHeatTouchedAt,
-            now
-          );
-          const currentHeat = task.heat ?? 0;
-          const heatDelta = calculateHeatBoost(
-            { id: task.id, heat: currentHeat },
-            contextTasks
-          );
-          const targetHeat = Math.min(
-            Math.max(currentHeat + heatDelta, HEAT_CONFIG.MIN_FINAL_SCORE),
-            HEAT_CONFIG.MAX_FINAL_SCORE
-          );
-
-          const { newAdjustment } = resolveAdjustmentForTargetHeat(
-            targetHeat,
-            {
-              importanceV1: task.importanceV1,
-              heatAdjustment: decayedAdjustment,
-              lastTouchedAt: task.lastTouchedAt,
-              lastHeatTouchedAt: task.lastHeatTouchedAt,
-            },
-            now
-          );
-
-          const updatedTask = {
-            ...task,
-            heatAdjustment: newAdjustment,
-            lastTouchedAt: now,
-            lastHeatTouchedAt: now,
-          };
-
-          // Recalculate heat client-side for immediate feedback
-          updatedTask.heat = calculateHeat(updatedTask, now);
-
-          return updatedTask;
-        });
-      });
 
       return { previousTasks };
     },
@@ -583,102 +528,28 @@ export function useTouchTask() {
       });
     },
     onSuccess: (response) => {
-      // Update with server response
-      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
-        if (!oldTasks || !Array.isArray(oldTasks)) {
-          return oldTasks;
-        }
-
-        return oldTasks.map((task) =>
-          task.id === response.task.id ? response.task : task
-        );
-      });
+      // Refetch all task queries to get fresh server data
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
 
       toast.success("Task heated", {
         description: `Heat adjustment: ${response.adjustmentDelta >= 0 ? "+" : ""}${response.adjustmentDelta.toFixed(0)} pts`,
       });
     },
-    onSettled: () => {
-      // Refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-    },
   });
 }
 
-// Hook: Cool task (V3 - simplified with context-aware positioning)
+// Hook: Cool task - Context-aware positioning (moves down 3 positions)
 export function useCoolTask() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ taskId, visibleTasks }: { taskId: number; visibleTasks?: Array<{id: number; heat: number}> }) =>
-      coolTask(taskId, visibleTasks),
-    onMutate: async ({ taskId, visibleTasks }) => {
-      // Cancel outgoing refetches
+    mutationFn: ({ taskId, visibleTaskIds }: { taskId: number; visibleTaskIds?: number[] }) =>
+      coolTask(taskId, visibleTaskIds),
+    onMutate: async () => {
+      // No optimistic updates - server is source of truth
+      // Cancel pending queries to avoid race conditions
       await queryClient.cancelQueries({ queryKey: ["tasks"] });
-
-      // Snapshot previous values
       const previousTasks = queryClient.getQueriesData({ queryKey: ["tasks"] });
-
-      // Optimistically update the task (approximate heat calculation)
-      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
-        if (!oldTasks || !Array.isArray(oldTasks)) {
-          return oldTasks;
-        }
-
-        const contextTasks =
-          visibleTasks && visibleTasks.length > 0
-            ? visibleTasks
-            : oldTasks
-                .filter(t => !t.completedAt)
-                .map(t => ({ id: t.id, heat: t.heat }));
-
-        return oldTasks.map((task) => {
-          if (task.id !== taskId) return task;
-
-          // Optimistic updates:
-          // 1. Update last touched timestamps
-          // 2. Update adjustment using shared helper
-          // 3. Update heat (recalculate client-side)
-          const now = new Date();
-          const { newAdjustment: decayedAdjustment } = applyAsymmetricDecay(
-            task.heatAdjustment ?? 0,
-            task.lastHeatTouchedAt,
-            now
-          );
-          const currentHeat = task.heat ?? 0;
-          const heatDelta = calculateCoolDrop(
-            { id: task.id, heat: currentHeat },
-            contextTasks
-          );
-          const targetHeat = Math.min(
-            Math.max(currentHeat + heatDelta, HEAT_CONFIG.MIN_FINAL_SCORE),
-            HEAT_CONFIG.MAX_FINAL_SCORE
-          );
-
-          const { newAdjustment } = resolveAdjustmentForTargetHeat(
-            targetHeat,
-            {
-              importanceV1: task.importanceV1,
-              heatAdjustment: decayedAdjustment,
-              lastTouchedAt: task.lastTouchedAt,
-              lastHeatTouchedAt: task.lastHeatTouchedAt,
-            },
-            now
-          );
-
-          const updatedTask = {
-            ...task,
-            heatAdjustment: newAdjustment,
-            lastTouchedAt: now,
-            lastHeatTouchedAt: now,
-          };
-
-          // Recalculate heat client-side for immediate feedback
-          updatedTask.heat = calculateHeat(updatedTask, now);
-
-          return updatedTask;
-        });
-      });
 
       return { previousTasks };
     },
@@ -694,28 +565,12 @@ export function useCoolTask() {
       });
     },
     onSuccess: (response) => {
-      // Update with server response and re-sort
-      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
-        if (!oldTasks || !Array.isArray(oldTasks)) {
-          return oldTasks;
-        }
-
-        // Replace the updated task and re-sort by heat
-        const updatedTasks = oldTasks.map((task) =>
-          task.id === response.task.id ? response.task : task
-        );
-
-        // Cool causes re-sort (move down 3 positions)
-        return updatedTasks.sort((a, b) => b.heat - a.heat);
-      });
+      // Refetch all task queries to get fresh server data
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
 
       toast.success("Task cooled", {
         description: `Heat adjustment: ${response.adjustmentDelta >= 0 ? "+" : ""}${response.adjustmentDelta.toFixed(0)} pts`,
       });
-    },
-    onSettled: () => {
-      // Refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
 }

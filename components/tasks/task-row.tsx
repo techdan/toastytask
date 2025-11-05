@@ -21,10 +21,13 @@ const priorityStyles: Record<Priority, string> = {
   top: "font-bold text-[#990000] dark:text-[#dd5555]",
 };
 
+// Task with computed fresh heat for accurate context-aware positioning
+type TaskWithFreshHeat = Task & { _freshHeat: number };
+
 interface TaskRowProps {
-  task: Task;
+  task: TaskWithFreshHeat;
   sortMode: SortMode;
-  allVisibleTasks: Task[];
+  allVisibleTasks: TaskWithFreshHeat[];
   onUpdate: (id: number, updates: Partial<Task>) => void;
   onDelete: (id: number) => void;
   onComplete: (id: number) => void;
@@ -106,23 +109,25 @@ export function TaskRow({ task, sortMode, allVisibleTasks, onUpdate, onDelete, o
 
   const handleTouchClick = () => {
     if (!isCompleted) {
-      // Prepare visible tasks for context-aware calculation
-      const visibleTasks = allVisibleTasks
+      // Send only task IDs for context-aware calculation
+      // Server will calculate fresh heat values to avoid time skew
+      const visibleTaskIds = allVisibleTasks
         .filter(t => !t.completedAt) // Exclude completed tasks from context
-        .map(t => ({ id: t.id, heat: t.heat }));
+        .map(t => t.id);
 
-      touchTaskMutation.mutate({ taskId: task.id, visibleTasks });
+      touchTaskMutation.mutate({ taskId: task.id, visibleTaskIds });
     }
   };
 
   const handleCoolClick = () => {
     if (!isCompleted) {
-      // Prepare visible tasks for context-aware calculation
-      const visibleTasks = allVisibleTasks
+      // Send only task IDs for context-aware calculation
+      // Server will calculate fresh heat values to avoid time skew
+      const visibleTaskIds = allVisibleTasks
         .filter(t => !t.completedAt) // Exclude completed tasks from context
-        .map(t => ({ id: t.id, heat: t.heat }));
+        .map(t => t.id);
 
-      coolTaskMutation.mutate({ taskId: task.id, visibleTasks });
+      coolTaskMutation.mutate({ taskId: task.id, visibleTaskIds });
     }
   };
 
