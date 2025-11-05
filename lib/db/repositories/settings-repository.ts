@@ -4,7 +4,7 @@ import type { Settings, NewSettings } from "@/lib/db/schema";
 import { settings } from "@/lib/db/schema";
 import { getDatabase } from "@/lib/db/client";
 
-export class SQLiteSettingsRepository implements ISettingsRepository {
+export class SettingsRepository implements ISettingsRepository {
   private db = getDatabase();
 
   async get(userId: string): Promise<Settings> {

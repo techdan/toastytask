@@ -32,7 +32,7 @@ function calculateNextDueDate(currentDueDate: Date | null, repeatType: string): 
   return nextDate;
 }
 
-export class SQLiteTaskRepository implements ITaskRepository {
+export class TaskRepository implements ITaskRepository {
   private db = getDatabase();
 
   async create(task: NewTask, userId: string): Promise<Task> {

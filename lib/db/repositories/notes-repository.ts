@@ -25,7 +25,7 @@ export interface INoteRepository {
   restoreVersion(noteRowId: number, versionId: number): Promise<NoteRowWithVersion>;
 }
 
-export class SQLiteNoteRepository implements INoteRepository {
+export class NoteRepository implements INoteRepository {
   private db = getDatabase();
 
   async getNotesForTasks(taskIds: number[]): Promise<Map<number, NoteRowWithVersion[]>> {

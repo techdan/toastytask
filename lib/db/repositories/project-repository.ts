@@ -4,7 +4,7 @@ import type { Project, NewProject } from "@/lib/db/schema";
 import { projects } from "@/lib/db/schema";
 import { getDatabase } from "@/lib/db/client";
 
-export class SQLiteProjectRepository implements IProjectRepository {
+export class ProjectRepository implements IProjectRepository {
   private db = getDatabase();
 
   async create(project: NewProject, userId: string): Promise<Project> {

@@ -2,33 +2,33 @@
 export type { ITaskRepository, IProjectRepository, ISettingsRepository, TaskQueryOptions } from "./interfaces";
 export type { INoteRepository, NoteRowWithVersion } from "./notes-repository";
 
-// Import SQLite implementations
-import { SQLiteTaskRepository } from "./task-repository";
-import { SQLiteProjectRepository } from "./project-repository";
-import { SQLiteSettingsRepository } from "./settings-repository";
-import { SQLiteNoteRepository } from "./notes-repository";
+// Import repository implementations
+import { TaskRepository } from "./task-repository";
+import { ProjectRepository } from "./project-repository";
+import { SettingsRepository } from "./settings-repository";
+import { NoteRepository } from "./notes-repository";
 
-// Re-export SQLite implementations
-export { SQLiteTaskRepository, SQLiteProjectRepository, SQLiteSettingsRepository, SQLiteNoteRepository };
+// Re-export repository implementations
+export { TaskRepository, ProjectRepository, SettingsRepository, NoteRepository };
 
 // Repository factory - returns the appropriate implementation based on environment
-// In the future, this can be extended to support PostgreSQL
+// In the future, this can be extended to support multiple database types
 export function createTaskRepository() {
-  // For now, always return SQLite implementation
+  // For now, always return the default implementation
   // Later: check process.env.DATABASE_TYPE
-  return new SQLiteTaskRepository();
+  return new TaskRepository();
 }
 
 export function createProjectRepository() {
-  return new SQLiteProjectRepository();
+  return new ProjectRepository();
 }
 
 export function createSettingsRepository() {
-  return new SQLiteSettingsRepository();
+  return new SettingsRepository();
 }
 
 export function createNoteRepository() {
-  return new SQLiteNoteRepository();
+  return new NoteRepository();
 }
 
 // Singleton instances for convenience
