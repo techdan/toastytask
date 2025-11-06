@@ -45,6 +45,13 @@ Refer back to `docs/requirements.md` for deeper UX and automation rules when des
   - Clerk also honors `Cookie`-based auth, but bearer tokens are recommended for native apps.
 - When a session is invalid or missing you receive `401 {"error":"Unauthorized"}`.
 
+### Authorization & Ownership
+- Beyond authentication, all endpoints verify **resource ownership** before allowing access.
+- Task endpoints verify that the task belongs to the authenticated user; returns `404` if not found or not owned.
+- Project endpoints verify that the project belongs to the authenticated user.
+- Settings endpoints automatically scope to the authenticated user.
+- This prevents authenticated users from accessing other users' data by guessing IDs.
+
 ### Request & Response Conventions
 - Content type: `application/json`
 - Datetimes are ISO 8601 strings in UTC (e.g., `"2025-10-30T01:37:52.123Z"`). Integers occasionally appear from database drivers; treat as Unix ms timestamps.
@@ -250,7 +257,7 @@ Both endpoints accept optional context from the client to avoid refetching the e
 #### `GET /api/tasks/{id}/notes`
 - **Purpose:** Fetch all note lines for a task.
 - **Response:** `{ "notes": NoteRow[] }`
-- **Security:** Protected by middleware; handler itself does not re-check auth.
+- **Security:** Verifies authentication and task ownership. Returns 404 if task doesn't exist or doesn't belong to the authenticated user.
 
 #### `POST /api/tasks/{id}/notes`
 - **Purpose:** Create/update the note text as a whole.

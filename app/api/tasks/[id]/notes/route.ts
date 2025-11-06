@@ -9,14 +9,25 @@ export const runtime = 'nodejs';
 
 // GET /api/tasks/[id]/notes - Get all notes for a task
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = await params;
     const taskId = parseInt(id);
     if (isNaN(taskId)) {
       return NextResponse.json({ error: "Invalid task ID" }, { status: 400 });
+    }
+
+    // Verify task ownership before returning notes
+    const task = await taskRepository.findById(taskId, userId);
+    if (!task) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
     const notes = await noteRepository.getNotesForTask(taskId);
