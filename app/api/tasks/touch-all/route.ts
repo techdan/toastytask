@@ -14,7 +14,7 @@ export const runtime = 'nodejs';
  * to their createdAt date. This removes the "new" (green) status without artificially
  * boosting recency scores.
  */
-export async function POST(_request: Request) {
+export async function POST() {
   try {
     const { userId } = await auth();
 

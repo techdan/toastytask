@@ -29,20 +29,21 @@ export function UserAccountDropdown() {
   const { data: settings = null } = useSettingsQuery();
   const queryClient = useQueryClient();
 
-  const normalizeToIsoString = (value: Task["createdAt"]) => {
-    if (!value) {
-      return new Date().toISOString();
-    }
-
+  const normalizeToDate = (value: Task["createdAt"]) => {
     if (value instanceof Date) {
-      return value.toISOString();
+      return value;
     }
 
     if (typeof value === "number") {
-      return new Date(value).toISOString();
+      const milliseconds = value < 1e12 ? value * 1000 : value;
+      return new Date(milliseconds);
     }
 
-    return value;
+    if (typeof value === "string" && value.length > 0) {
+      return new Date(value);
+    }
+
+    return new Date();
   };
 
   const handleTouchAll = async () => {
@@ -57,18 +58,18 @@ export function UserAccountDropdown() {
 
       let hasChanges = false;
 
-      const updatedTasks = oldTasks.map((task) => {
+      const updatedTasks = oldTasks.map((task): Task => {
         if (task.lastTouchedAt || task.lastHeatTouchedAt) {
           return task;
         }
 
         hasChanges = true;
-        const createdAtIso = normalizeToIsoString(task.createdAt);
+        const createdAtDate = normalizeToDate(task.createdAt);
 
         return {
           ...task,
-          lastTouchedAt: createdAtIso,
-          lastHeatTouchedAt: createdAtIso,
+          lastTouchedAt: createdAtDate,
+          lastHeatTouchedAt: createdAtDate,
         };
       });
 

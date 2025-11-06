@@ -1,6 +1,6 @@
 import type { Task } from "@/types";
-import { HEAT_CONFIG, STAR_CONFIG, GLOW_CONFIG } from "./heat-config";
-import { getMinImportance, getMaxImportance, getImportanceRange } from "./importance-v1";
+import { HEAT_CONFIG, GLOW_CONFIG } from "./heat-config";
+import { getMinImportance, getImportanceRange } from "./importance-v1";
 import { getHeatColorFromConfig, getHeatLabelFromConfig } from "./importance-colors";
 
 /**

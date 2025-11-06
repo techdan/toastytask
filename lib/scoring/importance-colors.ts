@@ -8,7 +8,7 @@
  * on different scales (importance: 2-14, heat: 0-145).
  */
 
-import { getMinImportance, getMaxImportance, getImportanceRange } from "./importance-v1";
+import { getMinImportance, getImportanceRange } from "./importance-v1";
 import { HEAT_CONFIG } from "./heat-config";
 
 /**
