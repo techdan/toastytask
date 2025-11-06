@@ -29,7 +29,7 @@ export function UserAccountDropdown() {
   const { data: settings = null } = useSettingsQuery();
   const queryClient = useQueryClient();
 
-  const normalizeToDate = (value: Task["createdAt"]) => {
+  const normalizeToDate = (value: Task["createdAt"] | string | number | null | undefined) => {
     if (value instanceof Date) {
       return value;
     }
