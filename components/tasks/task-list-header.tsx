@@ -27,14 +27,15 @@ export function TaskListHeader({
   return (
     <thead>
       <tr className="bg-muted/30">
-        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left first:rounded-l border border-r-0">
-          <div className="task-header-control">
+        <th scope="col" className="w-[150px] px-2 py-2 text-xs font-medium text-muted-foreground text-left first:rounded-l border border-r-0">
+          <div className="flex items-center justify-between pr-1">
+            <span className="sr-only">Task utilities</span>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="task-sort-trigger h-5 px-1.5 text-xs gap-1"
+                  className="h-5 px-1.5 text-xs gap-1"
                   title="Sort mode"
                 >
                   <span className="capitalize">{sortMode}</span>
@@ -60,18 +61,18 @@ export function TaskListHeader({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <span className="task-header-label capitalize" data-mode={sortMode}>
-              Task
-            </span>
           </div>
         </th>
-        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[8.5rem]">
+        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0">
+          Task
+        </th>
+        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[5.75rem]">
           Due Date
         </th>
-        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[6.25rem]">
+        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[5.25rem]">
           Priority
         </th>
-        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[7.5rem]">
+        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[6rem]">
           Recurrence
         </th>
         <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left last:rounded-r border-y border-r">

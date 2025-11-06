@@ -9,7 +9,6 @@ import { RecurrenceSelect } from "./recurrence-select";
 import { DueDateDisplay } from "./due-date-display";
 import { TaskNotes, TaskNotesPanel } from "./task-notes";
 import { HeatBadge } from "./heat-badge";
-import { useTouchTask, useCoolTask } from "@/lib/queries/use-task-mutations";
 import { getGlowLevel } from "@/lib/scoring/heat-v3";
 import type { Task, Priority, SortMode } from "@/types";
 import { cn } from "@/lib/utils";
@@ -27,20 +26,18 @@ type TaskWithFreshHeat = Task & { _freshHeat: number };
 interface TaskRowProps {
   task: TaskWithFreshHeat;
   sortMode: SortMode;
-  allVisibleTasks: TaskWithFreshHeat[];
   onUpdate: (id: number, updates: Partial<Task>) => void;
   onDelete: (id: number) => void;
   onComplete: (id: number) => void;
   onUncomplete: (id: number) => void;
+  onHeat: (taskId: number) => void;
+  onCool: (taskId: number) => void;
 }
 
-export function TaskRow({ task, sortMode, allVisibleTasks, onUpdate, onDelete, onComplete, onUncomplete }: TaskRowProps) {
+export function TaskRow({ task, sortMode, onUpdate, onDelete, onComplete, onUncomplete, onHeat, onCool }: TaskRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(task.title);
   const [notesExpanded, setNotesExpanded] = useState(false);
-
-  const touchTaskMutation = useTouchTask();
-  const coolTaskMutation = useCoolTask();
 
   const isCompleted = !!task.completedAt;
   const isNew = task.lastTouchedAt === null && task.lastHeatTouchedAt === null;
@@ -111,25 +108,13 @@ export function TaskRow({ task, sortMode, allVisibleTasks, onUpdate, onDelete, o
 
   const handleTouchClick = () => {
     if (!isCompleted) {
-      // Send only task IDs for context-aware calculation
-      // Server will calculate fresh heat values to avoid time skew
-      const visibleTaskIds = allVisibleTasks
-        .filter(t => !t.completedAt) // Exclude completed tasks from context
-        .map(t => t.id);
-
-      touchTaskMutation.mutate({ taskId: task.id, visibleTaskIds });
+      onHeat(task.id);
     }
   };
 
   const handleCoolClick = () => {
     if (!isCompleted) {
-      // Send only task IDs for context-aware calculation
-      // Server will calculate fresh heat values to avoid time skew
-      const visibleTaskIds = allVisibleTasks
-        .filter(t => !t.completedAt) // Exclude completed tasks from context
-        .map(t => t.id);
-
-      coolTaskMutation.mutate({ taskId: task.id, visibleTaskIds });
+      onCool(task.id);
     }
   };
 
@@ -208,38 +193,43 @@ export function TaskRow({ task, sortMode, allVisibleTasks, onUpdate, onDelete, o
                 </button>
               </>
             )}
-            <div className="flex-1 min-w-0">
-              {isEditing ? (
-                <Input
-                  value={editedTitle}
-                  onChange={(e) => setEditedTitle(e.target.value)}
-                  onBlur={handleTitleBlur}
-                  onKeyDown={handleTitleKeyDown}
-                  className="h-6 text-sm"
-                  autoFocus
-                />
-              ) : (
-                <button
-                  className={cn(
-                    "w-full text-left text-sm hover:text-primary cursor-pointer transition-all duration-200",
-                    !isCompleted && !isNew && priorityStyles[task.priority],
-                    !isCompleted && isNew && "font-bold text-green-600 dark:text-green-400",
-                    isCompleted && "line-through"
-                  )}
-                  onClick={handleTitleClick}
-                  disabled={isCompleted}
-                >
-                  {task.title}
-                </button>
-              )}
-            </div>
           </div>
         </td>
         <td className={cn(
           "px-2 py-1.5 align-middle border-y border-r-0",
           notesExpanded && "border-b-0"
         )}>
-          <div className={cn("min-w-[8.5rem]", isCompleted && "line-through") }>
+          <div className="min-w-0">
+            {isEditing ? (
+              <Input
+                value={editedTitle}
+                onChange={(e) => setEditedTitle(e.target.value)}
+                onBlur={handleTitleBlur}
+                onKeyDown={handleTitleKeyDown}
+                className="h-6 text-sm"
+                autoFocus
+              />
+            ) : (
+              <button
+                className={cn(
+                  "w-full text-left text-sm hover:text-primary cursor-pointer transition-all duration-200",
+                  !isCompleted && !isNew && priorityStyles[task.priority],
+                  !isCompleted && isNew && "font-bold text-green-600 dark:text-green-400",
+                  isCompleted && "line-through"
+                )}
+                onClick={handleTitleClick}
+                disabled={isCompleted}
+              >
+                {task.title}
+              </button>
+            )}
+          </div>
+        </td>
+        <td className={cn(
+          "px-2 py-1.5 align-middle border-y border-r-0",
+          notesExpanded && "border-b-0"
+        )}>
+          <div className={cn("min-w-[5.75rem]", isCompleted && "line-through") }>
             <DueDateDisplay
               dueAt={task.dueAt}
               onDateChange={handleDateChange}
@@ -252,7 +242,7 @@ export function TaskRow({ task, sortMode, allVisibleTasks, onUpdate, onDelete, o
           "px-2 py-1.5 align-middle border-y border-r-0",
           notesExpanded && "border-b-0"
         )}>
-          <div className={cn("min-w-[6.25rem]", isCompleted && "line-through") }>
+          <div className={cn("min-w-[5.25rem]", isCompleted && "line-through") }>
             <PrioritySelect
               value={task.priority}
               onValueChange={handlePriorityChange}
@@ -264,7 +254,7 @@ export function TaskRow({ task, sortMode, allVisibleTasks, onUpdate, onDelete, o
           "px-2 py-1.5 align-middle border-y border-r-0",
           notesExpanded && "border-b-0"
         )}>
-          <div className={cn("min-w-[7.5rem]", isCompleted && "line-through") }>
+          <div className={cn("min-w-[6rem]", isCompleted && "line-through") }>
             <RecurrenceSelect
               value={task.repeatType}
               onValueChange={handleRecurrenceChange}
@@ -289,7 +279,7 @@ export function TaskRow({ task, sortMode, allVisibleTasks, onUpdate, onDelete, o
       {/* Notes Panel - Expanded row with colspan */}
       {notesExpanded && (
         <tr className="bg-card">
-          <td colSpan={5} className="px-2 py-2 border-x border-b rounded-b">
+          <td colSpan={6} className="px-2 py-2 border-x border-b rounded-b">
             <TaskNotesPanel taskId={task.id} initialNotes={task.notes} />
           </td>
         </tr>

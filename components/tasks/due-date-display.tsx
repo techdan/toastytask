@@ -139,7 +139,7 @@ export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted }: D
       onClick={handleClick}
       disabled={disabled}
       className={cn(
-        "flex h-6 w-full items-center gap-1 text-left text-xs transition-opacity hover:opacity-70",
+        "flex h-6 w-full min-w-[5.75rem] items-center gap-1 text-left text-xs transition-opacity hover:opacity-70",
         "cursor-pointer px-0",
         disabled && "cursor-not-allowed opacity-50"
       )}

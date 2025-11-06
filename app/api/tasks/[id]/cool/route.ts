@@ -41,9 +41,17 @@ export async function POST(
     const { id } = await params;
     const taskId = parseInt(id, 10);
 
-    // Parse request body (optional)
+    // Parse request body
     const body = await request.json().catch(() => ({}));
     const { decrement, visibleTaskIds } = body;
+
+    // Validate required visibleTaskIds parameter
+    if (!visibleTaskIds || !Array.isArray(visibleTaskIds) || visibleTaskIds.length === 0) {
+      return NextResponse.json(
+        { error: "visibleTaskIds is required and must be a non-empty array" },
+        { status: 400 }
+      );
+    }
 
     // Get existing task
     const existingTask = await taskRepository.findById(taskId, userId);
@@ -63,8 +71,6 @@ export async function POST(
     );
 
     // Determine target heat using fresh calculations (never trust stored heat)
-    let contextTasks: Array<{id: number; heat: number}> = [];
-
     // CRITICAL FIX: Recalculate fresh importance for current task
     // importanceV1 can become stale in database (time-dependent calculation)
     const currentTaskFreshImportance = calculateImportanceV1(existingTask);
@@ -73,40 +79,19 @@ export async function POST(
       now
     );
 
-    // Build context from client-sent task IDs or fetch all tasks
-    if (visibleTaskIds && Array.isArray(visibleTaskIds) && visibleTaskIds.length > 0) {
-      // Client sent context IDs - fetch these tasks and calculate fresh heat
-      const neighborIds = Array.from(new Set(visibleTaskIds)).filter((id) => id !== existingTask.id);
-      if (neighborIds.length > 0) {
-        const neighborRecords = await taskRepository.findManyByIds(neighborIds, userId);
-        contextTasks = neighborRecords.map((neighbor) => {
-          // CRITICAL FIX: Recalculate importanceV1 fresh (don't trust DB value)
-          // importanceV1 is time-dependent and can become stale in the database
-          const freshImportance = calculateImportanceV1(neighbor);
-          const freshHeat = calculateHeat({ ...neighbor, importanceV1: freshImportance }, now);
-          return { id: neighbor.id, heat: freshHeat };
-        });
-      }
-    } else {
-      // No context provided by client - fetch ALL active tasks and calculate fresh heat
-      // Note: Must fetch all tasks because stored heat is stale - can't rely on DB sort
-      const dbTasks = await taskRepository.findAll(userId, {
-        includeCompleted: false,
-        includeArchived: false,
-        includeDeleted: false,
-      });
+    // Build context from nearby task IDs (performance optimization: ~20 tasks instead of all)
+    const neighborIds = Array.from(new Set(visibleTaskIds)).filter((id) => id !== existingTask.id);
 
-      // Calculate fresh heat for all tasks and sort by it
-      contextTasks = dbTasks
-        .filter((t) => !t.completedAt && t.id !== existingTask.id)
-        .map((t) => {
-          // CRITICAL FIX: Recalculate importanceV1 fresh (don't trust DB value)
-          const freshImportance = calculateImportanceV1(t);
-          const freshHeat = calculateHeat({ ...t, importanceV1: freshImportance }, now);
-          return { id: t.id, heat: freshHeat };
-        })
-        .sort((a, b) => b.heat - a.heat) // Sort by fresh heat (the ONLY accurate sort)
-        .slice(0, 30); // Take top 30 by fresh heat for context
+    let contextTasks: Array<{id: number; heat: number}> = [];
+    if (neighborIds.length > 0) {
+      const neighborRecords = await taskRepository.findManyByIds(neighborIds, userId);
+      contextTasks = neighborRecords.map((neighbor) => {
+        // CRITICAL FIX: Recalculate importanceV1 fresh (don't trust DB value)
+        // importanceV1 is time-dependent and can become stale in the database
+        const freshImportance = calculateImportanceV1(neighbor);
+        const freshHeat = calculateHeat({ ...neighbor, importanceV1: freshImportance }, now);
+        return { id: neighbor.id, heat: freshHeat };
+      });
     }
 
     // Calculate context-aware drop (move down 3 positions)

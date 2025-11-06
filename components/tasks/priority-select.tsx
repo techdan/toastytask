@@ -75,9 +75,9 @@ export function PrioritySelect({ value, onValueChange, disabled }: PrioritySelec
           <span className={priorityStyles[value]}>{priorityLabels[value]}</span>
         </SelectValue>
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className="text-xs">
         {priorityOrder.map((priority) => (
-          <SelectItem key={priority} value={priority}>
+          <SelectItem key={priority} value={priority} className="text-xs py-1 pl-2 pr-6">
             <span className={priorityStyles[priority]}>{priorityLabels[priority]}</span>
           </SelectItem>
         ))}

@@ -79,10 +79,10 @@ export function RecurrenceSelect({ value, onValueChange, disabled }: RecurrenceS
           </div>
         </SelectValue>
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className="text-xs">
         {recurrenceOrder.map((repeatType) => (
-          <SelectItem key={repeatType} value={repeatType}>
-            <div className="flex items-center gap-2">
+          <SelectItem key={repeatType} value={repeatType} className="text-xs py-1 pl-2 pr-6">
+            <div className="flex items-center gap-1.5">
               {repeatType !== RepeatType.NONE && <Repeat className="h-3 w-3" />}
               {recurrenceLabels[repeatType]}
             </div>
