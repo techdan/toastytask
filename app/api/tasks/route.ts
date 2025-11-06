@@ -31,14 +31,15 @@ export async function GET(request: Request) {
       tasks = tasks.filter((task) => task.projectId === pid);
     }
 
-    // Recalculate importance for each task to ensure freshness
-    // (values become stale when due dates pass since we only calculate on write)
+    // Calculate importance for heat calculation and sorting
+    // Note: We calculate but don't send importanceV1 to client (pure calculation architecture)
     const now = new Date();
     tasks = await Promise.all(tasks.map(async (task) => {
-      const freshImportance = calculateImportanceV1(task);
+      // Calculate fresh importance (not persisted, only used for heat calculation)
+      const freshImportance = calculateImportanceV1(task, now);
 
-      // Always recompute heat using latest data
-      const freshHeat = calculateHeat(task, now);
+      // Always recompute heat using latest importance
+      const freshHeat = calculateHeat(task, now, freshImportance);
       const storedHeat = typeof task.heat === "number" ? task.heat : 0;
       const requiresUpdate =
         !Number.isFinite(storedHeat) ||
@@ -49,9 +50,10 @@ export async function GET(request: Request) {
         await taskRepository.updateHeat(task.id, freshHeat, userId);
       }
 
+      // Store calculated importance for sorting (will be removed before sending)
       return {
         ...task,
-        importanceV1: freshImportance,
+        _calculatedImportance: freshImportance, // Temporary field for sorting
         heat: freshHeat,
         heatCalculatedAt: now,
       };
@@ -80,11 +82,13 @@ export async function GET(request: Request) {
       };
     });
 
-    // Sort by importance (desc), then due proximity
+    // Sort by calculated importance (desc), then due proximity
     tasks.sort((a, b) => {
       // Sort by importance first (higher is better)
-      if (b.importanceV1 !== a.importanceV1) {
-        return b.importanceV1 - a.importanceV1;
+      // @ts-expect-error - _calculatedImportance is a temporary field added above
+      if (b._calculatedImportance !== a._calculatedImportance) {
+        // @ts-expect-error - _calculatedImportance is a temporary field added above
+        return b._calculatedImportance - a._calculatedImportance;
       }
 
       // Then by due date (earlier is better, nulls last)
@@ -104,7 +108,16 @@ export async function GET(request: Request) {
       return bCreated - aCreated;
     });
 
-    return NextResponse.json({ tasks });
+    // Remove temporary _calculatedImportance field before sending response
+    // (Pure calculation architecture: client calculates importance on render)
+    const tasksWithoutCalculatedImportance = tasks.map((task) => {
+      // @ts-expect-error - _calculatedImportance is a temporary field that we're removing
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { _calculatedImportance, ...taskWithoutImportance } = task;
+      return taskWithoutImportance;
+    });
+
+    return NextResponse.json({ tasks: tasksWithoutCalculatedImportance });
   } catch (error) {
     console.error("Failed to fetch tasks:", error);
     return NextResponse.json({ error: "Failed to fetch tasks" }, { status: 500 });
@@ -127,17 +140,19 @@ export async function POST(request: Request) {
       starLevel: body.starLevel ?? 0, // V3: 0=none, 1=blue, 2=yellow, 3=orange
       dueAt: body.dueAt ? new Date(body.dueAt) : null,
       projectId: body.projectId || null,
-      importanceV1: 0, // Will calculate below
+      importanceV1: 0, // DEPRECATED: Will be removed in Phase 2
     };
 
-    // Calculate importance before saving
-    taskData.importanceV1 = calculateImportanceV1(taskData as Parameters<typeof calculateImportanceV1>[0]);
-
-    // Calculate initial heat using V3 algorithm
+    // Calculate importance for heat calculation (not persisted)
     const now = new Date();
-    taskData.heat = calculateHeat(taskData as Parameters<typeof calculateHeat>[0], now);
+    const freshImportance = calculateImportanceV1(taskData as Parameters<typeof calculateImportanceV1>[0], now);
+
+    // Calculate initial heat using fresh importance
+    taskData.heat = calculateHeat(taskData as Parameters<typeof calculateHeat>[0], now, freshImportance);
     taskData.heatCalculatedAt = now;
 
+    // Note: We don't persist importanceV1 anymore (pure calculation architecture)
+    // It will be calculated on the client side from base properties
     const task = await taskRepository.create(taskData, userId);
 
     return NextResponse.json({ task }, { status: 201 });

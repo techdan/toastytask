@@ -57,25 +57,20 @@ export async function POST(
       lastTouchedAt: now,
     }, userId);
 
-    // Recalculate importance (star affects base importance)
+    // Calculate fresh importance (for heat calculation only - not persisted)
+    // Pure calculation architecture: importance is not stored, only calculated
     const newImportance = calculateImportanceV1({
       priority: updatedTask.priority,
       dueAt: updatedTask.dueAt,
       starLevel: newStarLevel,
-    });
+    }, now);
 
-    // Update importance in database
-    await taskRepository.update(taskId, {
-      importanceV1: newImportance,
-    }, userId);
-
-    // Recalculate heat (importance is a component)
+    // Recalculate heat using fresh importance
     const newHeat = calculateHeat({
-      importanceV1: newImportance,
       heatAdjustment: updatedTask.heatAdjustment || 0,
       lastTouchedAt: updatedTask.lastTouchedAt,
       lastHeatTouchedAt: updatedTask.lastHeatTouchedAt,
-    }, now);
+    }, now, newImportance);
 
     // Update heat in database
     await taskRepository.updateHeat(taskId, newHeat, userId);

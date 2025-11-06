@@ -13,7 +13,7 @@ import {
   isHeatStale,
   type HeatV3Breakdown,
 } from "@/lib/scoring/heat-v3";
-import { calculateImportanceV1WithFactors } from "@/lib/scoring/importance-v1";
+import { calculateImportanceV1, calculateImportanceV1WithFactors } from "@/lib/scoring/importance-v1";
 import {
   getImportanceColorFromConfig,
   getHeatColorFromConfig,
@@ -41,13 +41,35 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
   const queryClient = useQueryClient();
   const invalidatedTasksRef = useRef<Set<number>>(new Set());
 
-  // Calculate heat breakdown for tooltip (always calculated, but only used in heat mode)
-  const breakdown = useMemo(() => {
-    return calculateHeatWithBreakdown(task);
-  }, [task]);
+  // Calculate fresh importance (pure calculation architecture)
+  const importance = useMemo(
+    () => calculateImportanceV1(task),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [task.priority, task.dueAt, task.starLevel, task.star]
+  );
 
-  // Calculate importance factors (always calculated for consistency with React hooks rules)
-  const importanceFactors = useMemo(() => calculateImportanceV1WithFactors(task), [task]);
+  // Calculate heat breakdown for tooltip using fresh importance
+  const breakdown = useMemo(
+    () => calculateHeatWithBreakdown(task, undefined, importance),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      task.heatAdjustment,
+      task.lastTouchedAt,
+      task.lastHeatTouchedAt,
+      task.priority,
+      task.dueAt,
+      task.starLevel,
+      task.star,
+      importance,
+    ]
+  );
+
+  // Calculate importance factors with breakdown for tooltip
+  const importanceFactors = useMemo(
+    () => calculateImportanceV1WithFactors(task),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [task.priority, task.dueAt, task.starLevel, task.star]
+  );
 
   // Check if heat is stale and trigger refresh if needed
   useEffect(() => {
@@ -76,7 +98,7 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
 
   if (mode === "importance") {
     // Importance Mode: Detailed breakdown tooltip
-    const importance = task.importanceV1 || 0;
+    // Pure calculation architecture: use calculated importance, not stored value
     const starLabels = ['None', 'Blue (+1)', 'Yellow (+2)', 'Orange (+3)'];
 
     return (
@@ -173,6 +195,8 @@ interface HeatBreakdownTooltipProps {
  * Detailed heat breakdown for tooltip (Heat V3/V4)
  * Shows contribution from 3 components: base importance, heat adjustment, recency
  * Heat v4: Updated to display points instead of percentages
+ *
+ * Debug Mode: Shows unrounded vs rounded values for transparency
  */
 function HeatBreakdownTooltip({
   breakdown,
@@ -198,10 +222,13 @@ function HeatBreakdownTooltip({
 
   return (
     <div className="space-y-3 py-1">
-      {/* Header */}
+      {/* Header with Task ID */}
       <div className="border-b pb-2">
         <div className="font-semibold">
           Heat: {heatDisplay} ({stageLabel})
+        </div>
+        <div className="text-[10px] text-muted-foreground/60 font-mono">
+          Task ID: {task.id}
         </div>
       </div>
 
@@ -212,10 +239,13 @@ function HeatBreakdownTooltip({
           <div className="flex justify-between items-center gap-4">
             <span className="text-muted-foreground">Base Importance:</span>
             <span className="font-mono tabular-nums">
-              {breakdown.importancePoints.toFixed(0)} pts ({task.importanceV1}/14)
+              {breakdown.importancePoints} pts ({calculateImportanceV1(task)}/14)
             </span>
           </div>
           <div className="text-muted-foreground/80 text-[10px] ml-2 space-y-0.5">
+            <div className="text-muted-foreground/60">
+              Raw: {breakdown.importancePointsUnrounded.toFixed(2)} → Rounded: {breakdown.importancePoints}
+            </div>
             <div>Priority ({task.priority}): {task.priority === 'low' ? 2 : task.priority === 'medium' ? 3 : task.priority === 'high' ? 4 : 5} pts</div>
             {task.dueAt && (
               <div>
@@ -242,12 +272,12 @@ function HeatBreakdownTooltip({
           </div>
         </div>
 
-        {/* Heat Adjustment */}
+        {/* Heat Adjustment with Decay Detail */}
         <div>
           <div className="flex justify-between items-center gap-4">
             <span className="text-muted-foreground">Heat Adjustment:</span>
             <span className="font-mono tabular-nums">
-              {breakdown.adjustmentPoints >= 0 ? '+' : ''}{breakdown.adjustmentPoints.toFixed(0)} pts
+              {breakdown.adjustmentPoints >= 0 ? '+' : ''}{breakdown.adjustmentPoints} pts
             </span>
           </div>
           {breakdown.heatAdjustment !== 0 && (
@@ -270,16 +300,28 @@ function HeatBreakdownTooltip({
               </div>
             </div>
           )}
-          <div className="text-muted-foreground/80 text-[10px] ml-2 mt-1">
+          <div className="text-muted-foreground/80 text-[10px] ml-2 mt-1 space-y-0.5">
             {breakdown.heatAdjustment === 0 ? (
               "No manual adjustments"
             ) : (
               <>
-                {breakdown.heatAdjustment > 0 ? "Heated" : "Cooled"} {formatTimeAgo(task.lastHeatTouchedAt)}
-                {breakdown.decayInfo && breakdown.decayInfo.daysSinceHeatTouch > 1 && (
-                  <div className="mt-0.5">
-                    Decayed from {breakdown.decayInfo.originalAdjustment >= 0 ? '+' : ''}{breakdown.decayInfo.originalAdjustment.toFixed(0)} pts
-                  </div>
+                <div>
+                  {breakdown.heatAdjustment > 0 ? "Heated" : "Cooled"} {formatTimeAgo(task.lastHeatTouchedAt)}
+                </div>
+                <div className="text-muted-foreground/60">
+                  Original: {breakdown.heatAdjustment >= 0 ? '+' : ''}{breakdown.heatAdjustment} pts (integer)
+                </div>
+                {breakdown.decayFactor < 0.999 && (
+                  <>
+                    <div className="text-muted-foreground/60">
+                      Decay factor: {(breakdown.decayFactor * 100).toFixed(1)}%
+                      ({breakdown.daysSinceHeatTouch.toFixed(1)} days,
+                      {breakdown.heatAdjustment > 0 ? '7d' : '3d'} half-life)
+                    </div>
+                    <div className="text-muted-foreground/60">
+                      After decay: {breakdown.decayedAdjustmentUnrounded.toFixed(2)} → {breakdown.decayedAdjustmentRounded} pts
+                    </div>
+                  </>
                 )}
               </>
             )}
@@ -291,22 +333,30 @@ function HeatBreakdownTooltip({
           <div className="flex justify-between items-center gap-4">
             <span className="text-muted-foreground">Recency:</span>
             <span className="font-mono tabular-nums">
-              {breakdown.recencyPoints.toFixed(1)} pts
+              {breakdown.recencyPoints} pts
             </span>
           </div>
-          <div className="text-muted-foreground/80 text-[10px] ml-2">
-            Last touched {formatTimeAgo(task.lastTouchedAt)}
+          <div className="text-muted-foreground/80 text-[10px] ml-2 space-y-0.5">
+            <div className="text-muted-foreground/60">
+              Raw: {breakdown.recencyPointsUnrounded.toFixed(2)} → Rounded: {breakdown.recencyPoints}
+            </div>
+            <div>
+              Last touched {formatTimeAgo(task.lastTouchedAt)}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Total */}
+      {/* Total with Calculation */}
       <div className="border-t pt-2">
         <div className="flex justify-between items-center text-xs font-semibold gap-4">
           <span>Total Heat:</span>
           <span className="font-mono tabular-nums">
             {heatDisplay} pts (of 145)
           </span>
+        </div>
+        <div className="text-muted-foreground/60 text-[10px] mt-1 font-mono">
+          = {breakdown.importancePoints} + {breakdown.adjustmentPoints >= 0 ? '+' : ''}{breakdown.adjustmentPoints} + {breakdown.recencyPoints}
         </div>
       </div>
     </div>

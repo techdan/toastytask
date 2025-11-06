@@ -68,7 +68,7 @@ export function QuickAdd({ onAdd, defaultPriority, defaultBucket, currentProject
         projectId: currentProjectId ?? null,
         heat: 0.0,
         touchCount: 0,
-        importanceV1: 0, // Will be calculated on the server
+        importanceV1: 0, // DEPRECATED: Placeholder only, will be removed in Phase 2
         repeatType: "none", // Default to non-recurring
       });
 

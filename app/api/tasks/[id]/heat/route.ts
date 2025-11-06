@@ -136,19 +136,19 @@ export async function POST(
       now
     );
 
-    // Update task with new adjustment AND fresh importance to prevent staleness
+    // Update task with new adjustment
+    // Note: We no longer persist importanceV1 (pure calculation architecture)
     const updatedTask = await taskRepository.update(taskId, {
       heatAdjustment: newAdjustment,
-      importanceV1: currentTaskFreshImportance, // Keep DB in sync with fresh calculation
       lastHeatTouchedAt: now,
       lastTouchedAt: now,
     }, userId);
 
-    // Calculate fresh heat (not stored, only returned to client)
-    const newHeat = calculateHeat(updatedTask, now);
+    // Calculate fresh heat using fresh importance (not stored, only returned to client)
+    const newHeat = calculateHeat(updatedTask, now, currentTaskFreshImportance);
 
-    // Calculate heat breakdown for tooltip
-    const heatBreakdown = calculateHeatWithBreakdown(updatedTask, now);
+    // Calculate heat breakdown for tooltip using fresh importance
+    const heatBreakdown = calculateHeatWithBreakdown(updatedTask, now, currentTaskFreshImportance);
 
     // Calculate deltas
     const heatDelta = newHeat - baselineHeat;

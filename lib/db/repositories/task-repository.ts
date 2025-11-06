@@ -100,9 +100,10 @@ export class TaskRepository implements ITaskRepository {
     }
 
     // Build ORDER BY
+    // Note: Removed 'importance' sorting option (pure calculation architecture)
+    // Importance is calculated on-demand and sorted in-memory, not in the database
     const orderByColumn = {
       heat: tasks.heat,
-      importance: tasks.importanceV1,
       dueDate: tasks.dueAt,
       createdAt: tasks.createdAt,
       updatedAt: tasks.updatedAt,

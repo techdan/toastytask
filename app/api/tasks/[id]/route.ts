@@ -43,21 +43,24 @@ export async function PATCH(
         : null;
     }
 
-    // Recalculate importance if relevant fields changed (V3: uses starLevel)
+    // Note: We no longer persist importanceV1 (pure calculation architecture)
+    // Importance will be calculated on the client side from base properties
+
+    const task = await taskRepository.update(taskId, updates, userId);
+
+    // Recalculate heat using fresh importance
+    // Calculate importance if relevant fields changed (for heat calculation only)
+    const now = new Date();
+    let freshImportance: number | undefined;
     if (
       updates.priority !== undefined ||
       updates.starLevel !== undefined ||
       updates.dueAt !== undefined
     ) {
-      const updatedTask = { ...existingTask, ...updates };
-      updates.importanceV1 = calculateImportanceV1(updatedTask);
+      freshImportance = calculateImportanceV1(task, now);
     }
 
-    const task = await taskRepository.update(taskId, updates, userId);
-
-    // Recalculate heat to keep cache and database in sync when context-changing fields update
-    const now = new Date();
-    const recalculatedHeat = calculateHeat(task, now);
+    const recalculatedHeat = calculateHeat(task, now, freshImportance);
     await taskRepository.updateHeat(taskId, recalculatedHeat, userId);
 
     const finalTask = await taskRepository.findById(taskId, userId);

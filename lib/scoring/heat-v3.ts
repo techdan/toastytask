@@ -40,26 +40,35 @@ export interface HeatV3Breakdown {
   baseImportanceNormalized: number; // 0-1 (normalized from importance scale)
   recencyNormalized: number; // 0-1
 
-  // Point contributions (Heat v4)
-  importancePoints: number; // 0-95 points
-  recencyPoints: number; // 0-5 points
-  adjustmentPoints: number; // ±45 points
+  // Point contributions (Heat v4) - UNROUNDED for transparency
+  importancePointsUnrounded: number; // 0-95 points (before rounding)
+  recencyPointsUnrounded: number; // 0-5 points (before rounding)
+  adjustmentPointsUnrounded: number; // ±45 points (before rounding)
 
-  // Heat adjustment (internal 0-1 scale, still used for decay)
-  heatAdjustment: number; // -45 to +45 (points)
+  // Point contributions (Heat v4) - ROUNDED (used in final calculation)
+  importancePoints: number; // 0-95 points (rounded)
+  recencyPoints: number; // 0-5 points (rounded)
+  adjustmentPoints: number; // ±45 points (rounded)
+
+  // Heat adjustment tracking (separate adjustment from decay)
+  heatAdjustment: number; // Original adjustment value (integer, stored in DB)
+  decayFactor: number; // Decay multiplier (0-1)
+  decayedAdjustmentUnrounded: number; // adjustment * decayFactor (unrounded)
+  decayedAdjustmentRounded: number; // adjustment * decayFactor (rounded)
 
   // Legacy weighted contributions (deprecated)
   baseImportanceWeighted: number; // baseImportance * WEIGHT_BASE
   recencyWeighted: number; // recency * WEIGHT_RECENCY
 
   // Final score (Heat v4: 0-145 points)
-  totalHeat: number; // 0-145 points
+  totalHeat: number; // 0-145 points (sum of rounded components)
 
   // Metadata for tooltips
   daysSinceLastTouch: number;
+  daysSinceHeatTouch: number;
   decayInfo?: {
-    originalAdjustment: number; // Before decay (0-1 scale)
-    decayedAdjustment: number; // After decay (0-1 scale)
+    originalAdjustment: number; // Before decay
+    decayedAdjustment: number; // After decay
     daysSinceHeatTouch: number;
   };
 }
@@ -184,29 +193,41 @@ function calculateRecency(
  * Calculate heat score for a task
  * Heat v4: Returns a value between 0 and 145 (point-based)
  *
+ * IMPORTANT: Heat values are always integers. Each component is rounded
+ * to prevent fractional accumulation, especially from exponential decay.
+ *
  * @param task - Task with importance, adjustment, and timestamps
  * @param now - Current timestamp for calculations
- * @returns Heat score (0-145 points)
+ * @param importance - Optional pre-calculated importance (if not provided, uses task.importanceV1)
+ * @returns Heat score (0-145 points, integer)
  */
 export function calculateHeat(
   task: Pick<
     Task,
-    | "importanceV1"
     | "heatAdjustment"
     | "lastTouchedAt"
     | "lastHeatTouchedAt"
-  >,
-  now: Date = new Date()
+  > & Partial<Pick<Task, "importanceV1">>,
+  now: Date = new Date(),
+  importance?: number
 ): number {
   // Convert dates
   const lastTouchedDate = toDate(task.lastTouchedAt);
   const lastHeatTouchedDate = toDate(task.lastHeatTouchedAt);
 
-  // Calculate each component in points
-  const importancePoints = calculateBaseImportancePoints(task.importanceV1);
-  const recencyNormalized = calculateRecency(lastTouchedDate, now);
-  const recencyPoints = recencyNormalized * HEAT_CONFIG.RECENCY_POINTS;
+  // Get importance value (use parameter if provided, otherwise fall back to task field)
+  const importanceValue = importance ?? task.importanceV1 ?? 0;
 
+  // Component 1: Importance points (ROUNDED)
+  const importancePointsRaw = calculateBaseImportancePoints(importanceValue);
+  const importancePoints = Math.round(importancePointsRaw);
+
+  // Component 2: Recency points (ROUNDED)
+  const recencyNormalized = calculateRecency(lastTouchedDate, now);
+  const recencyPointsRaw = recencyNormalized * HEAT_CONFIG.RECENCY_POINTS;
+  const recencyPoints = Math.round(recencyPointsRaw);
+
+  // Component 3: Adjustment with decay (ROUNDED)
   // Apply asymmetric decay to heat adjustment
   const { newAdjustment } = applyAsymmetricDecay(
     task.heatAdjustment,
@@ -214,10 +235,10 @@ export function calculateHeat(
     now
   );
 
-  // Adjustment already expressed in points
-  const adjustmentPoints = clampHeatAdjustment(newAdjustment);
+  // Round the decayed adjustment to prevent fractional drift
+  const adjustmentPoints = Math.round(clampHeatAdjustment(newAdjustment));
 
-  // Calculate total heat in points
+  // Calculate total heat (sum of rounded components = integer)
   const heat = importancePoints + recencyPoints + adjustmentPoints;
 
   return clamp(heat, HEAT_CONFIG.MIN_FINAL_SCORE, HEAT_CONFIG.MAX_FINAL_SCORE);
@@ -226,28 +247,41 @@ export function calculateHeat(
 /**
  * Calculate heat score with detailed breakdown for tooltip display
  * Heat v4: Returns point-based breakdown (0-145 scale)
+ *
+ * Includes both unrounded and rounded values for transparency and debugging
+ *
+ * @param task - Task with importance, adjustment, and timestamps
+ * @param now - Current timestamp for calculations
+ * @param importance - Optional pre-calculated importance (if not provided, uses task.importanceV1)
  */
 export function calculateHeatWithBreakdown(
   task: Pick<
     Task,
-    | "importanceV1"
     | "heatAdjustment"
     | "lastTouchedAt"
     | "lastHeatTouchedAt"
-  >,
-  now: Date = new Date()
+  > & Partial<Pick<Task, "importanceV1">>,
+  now: Date = new Date(),
+  importance?: number
 ): HeatV3Breakdown {
   // Convert dates
   const lastTouchedDate = toDate(task.lastTouchedAt);
   const lastHeatTouchedDate = toDate(task.lastHeatTouchedAt);
 
+  // Get importance value (use parameter if provided, otherwise fall back to task field)
+  const importanceValue = importance ?? task.importanceV1 ?? 0;
+
   // Calculate each component (normalized 0-1)
-  const baseImportanceNormalized = calculateBaseImportanceNormalized(task.importanceV1);
+  const baseImportanceNormalized = calculateBaseImportanceNormalized(importanceValue);
   const recencyNormalized = calculateRecency(lastTouchedDate, now);
 
-  // Calculate points (Heat v4)
-  const importancePoints = baseImportanceNormalized * HEAT_CONFIG.BASE_IMPORTANCE_POINTS;
-  const recencyPoints = recencyNormalized * HEAT_CONFIG.RECENCY_POINTS;
+  // Calculate points (Heat v4) - UNROUNDED
+  const importancePointsUnrounded = baseImportanceNormalized * HEAT_CONFIG.BASE_IMPORTANCE_POINTS;
+  const recencyPointsUnrounded = recencyNormalized * HEAT_CONFIG.RECENCY_POINTS;
+
+  // Calculate points (Heat v4) - ROUNDED (matches calculateHeat)
+  const importancePoints = Math.round(importancePointsUnrounded);
+  const recencyPoints = Math.round(recencyPointsUnrounded);
 
   // Apply asymmetric decay to heat adjustment
   const { newAdjustment, decayFactor } = applyAsymmetricDecay(
@@ -256,23 +290,27 @@ export function calculateHeatWithBreakdown(
     now
   );
 
-  // Adjustment already expressed in points
-  const adjustmentPoints = clampHeatAdjustment(newAdjustment);
+  // Separate adjustment from decay for transparency
+  const originalAdjustment = task.heatAdjustment ?? 0; // Integer stored in DB
+  const decayedAdjustmentUnrounded = clampHeatAdjustment(newAdjustment);
+  const decayedAdjustmentRounded = Math.round(decayedAdjustmentUnrounded);
+  const adjustmentPointsUnrounded = decayedAdjustmentUnrounded;
+  const adjustmentPoints = decayedAdjustmentRounded;
 
   // Calculate legacy weighted contributions (for backwards compatibility)
   const baseImportanceWeighted = HEAT_CONFIG.WEIGHT_BASE * baseImportanceNormalized;
   const recencyWeighted = HEAT_CONFIG.WEIGHT_RECENCY * recencyNormalized;
 
   // Calculate total heat (using the main function to ensure consistency)
-  const totalHeat = calculateHeat(task, now);
+  const totalHeat = calculateHeat(task, now, importanceValue);
 
   // Calculate metadata
   const daysSinceLastTouch = lastTouchedDate ? daysBetween(lastTouchedDate, now) : 0;
   const daysSinceHeatTouch = lastHeatTouchedDate ? daysBetween(lastHeatTouchedDate, now) : 0;
 
   // Build decay info if there's a meaningful decay
-  const decayInfo = (task.heatAdjustment !== 0 && lastHeatTouchedDate && decayFactor < 0.999) ? {
-    originalAdjustment: task.heatAdjustment,
+  const decayInfo = (originalAdjustment !== 0 && lastHeatTouchedDate && decayFactor < 0.999) ? {
+    originalAdjustment,
     decayedAdjustment: adjustmentPoints,
     daysSinceHeatTouch,
   } : undefined;
@@ -280,14 +318,21 @@ export function calculateHeatWithBreakdown(
   return {
     baseImportanceNormalized,
     recencyNormalized,
+    importancePointsUnrounded,
+    recencyPointsUnrounded,
+    adjustmentPointsUnrounded,
     importancePoints,
     recencyPoints,
     adjustmentPoints,
-    heatAdjustment: adjustmentPoints, // Decayed adjustment (points)
+    heatAdjustment: originalAdjustment, // Original adjustment (integer, from DB)
+    decayFactor,
+    decayedAdjustmentUnrounded,
+    decayedAdjustmentRounded,
     baseImportanceWeighted,
     recencyWeighted,
-    totalHeat, // 0-145 points
+    totalHeat, // 0-145 points (sum of rounded components)
     daysSinceLastTouch,
+    daysSinceHeatTouch,
     decayInfo,
   };
 }
@@ -470,15 +515,20 @@ export function calculateCoolDrop(
  * @param draggedTask - The task being dragged
  * @param targetHeat - Target heat value in points (0-145, midpoint between neighbors)
  * @param now - Current timestamp
+ * @param importance - Optional pre-calculated importance (if not provided, uses draggedTask.importanceV1)
  * @returns New heat adjustment value (points, stored directly on the task)
  */
 export function calculateDragAdjustment(
-  draggedTask: Pick<Task, "importanceV1" | "lastTouchedAt">,
+  draggedTask: Pick<Task, "lastTouchedAt"> & Partial<Pick<Task, "importanceV1">>,
   targetHeat: number,
-  now: Date = new Date()
+  now: Date = new Date(),
+  importance?: number
 ): number {
+  // Get importance value (use parameter if provided, otherwise fall back to task field)
+  const importanceValue = importance ?? draggedTask.importanceV1 ?? 0;
+
   // Calculate base components in points
-  const importancePoints = calculateBaseImportancePoints(draggedTask.importanceV1);
+  const importancePoints = calculateBaseImportancePoints(importanceValue);
   const recencyNormalized = calculateRecency(toDate(draggedTask.lastTouchedAt), now);
   const recencyPoints = recencyNormalized * HEAT_CONFIG.RECENCY_POINTS;
 
@@ -492,31 +542,40 @@ export function calculateDragAdjustment(
 /**
  * Given a target heat score, resolve the adjustment needed after applying decay
  * Returns new adjustment, baseline heat before change, and adjustment delta
+ *
+ * @param targetHeat - Target heat value
+ * @param task - Task with adjustment and timestamps
+ * @param now - Current timestamp
+ * @param importance - Optional pre-calculated importance (if not provided, uses task.importanceV1)
  */
 export function resolveAdjustmentForTargetHeat(
   targetHeat: number,
   task: Pick<
     Task,
-    | "importanceV1"
     | "heatAdjustment"
     | "lastTouchedAt"
     | "lastHeatTouchedAt"
-  >,
-  now: Date = new Date()
+  > & Partial<Pick<Task, "importanceV1">>,
+  now: Date = new Date(),
+  importance?: number
 ): {
   newAdjustment: number;
   baselineHeat: number;
   adjustmentDelta: number;
   basePoints: number;
 } {
+  // Get importance value (use parameter if provided, otherwise fall back to task field)
+  const importanceValue = importance ?? task.importanceV1 ?? 0;
+
   const baselineBreakdown = calculateHeatWithBreakdown(
     {
-      importanceV1: task.importanceV1,
+      importanceV1: importanceValue,
       heatAdjustment: task.heatAdjustment,
       lastTouchedAt: now,
       lastHeatTouchedAt: now,
     },
-    now
+    now,
+    importanceValue
   );
 
   const basePoints =

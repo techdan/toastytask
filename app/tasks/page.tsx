@@ -22,6 +22,7 @@ import {
   useUpdateSettings,
 } from "@/lib/queries";
 import { calculateHeat } from "@/lib/scoring/heat-v3";
+import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
 import type { Task, NewTask, Project, SortMode } from "@/types";
 
 // Number of days to show completed tasks when visibility is enabled
@@ -131,20 +132,25 @@ export default function TasksPage() {
       filteredTasks = allFetchedTasks.filter((task) => !task.completedAt);
     }
 
-    // Calculate fresh heat for all tasks (used for sorting)
-    return filteredTasks.map((task) => ({
-      ...task,
-      // Store fresh heat in a computed property for sorting
-      _freshHeat: calculateHeat(task, now),
-    }));
+    // Calculate fresh heat AND importance for all tasks (used for sorting)
+    // Pure calculation architecture: importance is never stored, always calculated
+    return filteredTasks.map((task) => {
+      const freshImportance = calculateImportanceV1(task, now);
+      return {
+        ...task,
+        // Store fresh importance and heat in computed properties for sorting
+        _freshImportance: freshImportance,
+        _freshHeat: calculateHeat(task, now, freshImportance),
+      };
+    });
   }, [allFetchedTasks, showCompleted]);
 
-  // Type for task with computed heat
-  type TaskWithFreshHeat = Task & { _freshHeat: number };
+  // Type for task with computed importance and heat
+  type TaskWithFreshValues = Task & { _freshImportance: number; _freshHeat: number };
 
-  // Client-side sorting (already sorted by server, but apply completed logic)
+  // Client-side sorting (using fresh calculated values)
   const sortedTasks = useMemo(() => {
-    return [...tasks].sort((a: TaskWithFreshHeat, b: TaskWithFreshHeat) => {
+    return [...tasks].sort((a: TaskWithFreshValues, b: TaskWithFreshValues) => {
       // Completed tasks always go to bottom
       if (a.completedAt && !b.completedAt) return 1;
       if (!a.completedAt && b.completedAt) return -1;
@@ -158,9 +164,10 @@ export default function TasksPage() {
       if (!aIsUntouched && bIsUntouched) return 1;
 
       // If both are untouched, sort by importance/heat (depending on mode)
+      // Pure calculation architecture: use fresh calculated importance, not stored value
       if (aIsUntouched && bIsUntouched) {
-        const sortValue = settings?.sortMode === "heat" ? (a._freshHeat || 0) : a.importanceV1;
-        const sortValueB = settings?.sortMode === "heat" ? (b._freshHeat || 0) : b.importanceV1;
+        const sortValue = settings?.sortMode === "heat" ? (a._freshHeat || 0) : a._freshImportance;
+        const sortValueB = settings?.sortMode === "heat" ? (b._freshHeat || 0) : b._freshImportance;
 
         if (sortValueB !== sortValue) {
           return sortValueB - sortValue; // desc: 12→2
@@ -173,8 +180,9 @@ export default function TasksPage() {
       }
 
       // Sort by importance or heat based on settings
-      const sortValue = settings?.sortMode === "heat" ? (a._freshHeat || 0) : a.importanceV1;
-      const sortValueB = settings?.sortMode === "heat" ? (b._freshHeat || 0) : b.importanceV1;
+      // Pure calculation architecture: use fresh calculated importance, not stored value
+      const sortValue = settings?.sortMode === "heat" ? (a._freshHeat || 0) : a._freshImportance;
+      const sortValueB = settings?.sortMode === "heat" ? (b._freshHeat || 0) : b._freshImportance;
 
       if (sortValueB !== sortValue) {
         return sortValueB - sortValue; // desc: 12→2

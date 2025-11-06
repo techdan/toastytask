@@ -79,8 +79,10 @@ function getPriorityWeight(priority: Priority): number {
 
 /**
  * Get due date weight for importance calculation
+ * @param dueAt - Due date (can be Date, timestamp, or string)
+ * @param now - Current timestamp for comparison (defaults to new Date())
  */
-function getDueWeight(dueAt: Date | number | string | null | undefined): number {
+function getDueWeight(dueAt: Date | number | string | null | undefined, now: Date = new Date()): number {
   if (!dueAt) {
     return 0; // No due date
   }
@@ -105,10 +107,8 @@ function getDueWeight(dueAt: Date | number | string | null | undefined): number 
     return 0;
   }
 
-  const today = new Date();
-
   // Reset hours for date-only comparison
-  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const dueStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
 
   const diffMs = dueStart.getTime() - todayStart.getTime();
@@ -127,10 +127,15 @@ function getDueWeight(dueAt: Date | number | string | null | undefined): number 
  * Calculate importance v1 score for a task
  * Heat v3: Uses starLevel (0-3) instead of star boolean
  * Backwards compatible: Falls back to star boolean if starLevel not present
+ * @param task - Task with priority, dueAt, and optionally star/starLevel
+ * @param now - Current timestamp for due date comparison (defaults to new Date())
  */
-export function calculateImportanceV1(task: Pick<Task, "priority" | "dueAt"> & Partial<Pick<Task, "star" | "starLevel">>): number {
+export function calculateImportanceV1(
+  task: Pick<Task, "priority" | "dueAt"> & Partial<Pick<Task, "star" | "starLevel">>,
+  now: Date = new Date()
+): number {
   const priorityWeight = getPriorityWeight(task.priority);
-  const dueWeight = getDueWeight(task.dueAt);
+  const dueWeight = getDueWeight(task.dueAt, now);
 
   // Heat v3: Use starLevel if available, otherwise fall back to star boolean
   const starBonus = task.starLevel !== undefined
@@ -144,12 +149,15 @@ export function calculateImportanceV1(task: Pick<Task, "priority" | "dueAt"> & P
  * Calculate importance v1 score with detailed breakdown
  * Heat v3: Uses starLevel (0-3) instead of star boolean
  * Backwards compatible: Falls back to star boolean if starLevel not present
+ * @param task - Task with priority, dueAt, and optionally star/starLevel
+ * @param now - Current timestamp for due date comparison (defaults to new Date())
  */
 export function calculateImportanceV1WithFactors(
-  task: Pick<Task, "priority" | "dueAt"> & Partial<Pick<Task, "star" | "starLevel">>
+  task: Pick<Task, "priority" | "dueAt"> & Partial<Pick<Task, "star" | "starLevel">>,
+  now: Date = new Date()
 ): ImportanceV1Factors {
   const priorityWeight = getPriorityWeight(task.priority);
-  const dueWeight = getDueWeight(task.dueAt);
+  const dueWeight = getDueWeight(task.dueAt, now);
 
   // Heat v3: Use starLevel if available, otherwise fall back to star boolean
   const starBonus = task.starLevel !== undefined

@@ -42,7 +42,8 @@ export interface TaskQueryOptions {
   includeCompleted?: boolean;
   includeArchived?: boolean;
   includeDeleted?: boolean;
-  sortBy?: "heat" | "importance" | "dueDate" | "createdAt" | "updatedAt";
+  // Note: "importance" removed - importance is calculated on-demand, not sorted in DB (pure calculation architecture)
+  sortBy?: "heat" | "dueDate" | "createdAt" | "updatedAt";
   sortOrder?: "asc" | "desc";
   limit?: number;
   offset?: number;

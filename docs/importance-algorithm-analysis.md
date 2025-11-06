@@ -202,7 +202,7 @@ neighborTasks.forEach(t => {
 3. Calculate heat for all tasks using fresh importance
 4. Run context-aware positioning logic
 5. Calculate heat adjustment delta
-6. Store updated heat adjustment (importance unchanged)
+6. Persist the new heat adjustment and write the freshly calculated `importanceV1` back to the task record so downstream consumers start from an up-to-date value.
 
 ---
 
@@ -296,25 +296,31 @@ if (recurRule) {
 
 ---
 
-#### Heat/Cool Actions (Lines 580-594)
+#### Heat/Cool Actions (Lines 504-576)
 
 ```typescript
-// CRITICAL FIX: Recalculate importanceV1 fresh (don't trust cached value)
-// Importance is time-dependent (due date: today → overdue as time passes)
-// and can become stale between refetches
-currentTask.importanceV1 = calculateImportanceV1(currentTask);
-neighborTasks.forEach(t => {
-  t.importanceV1 = calculateImportanceV1(t);
+return useMutation({
+  mutationFn: ({ taskId, visibleTaskIds }) => heatTask(taskId, visibleTaskIds),
+  onMutate: async () => {
+    await queryClient.cancelQueries({ queryKey: ["tasks"] });
+    const previousTasks = queryClient.getQueriesData({ queryKey: ["tasks"] });
+    return { previousTasks };
+  },
+  onSuccess: (response) => {
+    queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    toast.success("Task heated", {
+      description: `Heat adjustment: ${response.adjustmentDelta >= 0 ? "+" : ""}${response.adjustmentDelta.toFixed(0)} pts`,
+    });
+  },
 });
 ```
 
-**Why Critical Fix?**
-- Cached importance in TanStack Query can be stale
-- Time passes → "due today" becomes "overdue" → importance changes
-- Heat calculation depends on accurate importance
-- Must recalculate fresh before heat operations
+**Why This Matters**
+- The client intentionally avoids recalculating importance before heat/cool mutations.
+- All freshness fixes now live on the server: `/api/tasks/[id]/heat` and `/cool` recalculate importance for the target task and its context before running adjustment math.
+- By immediately invalidating the `"tasks"` query, the UI refreshes with the server's authoritative importance and heat values, eliminating stale-cache discrepancies.
 
-**This is the smoking gun for staleness issues.**
+> `useCoolTask` mirrors this flow, calling `coolTask` and invalidating the cache without attempting client-side importance math.
 
 ---
 

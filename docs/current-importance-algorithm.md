@@ -261,71 +261,64 @@ Client (every render):
 
 2. **Update client rendering** - Calculate on every render
    ```typescript
-   // components/tasks/task-list.tsx
-   const tasksWithImportance = tasks.map(task => ({
-     ...task,
-     _calculatedImportance: calculateImportanceV1(task)
-   }));
+   // app/tasks/page.tsx
+   const tasksWithImportance = useMemo(() => {
+     const now = new Date();
+     return filteredTasks.map(task => ({
+       ...task,
+       _calculatedImportance: calculateImportanceV1(task, now),
+     }));
+   }, [filteredTasks]);
 
-   // Sort by calculated importance
-   const sortedTasks = sortBy(tasksWithImportance, t => -t._calculatedImportance);
+   // Sort by calculated importance before passing to TaskRow
+   const sortedTasks = useMemo(
+     () => [...tasksWithImportance].sort((a, b) => b._calculatedImportance - a._calculatedImportance),
+     [tasksWithImportance]
+   );
    ```
 
-3. **Update server endpoints** - Stop reading/writing importanceV1
-   ```typescript
-   // app/api/tasks/route.ts - GET
-   const tasks = await db.select().from(tasks)
-     .where(eq(tasks.userId, session.user.id));
-
-   // Don't add importance to response - client will calculate
-   return NextResponse.json(tasks);
-   ```
-
-   ```typescript
-   // app/api/tasks/route.ts - POST
-   const taskData = { ...validated, userId: session.user.id };
-   // Remove: taskData.importanceV1 = calculateImportanceV1(taskData);
-   await db.insert(tasks).values(taskData);
-   ```
-
-   ```typescript
-   // app/api/tasks/[id]/route.ts - PATCH
-   await db.update(tasks)
-     .set(updateData) // No importanceV1 in updateData
-     .where(and(eq(tasks.id, taskId), eq(tasks.userId, session.user.id)));
-
-   // Remove conditional recalculation logic (lines 46-54)
-   ```
+3. **Update server endpoints** - Stop reading/writing `importanceV1`
+   - **GET `/api/tasks`**: continue calculating a local `importance` for each task so you can sort and feed `calculateHeat`, but strip the value before sending the JSON response. This keeps the response payload aligned with the new client-side calculation.
+   - **POST `/api/tasks`**: remove the assignment `taskData.importanceV1 = …` before inserting.
+   - **PATCH `/api/tasks/[id]`**: delete the conditional block that writes `updates.importanceV1`; instead, calculate a temporary importance for heat only.
+   - **POST `/api/tasks/[id]/star`**: compute `const importance = calculateImportanceV1({ ...existingTask, starLevel: newStarLevel })` for heat math, but do not persist it.
+   - **Repository ordering**: update `lib/db/repositories/task-repository.ts` so the `"importance"` branch no longer references `tasks.importanceV1`. Sorting happens after fetch using the fresh calculation.
 
 4. **Update heat calculations** - Still need importance, but calculate fresh
    ```typescript
    // app/api/tasks/[id]/heat/route.ts
-   const currentTask = await fetchTask(taskId);
+   const existingTask = await taskRepository.findById(taskId, userId);
 
    // Calculate fresh importance (not stored)
-   const currentImportance = calculateImportanceV1(currentTask);
+   const currentImportance = calculateImportanceV1(existingTask);
 
    // Calculate heat using fresh importance
-   const currentHeat = calculateHeatScore({
-     ...currentTask,
-     importanceV1: currentImportance // Use calculated, not stored
-   });
+   const currentHeat = calculateHeat({
+     ...existingTask,
+     importanceV1: currentImportance, // Use calculated, not stored
+   }, now);
    ```
 
 5. **Update star toggle** - Remove importance storage
    ```typescript
    // app/api/tasks/[id]/star/route.ts
-   await db.update(tasks)
-     .set({ starLevel: newStarLevel }) // Remove: importanceV1
-     .where(eq(tasks.id, taskId));
+   const now = new Date();
+   const updatedTask = await taskRepository.update(taskId, {
+     starLevel: newStarLevel,
+     lastTouchedAt: now,
+   }, userId);
 
-   // Calculate fresh for heat calculation
-   const freshImportance = calculateImportanceV1({ ...task, starLevel: newStarLevel });
-   const freshHeat = calculateHeatScore({ ...task, importanceV1: freshImportance });
+   // Calculate fresh for heat calculation (no DB write)
+   const freshImportance = calculateImportanceV1({
+     ...updatedTask,
+     starLevel: newStarLevel,
+   });
+   const freshHeat = calculateHeat({
+     ...updatedTask,
+     importanceV1: freshImportance,
+   }, now);
 
-   await db.update(tasks)
-     .set({ heat: freshHeat }) // Only update heat, not importance
-     .where(eq(tasks.id, taskId));
+   await taskRepository.updateHeat(taskId, freshHeat, userId);
    ```
 
 6. **Update client mutations** - Calculate, don't send
@@ -866,38 +859,200 @@ CREATE INDEX active_importance_computed_idx
 
 ---
 
+## Critical Implementation Considerations
+
+### 1. Type Safety During Transition
+
+**Problem**: When you stop sending `importanceV1` from the API but before removing the schema field, TypeScript may complain in some areas.
+
+**Solution**: Update heat calculation functions to accept importance as a parameter rather than requiring it on the task object. This allows gradual migration without breaking existing code.
+
+```typescript
+// Phase 1 refactor: lib/scoring/heat-v3.ts
+export function calculateHeat(
+  task: Pick<Task, "heatAdjustment" | "lastTouchedAt" | "lastHeatTouchedAt">,
+  now: Date = new Date(),
+  importance?: number // Add as optional parameter
+): number {
+  // Calculate importance if not provided
+  const taskImportance = importance ??
+    (('importanceV1' in task) ? task.importanceV1 :
+      calculateImportanceV1(task as any));
+
+  const importancePoints = calculateBaseImportancePoints(taskImportance);
+  // ... rest of calculation
+}
+```
+
+### 2. Heat Calculation Integration
+
+**Current State**: `heat-v3.ts:218,264` directly access `task.importanceV1`.
+
+**Phase 1 Strategy**:
+- Update heat functions to accept `importance` as an optional parameter
+- Calculate importance if not provided (backward compatibility)
+- Pass calculated importance explicitly in all new code paths
+
+### 3. Repository Sorting Removal
+
+**Current Code** (task-repository.ts:105):
+```typescript
+const orderByColumn = {
+  heat: tasks.heat,
+  importance: tasks.importanceV1, // ⚠️ Remove this in Phase 1
+  dueDate: tasks.dueAt,
+  createdAt: tasks.createdAt,
+  updatedAt: tasks.updatedAt,
+}[sortBy];
+```
+
+**Phase 1 Action**: Remove the `importance` sorting option entirely since:
+- `GET /api/tasks` doesn't pass sortBy parameter (sorts in-memory after fetch)
+- All sorting is done in-memory after calculating fresh importance
+- **Safe to remove from repository** ✅
+
+### 4. Star Toggle Persistence
+
+**Current Code** (app/api/tasks/[id]/star/route.ts:67-70):
+```typescript
+// Update importance in database (⚠️ Remove this write in Phase 1)
+await taskRepository.update(taskId, {
+  importanceV1: newImportance,
+}, userId);
+```
+
+**Phase 1 Fix**: Remove the second update call entirely. Calculate importance for heat calculation only:
+```typescript
+// Recalculate importance (for heat calculation only - don't persist)
+const newImportance = calculateImportanceV1({
+  priority: updatedTask.priority,
+  dueAt: updatedTask.dueAt,
+  starLevel: newStarLevel,
+});
+
+// Pass calculated importance to heat calculation
+const newHeat = calculateHeat({
+  ...updatedTask,
+  importanceV1: newImportance, // Temporary during transition
+}, now, newImportance); // Pass explicitly
+```
+
+### 5. Migration Script Updates
+
+**Files to update in Phase 1** (before Phase 2 schema changes):
+- `lib/db/scripts/import-to-supabase.js:153` - references `importanceV1`
+- `lib/db/scripts/migrate-sqlite-to-postgres.js:205` - references `importanceV1`
+
+These scripts will break in Phase 2 if not updated to calculate importance instead of reading it.
+
+### 6. Cache Invalidation Strategy
+
+After deploying Phase 1, client caches may still have `importanceV1` from previous API responses.
+
+**Options**:
+1. Use `queryClient.invalidateQueries()` on all tasks queries after deployment
+2. Bump API cache version in response headers
+3. Wait for natural cache expiration (TanStack Query default: 5 minutes)
+
+**Recommendation**: Use option 1 (invalidate) for immediate consistency.
+
+---
+
 ## Implementation Checklist
 
 ### Phase 1: Code Changes (No Schema Migration)
 
-- [ ] Update `calculateImportanceV1()` to accept optional `now` parameter
-- [ ] Remove `importanceV1` from GET /api/tasks response
-- [ ] Remove `importanceV1` assignments in POST /api/tasks
-- [ ] Remove `importanceV1` assignments in PATCH /api/tasks/[id]
-- [ ] Remove conditional recalculation logic in PATCH handler
-- [ ] Update star toggle to not write `importanceV1`
-- [ ] Update heat/cool to calculate importance fresh (already doing this)
-- [ ] Add `useTaskImportance()` hook for client-side calculation
-- [ ] Update TaskRow to calculate importance via hook
-- [ ] Update HeatBadge to calculate importance via hook
-- [ ] Update TaskList sorting to calculate importance
-- [ ] Remove CRITICAL FIX comments (no longer needed)
-- [ ] Update optimistic updates to not set `importanceV1`
-- [ ] Test all importance-related features
-- [ ] Test all heat-related features (depend on importance)
-- [ ] Deploy to staging and verify
+#### Core Calculation Changes
+
+- [ ] `lib/scoring/importance-v1.ts`: accept an optional `now` parameter so repeated calculations can share a timestamp.
+- [ ] `lib/scoring/heat-v3.ts`: update `calculateHeat()` and `calculateHeatWithBreakdown()` to accept importance as optional parameter (backward compatibility during transition).
+
+#### API Endpoint Changes
+
+- [ ] `app/api/tasks/route.ts`: calculate importance locally for heat + sorting, but do not include it in the JSON payload.
+- [ ] `app/api/tasks/[id]/route.ts`: drop `updates.importanceV1` writes and reuse a temporary calculation for heat.
+- [ ] `app/api/tasks/[id]/star/route.ts`: stop persisting `importanceV1`; only use the fresh value when recalculating heat. Remove the second `taskRepository.update()` call.
+- [ ] `app/api/tasks/[id]/heat` & `/cool`: verify they calculate importance fresh and pass it explicitly to heat calculations. No writes to `importanceV1`.
+
+#### Repository Changes
+
+- [ ] `lib/db/repositories/task-repository.ts`: remove the `orderBy(tasks.importanceV1)` branch from the orderByColumn map; rely on in-memory sorting post-fetch.
+
+#### Client-Side Changes
+
+- [ ] `lib/queries/use-task-mutations.ts`: eliminate optimistic `importanceV1` assignments in create/update/complete flows.
+- [ ] `components/tasks/quick-add.tsx`: remove the placeholder `importanceV1` field when building the optimistic task.
+- [ ] `app/tasks/page.tsx`: compute and sort using `calculateImportanceV1` before rendering.
+- [ ] `components/tasks/heat-badge.tsx`: derive the displayed importance/tooltip breakdown via `calculateImportanceV1`/`calculateImportanceV1WithFactors` instead of a prop.
+- [ ] `components/tasks/task-row.tsx`: consume the computed importance (directly or via a shared `useTaskImportance` hook).
+
+#### Helper Functions & Hooks
+
+- [ ] `lib/hooks/use-task-importance.ts`: add a memoized helper for components that need repeated calculations:
+  ```typescript
+  export function useTaskImportance(task: Task): number {
+    return useMemo(
+      () => calculateImportanceV1(task),
+      [task.priority, task.dueAt, task.starLevel]
+    );
+  }
+  ```
+
+- [ ] `lib/scoring/calculate-task-importance.ts`: create helper for bulk importance calculation:
+  ```typescript
+  export function addCalculatedImportance<T extends { priority: string, dueAt?: Date | null, starLevel?: number }>(
+    task: T,
+    now: Date = new Date()
+  ): T & { _importance: number } {
+    return {
+      ...task,
+      _importance: calculateImportanceV1(task, now)
+    };
+  }
+  ```
+
+#### Migration Script Updates
+
+- [ ] `lib/db/scripts/import-to-supabase.js`: update line 153 to calculate importance instead of reading `importanceV1`.
+- [ ] `lib/db/scripts/migrate-sqlite-to-postgres.js`: update line 205 to calculate importance instead of reading `importanceV1`.
+
+#### Testing & Cleanup
+
+- [ ] Sweep CRITICAL FIX comments that referenced stale `importanceV1`.
+- [ ] Add migration tests that verify calculated importance matches stored importance (during Phase 1).
+- [ ] Add tests that verify heat calculation works without stored importance (simulate Phase 2).
+- [ ] Regression-test importance displays, sorting, and heat integrations.
+- [ ] Test all heat-related features (still depend on accurate importance inputs).
+- [ ] Test heat/cool operations extensively (most complex code path).
+- [ ] Verify no direct `importanceV1` sorting in queries: `grep -r "orderBy.*importanceV1" --include="*.ts"`.
+
+#### Deployment
+
+- [ ] Deploy to staging and verify behaviour with real data.
+- [ ] Add performance monitoring to track calculation duration.
+- [ ] Monitor for 1-2 weeks in production before proceeding to Phase 2.
 
 ### Phase 2: Schema Migration
 
-- [ ] Create migration to drop `active_importance_idx`
-- [ ] Create migration to drop `importance_v1` column
-- [ ] Deploy migration to production
-- [ ] Update Task TypeScript type (remove `importanceV1`)
-- [ ] Remove any remaining `importanceV1` references
-- [ ] Update tests to not expect `importanceV1` field
-- [ ] Update documentation
+- [ ] Create Postgres migrations to drop `active_importance_idx` and the `importance_v1` column.
+- [ ] Deploy migrations to every environment.
+- [ ] Update `lib/db/schema.ts` to remove the column definition.
+- [ ] Update seed/import/export scripts that reference `importanceV1` (`lib/db/seed.ts`, `lib/db/scripts/*`).
+- [ ] Update `types/index.ts` (and any other shared types) to drop the field.
+- [ ] Sweep the codebase for residual `importanceV1` references and delete them.
+- [ ] Update automated tests/fixtures to match the new schema.
+- [ ] Refresh documentation to reflect the pure-calculation architecture.
 
-### Phase 3: Optimization
+### Phase 3: Terminology Migration (`importanceV1` → `importance`)
+
+- [ ] Rename calculation helpers (`calculateImportanceV1`, `calculateImportanceV1WithFactors`, etc.) and related exports to the simplified `importance` naming.
+- [ ] Update all API handlers, repositories, hooks, and components to use the new property name.
+- [ ] Regenerate Drizzle/TypeScript types and ensure consumer code (tests, scripts) aligns with the new naming.
+- [ ] Verify heat calculations consume the renamed field without intermediate adapters.
+- [ ] Perform a repo-wide search to confirm no lingering `importanceV1` references.
+- [ ] Announce the rename in release notes so integrators can adjust any custom tooling.
+
+### Phase 4: Optimization
 
 - [ ] Profile importance calculation performance
 - [ ] Add memoization if needed (via `useMemo`)
@@ -940,15 +1095,218 @@ CREATE INDEX active_importance_computed_idx
 **Phase 2 Success:**
 - [ ] Database migration completes without errors
 - [ ] All tests pass with removed field
-- [ ] No references to `importanceV1` in codebase
+- [ ] Application runs cleanly with field removed from persistence layer
 - [ ] Storage reduced (no importance field + index)
 - [ ] Documentation updated
 
 **Phase 3 Success:**
+- [ ] No references to `importanceV1` remain in the codebase
+- [ ] All runtime and type-level references now use `importance`
+- [ ] Shared utilities and UI components compile without aliasing the old name
+- [ ] External integrations (webhooks, exports) validated against the new field
+- [ ] Release notes published highlighting the rename
+
+**Phase 4 Success:**
 - [ ] Performance meets targets (<50ms for 500 tasks)
 - [ ] No production incidents
 - [ ] Positive developer feedback (simpler code)
 - [ ] Architecture documented for future developers
+
+---
+
+## Critical Pitfalls to Avoid
+
+### 1. Don't Remove Database Column Before Code Changes Are Deployed
+
+**Wrong Order**:
+```bash
+# ❌ BAD: Schema change before code
+1. Run migration to drop importance_v1 column
+2. Deploy code changes
+3. Application crashes (code still references removed column)
+```
+
+**Correct Order**:
+```bash
+# ✅ GOOD: Code changes before schema
+1. Deploy Phase 1 code changes to production
+2. Monitor for 1-2 weeks
+3. Verify no references to stored importance
+4. Then run Phase 2 schema migration
+```
+
+### 2. Watch for Migration Script Imports
+
+The following scripts will **break silently** in Phase 2 if not updated in Phase 1:
+- `lib/db/scripts/import-to-supabase.js:153`
+- `lib/db/scripts/migrate-sqlite-to-postgres.js:205`
+
+**Action**: Update these scripts in Phase 1 to calculate importance instead of reading it.
+
+### 3. Beware of Cached Query Data
+
+After deploying Phase 1, client caches may still contain `importanceV1` from previous API responses.
+
+**Symptoms**:
+- Tasks display old importance values
+- Sorting appears incorrect
+- Heat calculations use stale importance
+
+**Solution**:
+```typescript
+// After Phase 1 deployment, add this to app initialization
+queryClient.invalidateQueries({ queryKey: ["tasks"] });
+```
+
+Or wait 5 minutes for natural cache expiration.
+
+### 4. Test Heat/Cool Operations Extensively
+
+Heat/cool operations are the **most complex code paths** and depend heavily on accurate importance:
+- They calculate context-aware positioning
+- They need fresh importance for all neighbor tasks
+- Time skew can cause positioning errors
+
+**Test Cases**:
+- Heat a task that becomes overdue during the operation
+- Cool a task with neighbors that have different importance
+- Heat/cool with >100 tasks in the list (performance test)
+
+### 5. Don't Trust Type Errors Initially
+
+During Phase 1, TypeScript may show errors like:
+```typescript
+// Property 'importanceV1' does not exist on type 'Task'
+```
+
+These are expected during the transition. The code is correct; types will be updated in Phase 2.
+
+**Strategy**: Use type assertions sparingly and temporarily:
+```typescript
+const importance = (task as any).importanceV1 ?? calculateImportanceV1(task);
+```
+
+Remove these assertions in Phase 2 when the field is fully removed.
+
+---
+
+## Performance Monitoring
+
+Add performance tracking to measure migration impact:
+
+```typescript
+// lib/monitoring/importance-calculation-metrics.ts
+export function trackImportanceCalculation(taskCount: number, durationMs: number) {
+  if (process.env.NODE_ENV === 'production') {
+    console.log(`[Importance] Calculated ${taskCount} tasks in ${durationMs.toFixed(2)}ms (${(durationMs / taskCount).toFixed(2)}ms/task)`);
+  }
+}
+
+// In app/api/tasks/route.ts
+const startTime = performance.now();
+tasks = tasks.map(task => ({
+  ...task,
+  _importance: calculateImportanceV1(task)
+}));
+const duration = performance.now() - startTime;
+trackImportanceCalculation(tasks.length, duration);
+```
+
+**Acceptable Thresholds**:
+- <0.1ms per task (excellent)
+- 0.1-0.5ms per task (acceptable)
+- >0.5ms per task (investigate optimization)
+
+---
+
+## Rollback Plan
+
+### Phase 1 Rollback (If Issues Arise)
+
+If critical issues are discovered after Phase 1 deployment:
+
+1. **Revert code changes** (git revert)
+2. **Re-enable importance writes**:
+   ```typescript
+   // Restore writes in API endpoints
+   taskData.importanceV1 = calculateImportanceV1(taskData);
+   ```
+3. **Re-enable importance sorting**:
+   ```typescript
+   // Restore in task-repository.ts
+   importance: tasks.importanceV1,
+   ```
+4. **Deploy rollback**
+5. **Investigate root cause**
+
+**Data Safety**: ✅ No data loss (database field still exists and contains last calculated values)
+
+### Phase 2 Rollback (If Issues Arise)
+
+If critical issues are discovered after Phase 2 schema migration:
+
+1. **Run reverse migration**:
+   ```sql
+   ALTER TABLE tasks ADD COLUMN importance_v1 INTEGER;
+   CREATE INDEX active_importance_idx ON tasks(deleted_at, importance_v1);
+   ```
+2. **Backfill importance values**:
+   ```sql
+   UPDATE tasks SET importance_v1 = (priority_weight + due_weight + star_level);
+   ```
+3. **Revert Phase 1 code changes**
+4. **Deploy rollback**
+
+**Data Safety**: ⚠️ Requires running backfill script to recalculate all importance values
+
+**Recommendation**: Monitor Phase 1 extensively (1-2 weeks) to minimize Phase 2 rollback risk.
+
+---
+
+## Migration Timeline
+
+**Recommended Timeline**:
+
+| Phase | Duration | Milestone | Gate Criteria |
+|-------|----------|-----------|---------------|
+| **Phase 0: Preparation** | 2-3 days | Code review, test plan | Checklist complete, tests written |
+| **Phase 1: Code Changes** | 1 week | Staging deployment | All tests pass, no regressions |
+| **Phase 1: Production Soak** | 1-2 weeks | Monitor production | No incidents, performance acceptable |
+| **Phase 2: Schema Migration** | 1 day | Drop database column | Migration successful, app healthy |
+| **Phase 3: Terminology** | 2-3 days | Rename `importanceV1` → `importance` | Types clean, no build errors |
+| **Phase 4: Optimization** | 1 week | Performance tuning | <50ms for 500 tasks |
+
+**Total Duration**: 4-6 weeks
+
+**Fastest Path** (if pressure to ship): 2 weeks (Phase 1 + immediate Phase 2, skip Phase 3-4)
+
+---
+
+## Documentation Updates
+
+After completing migration, update these documents:
+
+### Code Documentation
+- [ ] `CLAUDE.md`: Add section on importance calculation architecture
+- [ ] `lib/scoring/README.md`: Document pure calculation pattern
+- [ ] `docs/architecture/scoring-systems.md`: Explain why importance uses pure calculation
+
+### API Documentation
+- [ ] Remove `importanceV1` from task schema in API docs
+- [ ] Document that importance is calculated, not stored
+- [ ] Update mobile API reference if applicable
+
+### Developer Guide
+- [ ] Add examples of calculating importance in React components
+- [ ] Document the `useTaskImportance` hook
+- [ ] Explain why we use pure calculation (avoid future developers adding storage back)
+
+### Migration Log
+- [ ] Create `docs/migrations/2025-11-importance-pure-calculation.md` with:
+  - Decision rationale (link to analysis)
+  - Timeline and milestones
+  - Rollback procedures
+  - Lessons learned
 
 ---
 
@@ -967,6 +1325,6 @@ The heat system's **pure calculation approach** offers a cleaner, simpler archit
 - Guaranteed client/server consistency
 - Eliminates CRITICAL FIX workarounds
 
-**Recommendation:** Migrate importance to pure calculation using the two-phase approach outlined above. This will eliminate staleness issues, simplify the codebase, and create consistent patterns across scoring systems.
+**Recommendation:** Migrate importance to pure calculation using the phased approach outlined above. This will eliminate staleness issues, simplify the codebase, and create consistent patterns across scoring systems.
 
-**Next step:** Implement Phase 1 (no schema changes) to prove the concept and verify performance.
+**Next step:** Create beads epic and begin Phase 1 implementation.

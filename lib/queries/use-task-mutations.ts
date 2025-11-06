@@ -143,7 +143,7 @@ export function useCreateTask() {
         nextSurfaceAt: null, // Deprecated V2 - kept for schema compatibility
         coldStorageAt: null,
         touchCount: 0, // Deprecated V1 - kept for schema compatibility
-        importanceV1: newTask.importanceV1 ?? 0,
+        importanceV1: 0, // DEPRECATED: Will be calculated on render (pure calculation architecture)
         completedAt: null,
         archivedAt: null,
         deletedAt: null,
@@ -154,8 +154,8 @@ export function useCreateTask() {
         notesLastModified: null,
       };
 
-      // Recalculate importance client-side for immediate feedback
-      optimisticTask.importanceV1 = calculateImportanceV1(optimisticTask);
+      // Note: We no longer calculate importanceV1 optimistically
+      // It will be calculated on render from base properties
 
       // Optimistically add task to all task queries
       queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
@@ -234,15 +234,13 @@ export function useUpdateTask() {
             ...updates,
           };
 
-          // INSTANT IMPORTANCE: Recalculate client-side if relevant fields changed
-          // This provides immediate UI feedback while server confirms (V3: uses starLevel)
+          // Note: We no longer calculate importanceV1 optimistically
+          // It will be calculated on render from base properties (pure calculation architecture)
+
+          // Check if heat-affecting fields changed
           const priorityChanged = updates.priority !== undefined;
           const starChanged = updates.starLevel !== undefined;
           const dueChanged = updates.dueAt !== undefined;
-          if (priorityChanged || starChanged || dueChanged) {
-            updatedTask.importanceV1 = calculateImportanceV1(updatedTask);
-          }
-
           const heatAffectingChange =
             priorityChanged ||
             starChanged ||
@@ -252,8 +250,10 @@ export function useUpdateTask() {
             updates.lastHeatTouchedAt !== undefined;
 
           if (heatAffectingChange) {
+            // Calculate fresh importance for heat calculation
             const now = new Date();
-            updatedTask.heat = calculateHeat(updatedTask, now);
+            const freshImportance = calculateImportanceV1(updatedTask, now);
+            updatedTask.heat = calculateHeat(updatedTask, now, freshImportance);
             updatedTask.heatCalculatedAt = now;
           }
 
@@ -395,8 +395,8 @@ export function useCompleteTask() {
             const nextDueDate = calculateOptimisticNextDueDate(task.dueAt, task.repeatType);
             const updatedTask = { ...task, dueAt: nextDueDate };
 
-            // INSTANT IMPORTANCE: Recalculate since due date changed
-            updatedTask.importanceV1 = calculateImportanceV1(updatedTask);
+            // Note: We no longer calculate importanceV1 optimistically
+            // It will be calculated on render from base properties (pure calculation architecture)
 
             return updatedTask;
           } else {
