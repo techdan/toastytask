@@ -71,7 +71,7 @@ export function RecurrenceSelect({ value, onValueChange, disabled }: RecurrenceS
       onOpenChange={setIsOpen}
       disabled={disabled}
     >
-      <SelectTrigger className="w-[100px] h-7 text-xs">
+      <SelectTrigger className="recurrence-trigger">
         <SelectValue>
           <div className="flex items-center gap-1">
             {showIcon && <Repeat className="h-3 w-3" />}

@@ -78,20 +78,22 @@ export function TaskRow({ task, sortMode, allVisibleTasks, onUpdate, onDelete, o
   };
 
   const handleStarClick = async () => {
-    // Use the star endpoint to cycle through levels
+    // Cycle star level optimistically and revert on failure
+    const previousStarLevel = task.starLevel ?? 0;
+    const newStarLevel = (previousStarLevel + 1) % 4;
+
+    onUpdate(task.id, { starLevel: newStarLevel });
+
     try {
       const response = await fetch(`/api/tasks/${task.id}/star`, {
         method: "POST",
       });
-      if (!response.ok) throw new Error("Failed to cycle star");
-
-      await response.json();
-      // The mutation will be handled by query invalidation
-      // For now, optimistically update
-      const newStarLevel = (task.starLevel ?? 0) + 1;
-      onUpdate(task.id, { starLevel: newStarLevel % 4 });
+      if (!response.ok) {
+        throw new Error("Failed to cycle star");
+      }
     } catch (error) {
       console.error("Failed to cycle star:", error);
+      onUpdate(task.id, { starLevel: previousStarLevel });
     }
   };
 
@@ -237,7 +239,7 @@ export function TaskRow({ task, sortMode, allVisibleTasks, onUpdate, onDelete, o
           "px-2 py-1.5 align-middle border-y border-r-0",
           notesExpanded && "border-b-0"
         )}>
-          <div className={cn(isCompleted && "line-through")}>
+          <div className={cn("min-w-[8.5rem]", isCompleted && "line-through") }>
             <DueDateDisplay
               dueAt={task.dueAt}
               onDateChange={handleDateChange}
@@ -250,7 +252,7 @@ export function TaskRow({ task, sortMode, allVisibleTasks, onUpdate, onDelete, o
           "px-2 py-1.5 align-middle border-y border-r-0",
           notesExpanded && "border-b-0"
         )}>
-          <div className={cn(isCompleted && "line-through")}>
+          <div className={cn("min-w-[6.25rem]", isCompleted && "line-through") }>
             <PrioritySelect
               value={task.priority}
               onValueChange={handlePriorityChange}
@@ -262,7 +264,7 @@ export function TaskRow({ task, sortMode, allVisibleTasks, onUpdate, onDelete, o
           "px-2 py-1.5 align-middle border-y border-r-0",
           notesExpanded && "border-b-0"
         )}>
-          <div className={cn(isCompleted && "line-through")}>
+          <div className={cn("min-w-[7.5rem]", isCompleted && "line-through") }>
             <RecurrenceSelect
               value={task.repeatType}
               onValueChange={handleRecurrenceChange}

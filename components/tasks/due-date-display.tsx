@@ -128,7 +128,7 @@ export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted }: D
         onChange={handleDateSelect}
         onBlur={handleBlur}
         disabled={disabled}
-        className="h-6 w-28 rounded border border-input bg-background px-1 text-xs"
+        className="date-input"
         autoFocus
       />
     );

@@ -70,7 +70,7 @@ export function PrioritySelect({ value, onValueChange, disabled }: PrioritySelec
       onOpenChange={setIsOpen}
       disabled={disabled}
     >
-      <SelectTrigger className="w-[90px] h-7 text-xs">
+      <SelectTrigger className="priority-trigger">
         <SelectValue>
           <span className={priorityStyles[value]}>{priorityLabels[value]}</span>
         </SelectValue>

@@ -28,18 +28,13 @@ export function TaskListHeader({
     <thead>
       <tr className="bg-muted/30">
         <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left first:rounded-l border border-r-0">
-          <div className="flex items-center gap-2">
-            <div className="w-4"></div>
-            <div className="w-5"></div>
-            <div className="w-4"></div>
-            <div className="w-4"></div>
-            <span>Task</span>
+          <div className="task-header-control">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-5 px-1.5 text-xs gap-1"
+                  className="task-sort-trigger h-5 px-1.5 text-xs gap-1"
                   title="Sort mode"
                 >
                   <span className="capitalize">{sortMode}</span>
@@ -65,15 +60,18 @@ export function TaskListHeader({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <span className="task-header-label capitalize" data-mode={sortMode}>
+              Task
+            </span>
           </div>
         </th>
-        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0">
+        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[8.5rem]">
           Due Date
         </th>
-        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0">
+        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[6.25rem]">
           Priority
         </th>
-        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0">
+        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[7.5rem]">
           Recurrence
         </th>
         <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left last:rounded-r border-y border-r">

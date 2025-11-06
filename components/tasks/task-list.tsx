@@ -44,9 +44,9 @@ export function TaskList({
         {/* Column definitions: task (checkbox, importance, star, notes, title), due date, priority, recurrence, actions */}
         <colgroup>
           <col />
+          <col className="w-[136px]" />
+          <col className="w-[110px]" />
           <col className="w-[120px]" />
-          <col className="w-[90px]" />
-          <col className="w-[100px]" />
           <col className="w-10" />
         </colgroup>
         <TaskListHeader
