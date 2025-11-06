@@ -211,6 +211,10 @@ export function calculateHeat(
   now: Date = new Date(),
   importance?: number
 ): number {
+  const heatAdjustment = Number.isFinite(task.heatAdjustment)
+    ? task.heatAdjustment
+    : 0;
+
   // Convert dates
   const lastTouchedDate = toDate(task.lastTouchedAt);
   const lastHeatTouchedDate = toDate(task.lastHeatTouchedAt);
@@ -230,7 +234,7 @@ export function calculateHeat(
   // Component 3: Adjustment with decay (ROUNDED)
   // Apply asymmetric decay to heat adjustment
   const { newAdjustment } = applyAsymmetricDecay(
-    task.heatAdjustment,
+    heatAdjustment,
     lastHeatTouchedDate,
     now
   );
@@ -285,7 +289,7 @@ export function calculateHeatWithBreakdown(
 
   // Apply asymmetric decay to heat adjustment
   const { newAdjustment, decayFactor } = applyAsymmetricDecay(
-    task.heatAdjustment,
+    Number.isFinite(task.heatAdjustment) ? task.heatAdjustment : 0,
     lastHeatTouchedDate,
     now
   );
@@ -362,10 +366,14 @@ export function applyAsymmetricDecay(
   lastHeatTouchedAt: Date | null,
   now: Date = new Date()
 ): DecayResult {
-  if (currentAdjustment === 0 || !lastHeatTouchedAt) {
+  const safeAdjustment = Number.isFinite(currentAdjustment)
+    ? currentAdjustment
+    : 0;
+
+  if (safeAdjustment === 0 || !lastHeatTouchedAt) {
     return {
       decayFactor: 1,
-      newAdjustment: currentAdjustment,
+      newAdjustment: safeAdjustment,
     };
   }
 
@@ -373,7 +381,7 @@ export function applyAsymmetricDecay(
   if (!lastTouchDate) {
     return {
       decayFactor: 1,
-      newAdjustment: currentAdjustment,
+      newAdjustment: safeAdjustment,
     };
   }
 
@@ -381,7 +389,7 @@ export function applyAsymmetricDecay(
 
   // Asymmetric decay based on sign
   let decayFactor: number;
-  if (currentAdjustment > 0) {
+  if (safeAdjustment > 0) {
     // Heat: 7-day half-life (persistent preference)
     decayFactor = Math.exp(-daysSinceLast * Math.LN2 / HEAT_CONFIG.HEAT_HALF_LIFE_DAYS);
   } else {
@@ -390,7 +398,7 @@ export function applyAsymmetricDecay(
   }
 
   // Apply decay
-  const newAdjustment = currentAdjustment * decayFactor;
+  const newAdjustment = safeAdjustment * decayFactor;
 
   return {
     decayFactor,
