@@ -11,6 +11,7 @@ export {
   useDeleteTask,
   useCompleteTask,
   useUncompleteTask,
+  useMarkTaskTouched,
 } from "./use-task-mutations";
 export {
   useCreateProject,

@@ -507,6 +507,84 @@ async function coolTask(id: number, visibleTaskIds?: number[]): Promise<CoolTask
   return response.json();
 }
 
+// Touch task row - mark task as interacted without modifying heat adjustment
+async function markTaskTouched(taskId: number): Promise<Task> {
+  const response = await fetch(`/api/tasks/${taskId}/touch`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to touch task");
+  }
+
+  const data: TaskResponse = await response.json();
+  return data.task;
+}
+
+// Hook: Mark task as touched (updates lastTouchedAt without changing heat adjustment)
+export function useMarkTaskTouched() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: markTaskTouched,
+    onMutate: async (taskId: number) => {
+      await queryClient.cancelQueries({ queryKey: ["tasks"] });
+
+      const previousTasks = queryClient.getQueriesData({ queryKey: ["tasks"] });
+
+      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
+        if (!oldTasks || !Array.isArray(oldTasks)) {
+          return oldTasks;
+        }
+
+        const now = new Date();
+
+        return oldTasks.map((task) => {
+          if (task.id !== taskId) {
+            return task;
+          }
+
+          const updatedTask: Task = {
+            ...task,
+            lastTouchedAt: now,
+            touchCount: (task.touchCount ?? 0) + 1,
+          };
+
+          const freshImportance = calculateImportanceV1(updatedTask, now);
+          return {
+            ...updatedTask,
+            heat: calculateHeat(updatedTask, now, freshImportance),
+            heatCalculatedAt: now,
+          };
+        });
+      });
+
+      return { previousTasks };
+    },
+    onError: (error, _variables, context) => {
+      if (context?.previousTasks) {
+        context.previousTasks.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
+      toast.error("Failed to touch task", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    },
+    onSuccess: (touchedTask) => {
+      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
+        if (!oldTasks || !Array.isArray(oldTasks)) {
+          return oldTasks;
+        }
+
+        return oldTasks.map((task) =>
+          task.id === touchedTask.id ? touchedTask : task
+        );
+      });
+    },
+  });
+}
+
 // Hook: Heat task - Context-aware positioning (moves up 1 position)
 export function useTouchTask() {
   const queryClient = useQueryClient();

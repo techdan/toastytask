@@ -32,9 +32,10 @@ interface TaskRowProps {
   onUncomplete: (id: number) => void;
   onHeat: (taskId: number) => void;
   onCool: (taskId: number) => void;
+  onTouch: (taskId: number) => void;
 }
 
-export function TaskRow({ task, sortMode, onUpdate, onDelete, onComplete, onUncomplete, onHeat, onCool }: TaskRowProps) {
+export function TaskRow({ task, sortMode, onUpdate, onDelete, onComplete, onUncomplete, onHeat, onCool, onTouch }: TaskRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(task.title);
   const [notesExpanded, setNotesExpanded] = useState(false);
@@ -118,6 +119,22 @@ export function TaskRow({ task, sortMode, onUpdate, onDelete, onComplete, onUnco
     }
   };
 
+  const handleRowClick = (event: React.MouseEvent<HTMLTableRowElement>) => {
+    if (event.defaultPrevented) {
+      return;
+    }
+
+    if (event.button !== 0) {
+      return;
+    }
+
+    if (isCompleted) {
+      return;
+    }
+
+    onTouch(task.id);
+  };
+
   return (
     <>
       <tr
@@ -125,6 +142,7 @@ export function TaskRow({ task, sortMode, onUpdate, onDelete, onComplete, onUnco
           "group bg-card transition-colors hover:bg-accent/30",
           isCompleted && "text-muted-foreground italic"
         )}
+        onClick={handleRowClick}
       >
         <td className={cn(
           "px-2 py-1.5 align-middle border border-r-0",

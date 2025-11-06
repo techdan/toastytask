@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 import { TaskRow } from "./task-row";
 import { TaskListHeader } from "./task-list-header";
-import { useTouchTask, useCoolTask } from "@/lib/queries/use-task-mutations";
+import { useTouchTask, useCoolTask, useMarkTaskTouched } from "@/lib/queries/use-task-mutations";
 import type { Task, SortMode } from "@/types";
 
 // Task with computed fresh heat for accurate context-aware positioning
@@ -34,6 +34,7 @@ export function TaskList({
 }: TaskListProps) {
   const touchTaskMutation = useTouchTask();
   const coolTaskMutation = useCoolTask();
+  const markTaskTouchedMutation = useMarkTaskTouched();
 
   // Helper function to get nearby task IDs for optimistic updates
   // Performance optimization: only process ~20 nearby tasks instead of all tasks (10x improvement)
@@ -63,6 +64,10 @@ export function TaskList({
     const nearbyTaskIds = getNearbyTaskIds(taskId);
     coolTaskMutation.mutate({ taskId, visibleTaskIds: nearbyTaskIds });
   }, [getNearbyTaskIds, coolTaskMutation]);
+
+  const handleTouch = useCallback((taskId: number) => {
+    markTaskTouchedMutation.mutate(taskId);
+  }, [markTaskTouchedMutation]);
 
   if (tasks.length === 0) {
     return (
@@ -101,6 +106,7 @@ export function TaskList({
               onUncomplete={onUncomplete}
               onHeat={handleHeat}
               onCool={handleCool}
+              onTouch={handleTouch}
             />
           </tbody>
         ))}
