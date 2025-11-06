@@ -1,13 +1,17 @@
 # Heat Model Production Deployment Guide
 
-**Migration ID:** heat-production-migration.sql
+**Migration ID:** heat-production-migration.sql (V2-V4), heat-v5-cleanup.sql (V5 cleanup)
 **Tracking:** toodle-91bf - Consolidate heat migrations for production deployment
-**Status:** Ready for Production
+**Status:** Ready for Production (V2-V4), Planning (V5)
 **Risk Level:** Low (Non-destructive, backwards compatible, idempotent)
 
 ## Overview
 
-This guide covers the deployment of the complete Heat Model system (V2, V3, and V4) to production. This consolidated migration brings the production database from Heat V1 (basic heat field) to Heat V4 (complete point-based heat system) in a single, idempotent script.
+This guide covers the deployment of the complete Heat Model system to production:
+- **V2-V4 Migration** (heat-production-migration.sql): Adds new columns and migrates data
+- **V5 Cleanup** (heat-v5-cleanup.sql): Removes deprecated columns after stable operation
+
+The V2-V4 migration brings the production database from Heat V1 (basic heat field) to Heat V4 (complete point-based heat system) in a single, idempotent script. After V2-V4 has been running stably in production, V5 cleanup can be optionally deployed to remove deprecated columns.
 
 ## What Changes
 
@@ -53,10 +57,29 @@ This guide covers the deployment of the complete Heat Model system (V2, V3, and 
 **Updated Constraints:**
 - `tasks_heat_check` - Ensures heat is 0-145
 
-### Fields Kept for Rollback Safety (Deprecated)
+#### Heat V5 - Cleanup (Optional, after stable operation)
+**Removed Columns:**
+- `star` (boolean) - Replaced by `star_level`
+- `heat_touch_count` (real) - Replaced by `heat_adjustment`
+- `other_touch_count` (integer) - Activity tracking removed
+- `touch_count` (integer) - Legacy counter removed
+- `next_surface_at` (timestamp) - Snooze feature removed
+- `cold_storage_at` (timestamp) - Auto-archival removed
+
+**Removed Indexes:**
+- `tasks_cold_storage_idx` - References removed column
+- `tasks_resurfacing_idx` - References removed column
+- `tasks_new_task_idx` - References removed columns
+
+**Deployment:** V5 cleanup should only be deployed after V2-V4 has been running stably in production for at least 2-4 weeks. See [HEAT_V5_CLEANUP_PLAN.md](HEAT_V5_CLEANUP_PLAN.md) for detailed planning.
+
+### Fields Kept in V2-V4 for Rollback Safety (Removed in V5)
 - `star` (boolean) - Use `star_level` instead
 - `heat_touch_count` (real) - Use `heat_adjustment` instead
 - `other_touch_count` (integer) - Removed in V3, kept for safety
+- `touch_count` (integer) - Legacy counter
+- `next_surface_at` (timestamp) - Snooze feature removed
+- `cold_storage_at` (timestamp) - Auto-archival removed
 
 ## Prerequisites
 
@@ -403,9 +426,57 @@ If you encounter issues during deployment:
 3. Test the rollback procedure on a backup
 4. Create a GitHub issue at https://github.com/your-repo/toodle/issues
 
+## Heat V5 Cleanup Deployment (Optional)
+
+After V2-V4 has been running stably in production for 2-4 weeks, you can optionally deploy Heat V5 to remove deprecated columns and clean up the schema.
+
+### Prerequisites for V5
+
+- [ ] V2-V4 migration has been deployed to production
+- [ ] Application has been running stably for at least 2-4 weeks
+- [ ] No rollback issues have occurred
+- [ ] Full database backup created
+
+### V5 Deployment Steps
+
+**WARNING:** V5 migration is **IRREVERSIBLE** - it permanently drops deprecated columns!
+
+```bash
+# Step 1: Create backup (CRITICAL!)
+pg_dump "$PROD_DATABASE_URL" > backup_pre_v5_cleanup_$(date +%Y%m%d_%H%M%S).sql
+
+# Step 2: Run V5 cleanup migration
+psql "$PROD_DATABASE_URL" < lib/db/migrations/heat-v5-cleanup.sql
+
+# Step 3: Verify cleanup
+# Check that deprecated columns are removed
+psql "$PROD_DATABASE_URL" -c "SELECT column_name FROM information_schema.columns WHERE table_name = 'tasks' AND column_name IN ('star', 'heat_touch_count', 'other_touch_count', 'touch_count', 'next_surface_at', 'cold_storage_at');"
+# Should return 0 rows
+
+# Step 4: Update application schema
+# Update lib/db/schema.ts to remove deprecated column definitions
+# Archive lib/scoring/heat-v2.ts to lib/scoring/archive/
+
+# Step 5: Deploy updated application code
+npm run build
+# Deploy to production
+```
+
+### V5 Post-Deployment Tasks
+
+After deploying V5 cleanup:
+
+1. Update `lib/db/schema.ts` to remove deprecated columns
+2. Archive `lib/scoring/heat-v2.ts` to `lib/scoring/archive/` folder
+3. Test application functionality
+4. Monitor production logs for 7 days
+5. Keep database backup for at least 30 days
+
 ## References
 
-- Migration script: [lib/db/migrations/heat-production-migration.sql](heat-production-migration.sql)
+- V2-V4 Migration: [lib/db/migrations/heat-production-migration.sql](heat-production-migration.sql)
+- V5 Cleanup Migration: [lib/db/migrations/heat-v5-cleanup.sql](heat-v5-cleanup.sql)
+- V5 Cleanup Plan: [lib/db/migrations/HEAT_V5_CLEANUP_PLAN.md](HEAT_V5_CLEANUP_PLAN.md)
 - Deployment script: [lib/db/scripts/deploy-heat-production.js](../scripts/deploy-heat-production.js)
 - Schema checker: [lib/db/scripts/check-prod-schema.js](../scripts/check-prod-schema.js)
 - Algorithm spec: [docs/heat-algorithm-v3.md](../../docs/heat-algorithm-v3.md)

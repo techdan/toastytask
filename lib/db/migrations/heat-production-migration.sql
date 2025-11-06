@@ -537,5 +537,10 @@ BEGIN
   RAISE NOTICE '  3. Test heat/cool/star interactions';
   RAISE NOTICE '  4. Monitor heat calculations and color bands';
   RAISE NOTICE '';
+  RAISE NOTICE 'Optional V5 Cleanup (after 2-4 weeks of stable operation):';
+  RAISE NOTICE '  • Run heat-v5-cleanup.sql to remove deprecated columns';
+  RAISE NOTICE '  • See HEAT_V5_CLEANUP_PLAN.md for detailed instructions';
+  RAISE NOTICE '  • This is an irreversible cleanup step (drops columns permanently)';
+  RAISE NOTICE '';
   RAISE NOTICE '======================================================================';
 END $$;
