@@ -20,6 +20,12 @@ interface ProjectItemProps {
   onSelect: () => void;
   onUpdate: (id: number, updates: Partial<Project>) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
+  draggable?: boolean;
+  isDragging?: boolean;
+  disableSelection?: boolean;
+  onDragStart?: () => void;
+  onDragOver?: () => void;
+  onDragEnd?: () => void;
 }
 
 const colorOptions = [
@@ -49,6 +55,12 @@ export function ProjectItem({
   onSelect,
   onUpdate,
   onDelete,
+  draggable = false,
+  isDragging = false,
+  disableSelection = false,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
 }: ProjectItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState(project.name);
@@ -99,11 +111,47 @@ export function ProjectItem({
       className={cn(
         "group flex items-center justify-between rounded pl-3 pr-2 py-2 transition-colors hover:bg-accent",
         isSelected && "bg-accent font-medium",
-        project.archived && "opacity-60"
+        project.archived && "opacity-60",
+        draggable && "cursor-grab",
+        isDragging && "cursor-grabbing opacity-70"
       )}
+      draggable={draggable}
+      onDragStart={(event) => {
+        if (!draggable) return;
+        event.dataTransfer.effectAllowed = "move";
+        onDragStart?.();
+      }}
+      onDragOver={(event) => {
+        if (!draggable) return;
+        event.preventDefault();
+        onDragOver?.();
+      }}
+      onDragEnd={() => {
+        if (!draggable) return;
+        onDragEnd?.();
+      }}
+      onDrop={(event) => {
+        if (!draggable) return;
+        event.preventDefault();
+        onDragEnd?.();
+      }}
+      aria-grabbed={draggable ? isDragging : undefined}
     >
       {/* Project Info */}
-      <button onClick={onSelect} className="flex flex-1 items-center gap-2 overflow-hidden">
+      <button
+        type="button"
+        onClick={(event) => {
+          if (disableSelection) {
+            event.preventDefault();
+            return;
+          }
+          onSelect();
+        }}
+        className={cn(
+          "flex flex-1 items-center gap-2 overflow-hidden",
+          draggable && "cursor-grab active:cursor-grabbing"
+        )}
+      >
         <div
           className="h-3 w-3 shrink-0 rounded-full"
           style={{ backgroundColor: project.colorHex }}

@@ -19,6 +19,7 @@ import {
   useCreateProject,
   useUpdateProject,
   useDeleteProject,
+  useReorderProjects,
   useUpdateSettings,
 } from "@/lib/queries";
 import { calculateHeat } from "@/lib/scoring/heat-v3";
@@ -38,6 +39,7 @@ export default function TasksPage() {
     }
     return false;
   });
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const queryClient = useQueryClient();
 
   // Query hooks - TanStack Query handles caching and state
@@ -103,6 +105,7 @@ export default function TasksPage() {
   const createProjectMutation = useCreateProject();
   const updateProjectMutation = useUpdateProject();
   const deleteProjectMutation = useDeleteProject();
+  const reorderProjectsMutation = useReorderProjects();
   const updateSettingsMutation = useUpdateSettings();
 
   // Client-side filtering for completed tasks with time cutoff
@@ -257,6 +260,10 @@ export default function TasksPage() {
     }
   };
 
+  const handleReorderProjects = async (orderedIds: number[]) => {
+    await reorderProjectsMutation.mutateAsync(orderedIds);
+  };
+
   // Settings handlers
   const handleSortModeChange = (sortMode: SortMode) => {
     updateSettingsMutation.mutate({ sortMode });
@@ -287,12 +294,15 @@ export default function TasksPage() {
         onCreateProject={handleCreateProject}
         onUpdateProject={handleUpdateProject}
         onDeleteProject={handleDeleteProject}
+        onReorderProjects={handleReorderProjects}
         taskCounts={taskCounts}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapsed={() => setIsSidebarCollapsed((prev) => !prev)}
       />
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto">
-        <div className="container mx-auto max-w-5xl py-8">
+        <div className="mx-auto w-full min-w-0 px-4 py-8 lg:px-[40px]">
           <div className="mb-8 flex items-start justify-between">
             <div>
               <h1 className="mb-2 text-3xl font-bold">Tasks</h1>

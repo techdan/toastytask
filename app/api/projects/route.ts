@@ -19,8 +19,14 @@ export async function GET(request: Request) {
 
     const projects = await projectRepository.findAll(userId, includeArchived);
 
-    // Sort by name
-    projects.sort((a, b) => a.name.localeCompare(b.name));
+    // Sort by explicit order, fallback to name for stability
+    projects.sort((a, b) => {
+      const orderDelta = (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+      if (orderDelta !== 0) {
+        return orderDelta;
+      }
+      return a.name.localeCompare(b.name);
+    });
 
     return NextResponse.json({ projects });
   } catch (error) {

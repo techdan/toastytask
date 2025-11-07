@@ -17,6 +17,7 @@ export {
   useCreateProject,
   useUpdateProject,
   useDeleteProject,
+  useReorderProjects,
 } from "./use-project-mutations";
 export { useUpdateSettings } from "./use-settings-mutations";
 export { useSaveNotes } from "./use-notes-mutations";

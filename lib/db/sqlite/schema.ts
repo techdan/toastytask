@@ -6,6 +6,7 @@ export const projects = sqliteTable("projects", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   colorHex: text("color_hex").notNull().default("#6b7280"), // neutral-500
+  sortOrder: integer("sort_order").notNull().default(0),
   archived: integer("archived", { mode: "boolean" }).notNull().default(false),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()

@@ -24,9 +24,9 @@ async function seed() {
 
   if (existingProjects.length === 0) {
     await db.insert(projects).values([
-      { name: "Personal", colorHex: "#3b82f6" }, // blue
-      { name: "Work", colorHex: "#10b981" }, // green
-      { name: "Learning", colorHex: "#8b5cf6" }, // purple
+      { name: "Personal", colorHex: "#3b82f6", sortOrder: 1 }, // blue
+      { name: "Work", colorHex: "#10b981", sortOrder: 2 }, // green
+      { name: "Learning", colorHex: "#8b5cf6", sortOrder: 3 }, // purple
     ]);
     console.log("✓ Created sample projects");
   } else {

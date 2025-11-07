@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql, asc } from "drizzle-orm";
 import type { IProjectRepository } from "./interfaces";
 import type { Project, NewProject } from "@/lib/db/schema";
 import { projects } from "@/lib/db/schema";
@@ -8,12 +8,15 @@ export class ProjectRepository implements IProjectRepository {
   private db = getDatabase();
 
   async create(project: NewProject, userId: string): Promise<Project> {
+    const nextSortOrder = await this.getNextSortOrder(userId);
+
     const [newProject] = await this.db
       .insert(projects)
       .values({
         ...project,
         userId,
         createdAt: new Date(),
+        sortOrder: nextSortOrder,
       })
       .returning();
     return newProject;
@@ -33,13 +36,15 @@ export class ProjectRepository implements IProjectRepository {
       return this.db
         .select()
         .from(projects)
-        .where(eq(projects.userId, userId));
+        .where(eq(projects.userId, userId))
+        .orderBy(asc(projects.sortOrder), asc(projects.name));
     }
 
     return this.db
       .select()
       .from(projects)
-      .where(and(eq(projects.userId, userId), eq(projects.archived, false)));
+      .where(and(eq(projects.userId, userId), eq(projects.archived, false)))
+      .orderBy(asc(projects.sortOrder), asc(projects.name));
   }
 
   async update(id: number, updates: Partial<NewProject>, userId: string): Promise<Project> {
@@ -73,5 +78,29 @@ export class ProjectRepository implements IProjectRepository {
     await this.db
       .delete(projects)
       .where(and(eq(projects.id, id), eq(projects.userId, userId)));
+  }
+
+  async reorder(projectIds: number[], userId: string): Promise<void> {
+    if (projectIds.length === 0) {
+      return;
+    }
+
+    await this.db.transaction(async (tx) => {
+      for (const [index, projectId] of projectIds.entries()) {
+        await tx
+          .update(projects)
+          .set({ sortOrder: index + 1 })
+          .where(and(eq(projects.id, projectId), eq(projects.userId, userId)));
+      }
+    });
+  }
+
+  private async getNextSortOrder(userId: string): Promise<number> {
+    const [result] = await this.db
+      .select({ maxSortOrder: sql<number>`COALESCE(MAX(${projects.sortOrder}), 0)` })
+      .from(projects)
+      .where(eq(projects.userId, userId));
+
+    return (result?.maxSortOrder ?? 0) + 1;
   }
 }

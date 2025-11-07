@@ -15,6 +15,7 @@ export const projects = pgTable("projects", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   colorHex: text("color_hex").notNull().default("#6b7280"), // neutral-500
+  sortOrder: integer("sort_order").notNull().default(0),
   archived: boolean("archived").notNull().default(false),
   userId: text("user_id"), // Clerk user ID for multi-tenancy (nullable for migration)
   createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
@@ -26,6 +27,7 @@ export const projects = pgTable("projects", {
 }, (table) => ({
   // Index for filtering projects by user
   userIdIdx: index("projects_user_id_idx").on(table.userId),
+  userSortOrderIdx: index("projects_user_sort_order_idx").on(table.userId, table.sortOrder),
 }));
 
 // Tasks table

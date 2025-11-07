@@ -11,6 +11,20 @@ interface UpdateProjectData {
   updates: Partial<Project>;
 }
 
+function splitProjectsByArchived(projects: Project[]) {
+  return projects.reduce(
+    (acc, project) => {
+      if (project.archived) {
+        acc.archived.push(project);
+      } else {
+        acc.active.push(project);
+      }
+      return acc;
+    },
+    { active: [] as Project[], archived: [] as Project[] }
+  );
+}
+
 // Create project
 async function createProject(projectData: NewProject): Promise<Project> {
   const response = await fetch("/api/projects", {
@@ -57,6 +71,19 @@ async function deleteProject(id: number): Promise<void> {
   }
 }
 
+// Reorder projects
+async function reorderProjectsRequest(projectIds: number[]): Promise<void> {
+  const response = await fetch("/api/projects/reorder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ projectIds }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to reorder projects");
+  }
+}
+
 // Hook: Create project with optimistic update
 export function useCreateProject() {
   const queryClient = useQueryClient();
@@ -72,6 +99,16 @@ export function useCreateProject() {
         queryKey: ["projects"],
       });
 
+      let maxSortOrder = 0;
+      previousProjects.forEach(([, data]) => {
+        if (!Array.isArray(data)) return;
+        data.forEach((project) => {
+          if (!project.archived) {
+            maxSortOrder = Math.max(maxSortOrder, project.sortOrder ?? 0);
+          }
+        });
+      });
+
       // Create optimistic project with temporary negative ID
       const optimisticProject: Project = {
         id: -Date.now(), // Temporary negative ID (will be replaced by server)
@@ -81,19 +118,17 @@ export function useCreateProject() {
         userId: null,
         createdAt: new Date(),
         updatedAt: new Date(),
+        sortOrder: maxSortOrder + 1,
       };
 
       // Optimistically add project to all project queries
       queryClient.setQueriesData<Project[]>(
         { queryKey: ["projects"] },
         (oldProjects) => {
-          // Don't update if no data exists yet
           if (!oldProjects || !Array.isArray(oldProjects)) {
             return oldProjects;
           }
-
-          // Add the new project at the beginning
-          return [optimisticProject, ...oldProjects];
+          return appendProjectToActiveList(oldProjects, optimisticProject);
         }
       );
 
@@ -229,4 +264,76 @@ export function useDeleteProject() {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
   });
+}
+
+// Hook: Reorder projects with optimistic update
+export function useReorderProjects() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: reorderProjectsRequest,
+    onMutate: async (orderedIds) => {
+      await queryClient.cancelQueries({ queryKey: ["projects"] });
+
+      const previousProjects = queryClient.getQueriesData({
+        queryKey: ["projects"],
+      });
+
+      queryClient.setQueriesData<Project[]>(
+        { queryKey: ["projects"] },
+        (oldProjects) => reorderProjectList(oldProjects, orderedIds)
+      );
+
+      return { previousProjects };
+    },
+    onError: (error, _variables, context) => {
+      if (context?.previousProjects) {
+        context.previousProjects.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
+      toast.error("Failed to reorder projects", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
+function appendProjectToActiveList(projects: Project[], projectToAdd: Project) {
+  const { active, archived } = splitProjectsByArchived(projects);
+  return [...active, projectToAdd, ...archived];
+}
+
+function reorderProjectList(
+  projects: Project[] | undefined,
+  orderedIds: number[]
+): Project[] | undefined {
+  if (!projects || !Array.isArray(projects) || orderedIds.length === 0) {
+    return projects;
+  }
+
+  const { active, archived } = splitProjectsByArchived(projects);
+  const projectMap = new Map(active.map((project) => [project.id, project]));
+  const reorderedActive: Project[] = [];
+
+  orderedIds.forEach((id, index) => {
+    const project = projectMap.get(id);
+    if (project) {
+      reorderedActive.push({ ...project, sortOrder: index + 1 });
+      projectMap.delete(id);
+    }
+  });
+
+  if (projectMap.size > 0) {
+    let offset = reorderedActive.length;
+    projectMap.forEach((project) => {
+      offset += 1;
+      reorderedActive.push({ ...project, sortOrder: offset });
+    });
+  }
+
+  return [...reorderedActive, ...archived];
 }

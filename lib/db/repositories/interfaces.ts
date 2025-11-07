@@ -60,6 +60,7 @@ export interface IProjectRepository {
 
   // Update
   update(id: number, updates: Partial<NewProject>, userId: string): Promise<Project>;
+  reorder(projectIds: number[], userId: string): Promise<void>;
 
   // Delete
   archive(id: number, userId: string): Promise<Project>;
