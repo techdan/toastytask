@@ -4,14 +4,12 @@ import { useCallback } from "react";
 import { TaskRow } from "./task-row";
 import { TaskListHeader } from "./task-list-header";
 import { useTouchTask, useCoolTask, useMarkTaskTouched } from "@/lib/queries/use-task-mutations";
-import type { Task, SortMode, Project } from "@/types";
+import type { Task, SortMode, Project, TaskWithFreshValues } from "@/types";
 
-// Task with computed fresh importance/heat for accurate context-aware positioning
-type TaskWithFreshHeat = Task & { _freshHeat: number; _freshImportance: number };
-type FreshMetricKey = "_freshHeat" | "_freshImportance";
+type FreshMetricKey = Extract<keyof TaskWithFreshValues, "_freshHeat" | "_freshImportance">;
 
 interface TaskListProps {
-  tasks: TaskWithFreshHeat[];
+  tasks: TaskWithFreshValues[];
   projects: Project[];
   showCompleted: boolean;
   onToggleCompleted: () => void;

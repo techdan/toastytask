@@ -11,7 +11,7 @@ import { DueDateDisplay } from "./due-date-display";
 import { TaskNotes, TaskNotesPanel } from "./task-notes";
 import { HeatBadge } from "./heat-badge";
 import { getGlowLevel } from "@/lib/scoring/heat-v3";
-import type { Task, Priority, SortMode, Project } from "@/types";
+import type { Task, Priority, SortMode, Project, TaskWithFreshValues } from "@/types";
 import { cn } from "@/lib/utils";
 
 const priorityStyles: Record<Priority, string> = {
@@ -21,11 +21,8 @@ const priorityStyles: Record<Priority, string> = {
   top: "font-bold text-[#990000] dark:text-[#dd5555]",
 };
 
-// Task with computed fresh heat for accurate context-aware positioning
-type TaskWithFreshHeat = Task & { _freshHeat: number };
-
 interface TaskRowProps {
-  task: TaskWithFreshHeat;
+  task: TaskWithFreshValues;
   projects: Project[];
   sortMode: SortMode;
   onUpdate: (id: number, updates: Partial<Task>) => void;

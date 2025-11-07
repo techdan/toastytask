@@ -57,3 +57,9 @@ export type Task = BaseTaskType & {
   notesCount?: number;
   notesLastModified?: Date | null;
 };
+
+// Client-calculated scoring fields that supplement Task data
+export type TaskWithFreshValues = Task & {
+  _freshImportance: number;
+  _freshHeat: number;
+};

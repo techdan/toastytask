@@ -25,12 +25,10 @@ import {
 } from "@/lib/queries";
 import { calculateHeat } from "@/lib/scoring/heat-v3";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
-import type { Task, NewTask, Project, SortMode } from "@/types";
+import type { Task, NewTask, Project, SortMode, TaskWithFreshValues } from "@/types";
 
 // Number of days to show completed tasks when visibility is enabled
 const COMPLETED_TASKS_VISIBLE_DAYS = 7;
-
-type TaskWithFreshValues = Task & { _freshImportance: number; _freshHeat: number };
 
 const toMilliseconds = (value: Date | string | number | null | undefined) => {
   if (!value) {
@@ -109,6 +107,19 @@ const normalizeToDate = (
     return new Date(value);
   }
   return new Date();
+};
+
+const coerceCompletedDate = (value: Date | string | number | null | undefined) => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+  if (typeof value === "number") {
+    return new Date(value < 1e12 ? value * 1000 : value);
+  }
+  return new Date(value);
 };
 
 export default function TasksPage() {
@@ -298,12 +309,9 @@ export default function TasksPage() {
       }
 
       if (isCompleted && !isOptimisticActive && !shouldLinger && showCompleted) {
-        const completedDate =
-          typeof task.completedAt === "number"
-            ? new Date(task.completedAt * 1000)
-            : new Date(task.completedAt);
+        const completedDate = coerceCompletedDate(task.completedAt);
 
-        if (completedDate < cutoffDate) {
+        if (!completedDate || completedDate < cutoffDate) {
           return;
         }
       }
