@@ -12,11 +12,11 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const projectIds = Array.isArray(body.projectIds) ? body.projectIds : [];
+    const projectIdsInput: unknown[] = Array.isArray(body.projectIds) ? body.projectIds : [];
 
     if (
-      projectIds.length === 0 ||
-      projectIds.some((id) => typeof id !== "number" || Number.isNaN(id))
+      projectIdsInput.length === 0 ||
+      projectIdsInput.some((id: unknown) => typeof id !== "number" || Number.isNaN(id))
     ) {
       return NextResponse.json(
         { error: "Invalid request payload" },
@@ -24,6 +24,7 @@ export async function POST(request: Request) {
       );
     }
 
+    const projectIds = projectIdsInput as number[];
     await projectRepository.reorder(projectIds, userId);
 
     return NextResponse.json({ success: true });
