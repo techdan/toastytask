@@ -21,6 +21,7 @@ export {
 } from "./use-project-mutations";
 export { useUpdateSettings } from "./use-settings-mutations";
 export { useSaveNotes } from "./use-notes-mutations";
+export { useTouchAllTasks } from "./use-touch-all-tasks";
 
 // Re-export types
 export type { NoteRowData } from "./use-notes-query";

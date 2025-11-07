@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { QuickAdd } from "@/components/tasks/quick-add";
 import { TaskList } from "@/components/tasks/task-list";
@@ -21,6 +21,7 @@ import {
   useDeleteProject,
   useReorderProjects,
   useUpdateSettings,
+  useTouchAllTasks,
 } from "@/lib/queries";
 import { calculateHeat } from "@/lib/scoring/heat-v3";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
@@ -28,6 +29,71 @@ import type { Task, NewTask, Project, SortMode } from "@/types";
 
 // Number of days to show completed tasks when visibility is enabled
 const COMPLETED_TASKS_VISIBLE_DAYS = 7;
+
+type TaskWithFreshValues = Task & { _freshImportance: number; _freshHeat: number };
+
+const toMilliseconds = (value: Date | string | number | null | undefined) => {
+  if (!value) {
+    return 0;
+  }
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+  if (typeof value === "number") {
+    return value < 1e12 ? value * 1000 : value;
+  }
+  return new Date(value).getTime();
+};
+
+const compareTasks = (
+  a: TaskWithFreshValues,
+  b: TaskWithFreshValues,
+  sortMode: SortMode
+) => {
+  if (a.completedAt && !b.completedAt) return 1;
+  if (!a.completedAt && b.completedAt) return -1;
+
+  const aIsUntouched = !a.lastHeatTouchedAt && !a.lastTouchedAt;
+  const bIsUntouched = !b.lastHeatTouchedAt && !b.lastTouchedAt;
+
+  if (aIsUntouched && !bIsUntouched) return -1;
+  if (!aIsUntouched && bIsUntouched) return 1;
+
+  if (aIsUntouched && bIsUntouched) {
+    const sortValue = sortMode === "heat" ? (a._freshHeat || 0) : a._freshImportance;
+    const sortValueB = sortMode === "heat" ? (b._freshHeat || 0) : b._freshImportance;
+
+    if (sortValueB !== sortValue) {
+      return sortValueB - sortValue;
+    }
+
+    const aCreated = toMilliseconds(a.createdAt);
+    const bCreated = toMilliseconds(b.createdAt);
+    return bCreated - aCreated;
+  }
+
+  const sortValue = sortMode === "heat" ? (a._freshHeat || 0) : a._freshImportance;
+  const sortValueB = sortMode === "heat" ? (b._freshHeat || 0) : b._freshImportance;
+
+  if (sortValueB !== sortValue) {
+    return sortValueB - sortValue;
+  }
+
+  if (a.dueAt && b.dueAt) {
+    const aTime = toMilliseconds(a.dueAt);
+    const bTime = toMilliseconds(b.dueAt);
+    return aTime - bTime;
+  }
+  if (a.dueAt) return -1;
+  if (b.dueAt) return 1;
+
+  const aCreated = toMilliseconds(a.createdAt);
+  const bCreated = toMilliseconds(b.createdAt);
+  return bCreated - aCreated;
+};
+
+const sortTasksByMode = (tasks: TaskWithFreshValues[], sortMode: SortMode) =>
+  [...tasks].sort((a, b) => compareTasks(a, b, sortMode));
 
 export default function TasksPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<number | null | "all">("all");
@@ -107,105 +173,119 @@ export default function TasksPage() {
   const deleteProjectMutation = useDeleteProject();
   const reorderProjectsMutation = useReorderProjects();
   const updateSettingsMutation = useUpdateSettings();
+  const { touchAllTasks } = useTouchAllTasks();
+  const [taskOrder, setTaskOrder] = useState<number[]>([]);
+  const [isRefreshingOrder, setIsRefreshingOrder] = useState(false);
+  const contextRef = useRef<{ projectId: number | null | "all"; sortMode: SortMode } | null>(null);
+  const sortMode = settings?.sortMode || "importance";
 
-  // Client-side filtering for completed tasks with time cutoff
-  // Only show completed tasks from the last N days when toggle is on
-  // Also recalculate fresh heat for all tasks
-  const tasks = useMemo(() => {
+  // Calculate fresh scoring data and split completed tasks (recent only) from actives
+  const { activeTasks, completedTasks } = useMemo(() => {
     const now = new Date();
-    let filteredTasks = allFetchedTasks;
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - COMPLETED_TASKS_VISIBLE_DAYS);
 
-    if (showCompleted) {
-      // Show all tasks, but filter out old completed tasks
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - COMPLETED_TASKS_VISIBLE_DAYS);
+    const actives: TaskWithFreshValues[] = [];
+    const completeds: TaskWithFreshValues[] = [];
 
-      filteredTasks = allFetchedTasks.filter((task) => {
-        if (!task.completedAt) return true; // Always show uncompleted tasks
+    allFetchedTasks.forEach((task) => {
+      if (task.completedAt) {
+        if (!showCompleted) {
+          return;
+        }
 
-        // Only show recently completed tasks (within the configured timeframe)
-        const completedDate = typeof task.completedAt === "number"
-          ? new Date(task.completedAt * 1000)
-          : new Date(task.completedAt);
+        const completedDate =
+          typeof task.completedAt === "number"
+            ? new Date(task.completedAt * 1000)
+            : new Date(task.completedAt);
 
-        return completedDate >= cutoffDate;
-      });
-    } else {
-      // Hide all completed tasks
-      filteredTasks = allFetchedTasks.filter((task) => !task.completedAt);
-    }
+        if (completedDate < cutoffDate) {
+          return;
+        }
+      }
 
-    // Calculate fresh heat AND importance for all tasks (used for sorting)
-    // Pure calculation architecture: importance is never stored, always calculated
-    return filteredTasks.map((task) => {
       const freshImportance = calculateImportanceV1(task, now);
-      return {
+      const enrichedTask: TaskWithFreshValues = {
         ...task,
-        // Store fresh importance and heat in computed properties for sorting
         _freshImportance: freshImportance,
         _freshHeat: calculateHeat(task, now, freshImportance),
       };
+
+      if (enrichedTask.completedAt) {
+        completeds.push(enrichedTask);
+      } else {
+        actives.push(enrichedTask);
+      }
     });
+
+    return { activeTasks: actives, completedTasks: completeds };
   }, [allFetchedTasks, showCompleted]);
 
-  // Type for task with computed importance and heat
-  type TaskWithFreshValues = Task & { _freshImportance: number; _freshHeat: number };
+  const sortedActiveIds = useMemo(
+    () => sortTasksByMode(activeTasks, sortMode).map((task) => task.id),
+    [activeTasks, sortMode]
+  );
 
-  // Client-side sorting (using fresh calculated values)
-  const sortedTasks = useMemo(() => {
-    return [...tasks].sort((a: TaskWithFreshValues, b: TaskWithFreshValues) => {
-      // Completed tasks always go to bottom
-      if (a.completedAt && !b.completedAt) return 1;
-      if (!a.completedAt && b.completedAt) return -1;
+  useEffect(() => {
+    const lastContext = contextRef.current;
+    const contextChanged =
+      !lastContext ||
+      lastContext.projectId !== selectedProjectId ||
+      lastContext.sortMode !== sortMode;
 
-      // HEAT V3: Untouched tasks (never heated/cooled or touched) always sort to top
-      // This applies to BOTH Importance and Heat modes (toodle-163)
-      const aIsUntouched = !a.lastHeatTouchedAt && !a.lastTouchedAt;
-      const bIsUntouched = !b.lastHeatTouchedAt && !b.lastTouchedAt;
+    if (contextChanged) {
+      contextRef.current = { projectId: selectedProjectId, sortMode };
+      setTaskOrder(sortedActiveIds);
+      return;
+    }
 
-      if (aIsUntouched && !bIsUntouched) return -1;
-      if (!aIsUntouched && bIsUntouched) return 1;
+    setTaskOrder((previousOrder) => {
+      const activeIdSet = new Set(activeTasks.map((task) => task.id));
+      const filteredOrder = previousOrder.filter((id) => activeIdSet.has(id));
+      const filteredSet = new Set(filteredOrder);
+      const newTaskIds = activeTasks
+        .map((task) => task.id)
+        .filter((id) => !filteredSet.has(id));
 
-      // If both are untouched, sort by importance/heat (depending on mode)
-      // Pure calculation architecture: use fresh calculated importance, not stored value
-      if (aIsUntouched && bIsUntouched) {
-        const sortValue = settings?.sortMode === "heat" ? (a._freshHeat || 0) : a._freshImportance;
-        const sortValueB = settings?.sortMode === "heat" ? (b._freshHeat || 0) : b._freshImportance;
-
-        if (sortValueB !== sortValue) {
-          return sortValueB - sortValue; // desc: 12→2
-        }
-
-        // Then by creation date (newest first)
-        const aCreated = typeof a.createdAt === "number" ? a.createdAt * 1000 : new Date(a.createdAt).getTime();
-        const bCreated = typeof b.createdAt === "number" ? b.createdAt * 1000 : new Date(b.createdAt).getTime();
-        return bCreated - aCreated;
+      if (newTaskIds.length === 0 && filteredOrder.length === previousOrder.length) {
+        return previousOrder;
       }
 
-      // Sort by importance or heat based on settings
-      // Pure calculation architecture: use fresh calculated importance, not stored value
-      const sortValue = settings?.sortMode === "heat" ? (a._freshHeat || 0) : a._freshImportance;
-      const sortValueB = settings?.sortMode === "heat" ? (b._freshHeat || 0) : b._freshImportance;
-
-      if (sortValueB !== sortValue) {
-        return sortValueB - sortValue; // desc: 12→2
-      }
-
-      // Then by due date (earlier is better, nulls last)
-      if (a.dueAt && b.dueAt) {
-        const aTime = typeof a.dueAt === "number" ? a.dueAt * 1000 : new Date(a.dueAt).getTime();
-        const bTime = typeof b.dueAt === "number" ? b.dueAt * 1000 : new Date(b.dueAt).getTime();
-        return aTime - bTime;
-      }
-      if (a.dueAt) return -1;
-      if (b.dueAt) return 1;
-
-      // Finally by creation date (newest first)
-      const aCreated = typeof a.createdAt === "number" ? a.createdAt * 1000 : new Date(a.createdAt).getTime();
-      const bCreated = typeof b.createdAt === "number" ? b.createdAt * 1000 : new Date(b.createdAt).getTime();
-      return bCreated - aCreated;
+      return [...newTaskIds, ...filteredOrder];
     });
-  }, [tasks, settings?.sortMode]);
+  }, [activeTasks, selectedProjectId, sortMode, sortedActiveIds]);
+
+  const orderedActiveTasks = useMemo(() => {
+    if (taskOrder.length === 0) {
+      return sortTasksByMode(activeTasks, sortMode);
+    }
+
+    const taskMap = new Map(activeTasks.map((task) => [task.id, task]));
+    const seen = new Set<number>();
+    const ordered = taskOrder
+      .map((taskId) => {
+        const task = taskMap.get(taskId);
+        if (task) {
+          seen.add(task.id);
+        }
+        return task;
+      })
+      .filter((task): task is TaskWithFreshValues => Boolean(task));
+
+    const missing = activeTasks.filter((task) => !seen.has(task.id));
+
+    return [...ordered, ...missing];
+  }, [activeTasks, sortMode, taskOrder]);
+
+  const completedDisplay = useMemo(
+    () => (showCompleted ? sortTasksByMode(completedTasks, sortMode) : []),
+    [completedTasks, showCompleted, sortMode]
+  );
+
+  const displayedTasks = useMemo(
+    () => [...orderedActiveTasks, ...completedDisplay],
+    [completedDisplay, orderedActiveTasks]
+  );
 
   const handleAddTask = async (taskData: Omit<NewTask, "createdAt" | "updatedAt">) => {
     createTaskMutation.mutate(taskData as NewTask);
@@ -267,6 +347,26 @@ export default function TasksPage() {
   // Settings handlers
   const handleSortModeChange = (sortMode: SortMode) => {
     updateSettingsMutation.mutate({ sortMode });
+  };
+
+  const handleRefreshOrder = async () => {
+    if (isRefreshingOrder) {
+      return;
+    }
+
+    setIsRefreshingOrder(true);
+    setTaskOrder(sortedActiveIds);
+
+    try {
+      await touchAllTasks({
+        successMessage: "Tasks resorted and marked as touched",
+        errorMessage: "Failed to refresh task order",
+      });
+    } catch (error) {
+      console.error("Failed to refresh task order:", error);
+    } finally {
+      setIsRefreshingOrder(false);
+    }
   };
 
   // Calculate task counts per project from ALL tasks (exclude completed)
@@ -331,11 +431,13 @@ export default function TasksPage() {
             </div>
           ) : (
             <TaskList
-              tasks={sortedTasks}
+              tasks={displayedTasks}
               showCompleted={showCompleted}
               onToggleCompleted={handleToggleCompleted}
-              sortMode={settings?.sortMode || "importance"}
+              sortMode={sortMode}
               onSortModeChange={handleSortModeChange}
+              onRefreshOrder={handleRefreshOrder}
+              isRefreshingOrder={isRefreshingOrder}
               onUpdate={handleUpdateTask}
               onDelete={handleDeleteTask}
               onComplete={handleCompleteTask}

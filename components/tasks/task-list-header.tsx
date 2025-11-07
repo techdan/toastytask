@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, EyeOff, ChevronDown } from "lucide-react";
+import { Eye, EyeOff, ChevronDown, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,6 +16,8 @@ interface TaskListHeaderProps {
   onToggleCompleted: () => void;
   sortMode: SortMode;
   onSortModeChange: (mode: SortMode) => void;
+  onRefreshOrder: () => Promise<void> | void;
+  isRefreshingOrder: boolean;
 }
 
 export function TaskListHeader({
@@ -23,6 +25,8 @@ export function TaskListHeader({
   onToggleCompleted,
   sortMode,
   onSortModeChange,
+  onRefreshOrder,
+  isRefreshingOrder,
 }: TaskListHeaderProps) {
   return (
     <thead>
@@ -76,22 +80,39 @@ export function TaskListHeader({
           Recurrence
         </th>
         <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left last:rounded-r border-y border-r">
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn(
-              "h-6 px-2 text-xs",
-              showCompleted ? "bg-accent" : ""
-            )}
-            onClick={onToggleCompleted}
-            title={showCompleted ? "Hide completed tasks" : "Show completed tasks"}
-          >
-            {showCompleted ? (
-              <Eye className="h-3.5 w-3.5" />
-            ) : (
-              <EyeOff className="h-3.5 w-3.5" />
-            )}
-          </Button>
+          <div className="flex items-center justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={onRefreshOrder}
+              title="Refresh order"
+              disabled={isRefreshingOrder}
+            >
+              <RefreshCcw
+                className={cn(
+                  "h-3.5 w-3.5",
+                  isRefreshingOrder && "animate-spin"
+                )}
+              />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-6 px-2 text-xs",
+                showCompleted ? "bg-accent" : ""
+              )}
+              onClick={onToggleCompleted}
+              title={showCompleted ? "Hide completed tasks" : "Show completed tasks"}
+            >
+              {showCompleted ? (
+                <Eye className="h-3.5 w-3.5" />
+              ) : (
+                <EyeOff className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </div>
         </th>
       </tr>
     </thead>

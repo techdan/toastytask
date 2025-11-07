@@ -15,6 +15,8 @@ interface TaskListProps {
   onToggleCompleted: () => void;
   sortMode: SortMode;
   onSortModeChange: (mode: SortMode) => void;
+  onRefreshOrder: () => Promise<void> | void;
+  isRefreshingOrder: boolean;
   onUpdate: (id: number, updates: Partial<Task>) => void;
   onDelete: (id: number) => void;
   onComplete: (id: number) => void;
@@ -27,6 +29,8 @@ export function TaskList({
   onToggleCompleted,
   sortMode,
   onSortModeChange,
+  onRefreshOrder,
+  isRefreshingOrder,
   onUpdate,
   onDelete,
   onComplete,
@@ -39,19 +43,25 @@ export function TaskList({
   // Helper function to get nearby task IDs for optimistic updates
   // Performance optimization: only process ~20 nearby tasks instead of all tasks (10x improvement)
   const getNearbyTaskIds = useCallback((taskId: number): number[] => {
-    const incompleteTasks = tasks.filter(t => !t.completedAt);
-    const currentIndex = incompleteTasks.findIndex(t => t.id === taskId);
+    const metricKey = sortMode === "heat" ? "_freshHeat" : "_freshImportance";
+    const incompleteTasks = tasks.filter((t) => !t.completedAt);
+    const targetTask = incompleteTasks.find((t) => t.id === taskId);
 
-    if (currentIndex === -1) {
-      // Fallback: if task not found, use all visible tasks
-      return incompleteTasks.map(t => t.id);
+    if (!targetTask) {
+      return incompleteTasks.map((t) => t.id);
     }
 
-    // Get 10 tasks above and 10 tasks below (+ current task)
-    const start = Math.max(0, currentIndex - 10);
-    const end = Math.min(incompleteTasks.length, currentIndex + 10 + 1);
-    return incompleteTasks.slice(start, end).map(t => t.id);
-  }, [tasks]);
+    const targetValue = targetTask[metricKey] ?? 0;
+
+    return incompleteTasks
+      .map((task) => ({
+        id: task.id,
+        distance: Math.abs((task[metricKey] ?? 0) - targetValue),
+      }))
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 21)
+      .map((task) => task.id);
+  }, [sortMode, tasks]);
 
   // Heat handler: increases heat adjustment to move task up
   const handleHeat = useCallback((taskId: number) => {
@@ -94,6 +104,8 @@ export function TaskList({
           onToggleCompleted={onToggleCompleted}
           sortMode={sortMode}
           onSortModeChange={onSortModeChange}
+          onRefreshOrder={onRefreshOrder}
+          isRefreshingOrder={isRefreshingOrder}
         />
         {tasks.map((task) => (
           <tbody key={task.id} className="before:content-[''] before:block before:h-2">

@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useUser, useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,92 +13,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { User, Settings, LogOut, CheckCheck } from "lucide-react";
+import { User, Settings, LogOut } from "lucide-react";
 import { SettingsDrawer } from "@/components/settings/settings-drawer";
 import { useSettingsQuery } from "@/lib/queries/use-settings-query";
-import { toast } from "sonner";
-import type { Task } from "@/types";
 
 export function UserAccountDropdown() {
   const { user, isLoaded } = useUser();
   const { signOut } = useClerk();
   const router = useRouter();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isTouchingAll, setIsTouchingAll] = useState(false);
   const { data: settings = null } = useSettingsQuery();
-  const queryClient = useQueryClient();
-
-  const normalizeToDate = (value: Task["createdAt"] | string | number | null | undefined) => {
-    if (value instanceof Date) {
-      return value;
-    }
-
-    if (typeof value === "number") {
-      const milliseconds = value < 1e12 ? value * 1000 : value;
-      return new Date(milliseconds);
-    }
-
-    if (typeof value === "string" && value.length > 0) {
-      return new Date(value);
-    }
-
-    return new Date();
-  };
-
-  const handleTouchAll = async () => {
-    setIsTouchingAll(true);
-
-    const previousTasks = queryClient.getQueriesData<Task[]>({ queryKey: ["tasks"] });
-
-    queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
-      if (!oldTasks || !Array.isArray(oldTasks) || oldTasks.length === 0) {
-        return oldTasks;
-      }
-
-      let hasChanges = false;
-
-      const updatedTasks = oldTasks.map((task): Task => {
-        if (task.lastTouchedAt || task.lastHeatTouchedAt) {
-          return task;
-        }
-
-        hasChanges = true;
-        const createdAtDate = normalizeToDate(task.createdAt);
-
-        return {
-          ...task,
-          lastTouchedAt: createdAtDate,
-          lastHeatTouchedAt: createdAtDate,
-        };
-      });
-
-      return hasChanges ? updatedTasks : oldTasks;
-    });
-
-    try {
-      const response = await fetch("/api/tasks/touch-all", {
-        method: "POST",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to touch all tasks");
-      }
-
-      const data = await response.json();
-      toast.success(data.message || "All tasks marked as touched");
-
-      // Ensure server state eventually matches optimistic cache
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-    } catch (error) {
-      console.error("Error touching all tasks:", error);
-      previousTasks.forEach(([queryKey, data]) => {
-        queryClient.setQueryData(queryKey, data);
-      });
-      toast.error("Failed to mark tasks as touched");
-    } finally {
-      setIsTouchingAll(false);
-    }
-  };
 
   if (!isLoaded) {
     return (
@@ -147,10 +70,6 @@ export function UserAccountDropdown() {
           <DropdownMenuItem onClick={() => setIsSettingsOpen(true)}>
             <Settings className="mr-2 h-4 w-4" />
             <span>Settings</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleTouchAll} disabled={isTouchingAll}>
-            <CheckCheck className="mr-2 h-4 w-4" />
-            <span>{isTouchingAll ? "Touching..." : "Touch All"}</span>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
