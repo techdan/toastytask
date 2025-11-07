@@ -112,7 +112,8 @@ export function ProjectItem({
         "group flex items-center justify-between rounded pl-3 pr-2 py-2 transition-colors hover:bg-accent",
         isSelected && "bg-accent font-medium",
         project.archived && "opacity-60",
-        draggable && "cursor-grab",
+        "cursor-pointer",
+        draggable && "active:cursor-grabbing",
         isDragging && "cursor-grabbing opacity-70"
       )}
       draggable={draggable}
@@ -148,8 +149,8 @@ export function ProjectItem({
           onSelect();
         }}
         className={cn(
-          "flex flex-1 items-center gap-2 overflow-hidden",
-          draggable && "cursor-grab active:cursor-grabbing"
+          "flex flex-1 items-center gap-2 overflow-hidden cursor-pointer",
+          draggable && "active:cursor-grabbing"
         )}
       >
         <div

@@ -76,6 +76,9 @@ export function TaskListHeader({
         <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[5.25rem]">
           Priority
         </th>
+        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[5.5rem]">
+          Project
+        </th>
         <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[6rem]">
           Recurrence
         </th>

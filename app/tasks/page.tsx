@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { QuickAdd } from "@/components/tasks/quick-add";
 import { TaskList } from "@/components/tasks/task-list";
@@ -95,6 +95,22 @@ const compareTasks = (
 const sortTasksByMode = (tasks: TaskWithFreshValues[], sortMode: SortMode) =>
   [...tasks].sort((a, b) => compareTasks(a, b, sortMode));
 
+const normalizeToDate = (
+  value: Task["createdAt"] | string | number | null | undefined
+) => {
+  if (value instanceof Date) {
+    return value;
+  }
+  if (typeof value === "number") {
+    const milliseconds = value < 1e12 ? value * 1000 : value;
+    return new Date(milliseconds);
+  }
+  if (typeof value === "string" && value.length > 0) {
+    return new Date(value);
+  }
+  return new Date();
+};
+
 export default function TasksPage() {
   const [selectedProjectId, setSelectedProjectId] = useState<number | null | "all">("all");
   const [showCompleted, setShowCompleted] = useState(() => {
@@ -105,6 +121,10 @@ export default function TasksPage() {
     }
     return false;
   });
+  // Keep recently completed tasks visible (styled as completed) until a full refresh occurs.
+  const [lingeringCompletedIds, setLingeringCompletedIds] = useState<Set<number>>(() => new Set());
+  // Track tasks that should appear active again before the server confirms uncompletion.
+  const [optimisticActiveIds, setOptimisticActiveIds] = useState<Set<number>>(() => new Set());
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const queryClient = useQueryClient();
 
@@ -130,6 +150,85 @@ export default function TasksPage() {
   });
 
   const { data: settings } = useSettingsQuery();
+
+  const addLingeringCompleted = useCallback((taskId: number) => {
+    setLingeringCompletedIds((previous) => {
+      if (previous.has(taskId)) {
+        return previous;
+      }
+      const next = new Set(previous);
+      next.add(taskId);
+      return next;
+    });
+  }, []);
+
+  const removeLingeringCompleted = useCallback((taskId: number) => {
+    setLingeringCompletedIds((previous) => {
+      if (!previous.has(taskId)) {
+        return previous;
+      }
+      const next = new Set(previous);
+      next.delete(taskId);
+      return next;
+    });
+  }, []);
+
+  const addOptimisticActive = useCallback((taskId: number) => {
+    setOptimisticActiveIds((previous) => {
+      if (previous.has(taskId)) {
+        return previous;
+      }
+      const next = new Set(previous);
+      next.add(taskId);
+      return next;
+    });
+  }, []);
+
+  const removeOptimisticActive = useCallback((taskId: number) => {
+    setOptimisticActiveIds((previous) => {
+      if (!previous.has(taskId)) {
+        return previous;
+      }
+      const next = new Set(previous);
+      next.delete(taskId);
+      return next;
+    });
+  }, []);
+
+  // Drop lingering/optimistic IDs once server data reflects the final completion status.
+  useEffect(() => {
+    const completedIdSet = new Set(
+      allFetchedTasks.filter((task) => task.completedAt).map((task) => task.id)
+    );
+
+    setLingeringCompletedIds((previous) => {
+      if (previous.size === 0) {
+        return previous;
+      }
+
+      const next = new Set<number>();
+      previous.forEach((id) => {
+        if (completedIdSet.has(id)) {
+          next.add(id);
+        }
+      });
+      return next.size === previous.size ? previous : next;
+    });
+
+    setOptimisticActiveIds((previous) => {
+      if (previous.size === 0) {
+        return previous;
+      }
+
+      const next = new Set<number>();
+      previous.forEach((id) => {
+        if (completedIdSet.has(id)) {
+          next.add(id);
+        }
+      });
+      return next.size === previous.size ? previous : next;
+    });
+  }, [allFetchedTasks]);
 
   // Background pre-fetching for better perceived performance
   useEffect(() => {
@@ -177,6 +276,7 @@ export default function TasksPage() {
   const [taskOrder, setTaskOrder] = useState<number[]>([]);
   const [isRefreshingOrder, setIsRefreshingOrder] = useState(false);
   const contextRef = useRef<{ projectId: number | null | "all"; sortMode: SortMode } | null>(null);
+  const prevActiveCountRef = useRef(0); // Detect first non-empty load per context for deterministic seeding
   const sortMode = settings?.sortMode || "importance";
 
   // Calculate fresh scoring data and split completed tasks (recent only) from actives
@@ -189,11 +289,15 @@ export default function TasksPage() {
     const completeds: TaskWithFreshValues[] = [];
 
     allFetchedTasks.forEach((task) => {
-      if (task.completedAt) {
-        if (!showCompleted) {
-          return;
-        }
+      const isCompleted = !!task.completedAt;
+      const isOptimisticActive = optimisticActiveIds.has(task.id);
+      const shouldLinger = !isOptimisticActive && isCompleted && lingeringCompletedIds.has(task.id);
 
+      if (isCompleted && !isOptimisticActive && !shouldLinger && !showCompleted) {
+        return;
+      }
+
+      if (isCompleted && !isOptimisticActive && !shouldLinger && showCompleted) {
         const completedDate =
           typeof task.completedAt === "number"
             ? new Date(task.completedAt * 1000)
@@ -209,17 +313,21 @@ export default function TasksPage() {
         ...task,
         _freshImportance: freshImportance,
         _freshHeat: calculateHeat(task, now, freshImportance),
+        ...(isOptimisticActive ? { completedAt: null } : {}),
       };
 
-      if (enrichedTask.completedAt) {
-        completeds.push(enrichedTask);
-      } else {
-        actives.push(enrichedTask);
+      if (isCompleted && !isOptimisticActive && !shouldLinger) {
+        if (showCompleted) {
+          completeds.push(enrichedTask);
+        }
+        return;
       }
+
+      actives.push(enrichedTask);
     });
 
     return { activeTasks: actives, completedTasks: completeds };
-  }, [allFetchedTasks, showCompleted]);
+  }, [allFetchedTasks, showCompleted, lingeringCompletedIds, optimisticActiveIds]);
 
   const sortedActiveIds = useMemo(
     () => sortTasksByMode(activeTasks, sortMode).map((task) => task.id),
@@ -232,12 +340,18 @@ export default function TasksPage() {
       !lastContext ||
       lastContext.projectId !== selectedProjectId ||
       lastContext.sortMode !== sortMode;
+    const wasPreviouslyEmpty = prevActiveCountRef.current === 0;
+    const nowHasTasks = activeTasks.length > 0;
+    const shouldSeedFromSorted = contextChanged || (nowHasTasks && wasPreviouslyEmpty);
 
-    if (contextChanged) {
+    if (shouldSeedFromSorted) {
       contextRef.current = { projectId: selectedProjectId, sortMode };
       setTaskOrder(sortedActiveIds);
+      prevActiveCountRef.current = activeTasks.length;
       return;
     }
+
+    prevActiveCountRef.current = activeTasks.length;
 
     setTaskOrder((previousOrder) => {
       const activeIdSet = new Set(activeTasks.map((task) => task.id));
@@ -301,12 +415,25 @@ export default function TasksPage() {
 
   const handleCompleteTask = async (id: number) => {
     console.log("DEBUG: handleCompleteTask called", { id });
-    completeTaskMutation.mutate(id);
+    removeOptimisticActive(id);
+    addLingeringCompleted(id);
+    completeTaskMutation.mutate(id, {
+      onError: () => {
+        removeLingeringCompleted(id);
+      },
+    });
   };
 
   const handleUncompleteTask = async (id: number) => {
     console.log("DEBUG: handleUncompleteTask called", { id });
-    uncompleteTaskMutation.mutate(id);
+    addOptimisticActive(id);
+    removeLingeringCompleted(id);
+    uncompleteTaskMutation.mutate(id, {
+      onError: () => {
+        removeOptimisticActive(id);
+        addLingeringCompleted(id);
+      },
+    });
   };
 
   const handleToggleCompleted = () => {
@@ -355,7 +482,28 @@ export default function TasksPage() {
     }
 
     setIsRefreshingOrder(true);
-    setTaskOrder(sortedActiveIds);
+    const previousOrder = taskOrder;
+    const recalculationTimestamp = new Date();
+
+    const simulatedActiveTasks = activeTasks.map((task) => {
+      if (task.lastTouchedAt || task.lastHeatTouchedAt) {
+        return task;
+      }
+      const createdAtDate = normalizeToDate(task.createdAt);
+      const touchedTask = {
+        ...task,
+        lastTouchedAt: createdAtDate,
+        lastHeatTouchedAt: createdAtDate,
+      };
+      const freshImportance = calculateImportanceV1(touchedTask, recalculationTimestamp);
+      return {
+        ...touchedTask,
+        _freshImportance: freshImportance,
+        _freshHeat: calculateHeat(touchedTask, recalculationTimestamp, freshImportance),
+      };
+    });
+
+    setTaskOrder(sortTasksByMode(simulatedActiveTasks, sortMode).map((task) => task.id));
 
     try {
       await touchAllTasks({
@@ -364,6 +512,7 @@ export default function TasksPage() {
       });
     } catch (error) {
       console.error("Failed to refresh task order:", error);
+      setTaskOrder(previousOrder);
     } finally {
       setIsRefreshingOrder(false);
     }
@@ -432,6 +581,7 @@ export default function TasksPage() {
           ) : (
             <TaskList
               tasks={displayedTasks}
+              projects={projects}
               showCompleted={showCompleted}
               onToggleCompleted={handleToggleCompleted}
               sortMode={sortMode}

@@ -4,13 +4,15 @@ import { useCallback } from "react";
 import { TaskRow } from "./task-row";
 import { TaskListHeader } from "./task-list-header";
 import { useTouchTask, useCoolTask, useMarkTaskTouched } from "@/lib/queries/use-task-mutations";
-import type { Task, SortMode } from "@/types";
+import type { Task, SortMode, Project } from "@/types";
 
-// Task with computed fresh heat for accurate context-aware positioning
-type TaskWithFreshHeat = Task & { _freshHeat: number };
+// Task with computed fresh importance/heat for accurate context-aware positioning
+type TaskWithFreshHeat = Task & { _freshHeat: number; _freshImportance: number };
+type FreshMetricKey = "_freshHeat" | "_freshImportance";
 
 interface TaskListProps {
   tasks: TaskWithFreshHeat[];
+  projects: Project[];
   showCompleted: boolean;
   onToggleCompleted: () => void;
   sortMode: SortMode;
@@ -25,6 +27,7 @@ interface TaskListProps {
 
 export function TaskList({
   tasks,
+  projects,
   showCompleted,
   onToggleCompleted,
   sortMode,
@@ -43,7 +46,7 @@ export function TaskList({
   // Helper function to get nearby task IDs for optimistic updates
   // Performance optimization: only process ~20 nearby tasks instead of all tasks (10x improvement)
   const getNearbyTaskIds = useCallback((taskId: number): number[] => {
-    const metricKey = sortMode === "heat" ? "_freshHeat" : "_freshImportance";
+    const metricKey: FreshMetricKey = sortMode === "heat" ? "_freshHeat" : "_freshImportance";
     const incompleteTasks = tasks.filter((t) => !t.completedAt);
     const targetTask = incompleteTasks.find((t) => t.id === taskId);
 
@@ -90,12 +93,13 @@ export function TaskList({
   return (
     <div>
       <table className="w-full border-separate border-spacing-0">
-        {/* Column definitions: task (checkbox, importance, star, notes, title), due date, priority, recurrence, actions */}
+        {/* Column definitions: task (checkbox, importance, star, notes, title), due date, priority, project, recurrence, actions */}
         <colgroup>
           <col className="w-[160px]" />
           <col />
           <col className="w-[92px]" />
           <col className="w-[84px]" />
+          <col className="w-[110px]" />
           <col className="w-[96px]" />
           <col className="w-10" />
         </colgroup>
@@ -111,6 +115,7 @@ export function TaskList({
           <tbody key={task.id} className="before:content-[''] before:block before:h-2">
             <TaskRow
               task={task}
+              projects={projects}
               sortMode={sortMode}
               onUpdate={onUpdate}
               onDelete={onDelete}

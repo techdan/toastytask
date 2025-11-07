@@ -6,11 +6,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { PrioritySelect } from "./priority-select";
 import { RecurrenceSelect } from "./recurrence-select";
+import { TaskProjectSelect } from "./project-select";
 import { DueDateDisplay } from "./due-date-display";
 import { TaskNotes, TaskNotesPanel } from "./task-notes";
 import { HeatBadge } from "./heat-badge";
 import { getGlowLevel } from "@/lib/scoring/heat-v3";
-import type { Task, Priority, SortMode } from "@/types";
+import type { Task, Priority, SortMode, Project } from "@/types";
 import { cn } from "@/lib/utils";
 
 const priorityStyles: Record<Priority, string> = {
@@ -25,6 +26,7 @@ type TaskWithFreshHeat = Task & { _freshHeat: number };
 
 interface TaskRowProps {
   task: TaskWithFreshHeat;
+  projects: Project[];
   sortMode: SortMode;
   onUpdate: (id: number, updates: Partial<Task>) => void;
   onDelete: (id: number) => void;
@@ -35,7 +37,7 @@ interface TaskRowProps {
   onTouch: (taskId: number) => void;
 }
 
-export function TaskRow({ task, sortMode, onUpdate, onDelete, onComplete, onUncomplete, onHeat, onCool, onTouch }: TaskRowProps) {
+export function TaskRow({ task, projects, sortMode, onUpdate, onDelete, onComplete, onUncomplete, onHeat, onCool, onTouch }: TaskRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(task.title);
   const [notesExpanded, setNotesExpanded] = useState(false);
@@ -105,6 +107,10 @@ export function TaskRow({ task, sortMode, onUpdate, onDelete, onComplete, onUnco
 
   const handleRecurrenceChange = (repeatType: Task["repeatType"]) => {
     onUpdate(task.id, { repeatType });
+  };
+
+  const handleProjectChange = (projectId: number | null) => {
+    onUpdate(task.id, { projectId });
   };
 
   const handleTouchClick = () => {
@@ -272,6 +278,19 @@ export function TaskRow({ task, sortMode, onUpdate, onDelete, onComplete, onUnco
           "px-2 py-1.5 align-middle border-y border-r-0",
           notesExpanded && "border-b-0"
         )}>
+          <div className={cn("min-w-[5.5rem]", isCompleted && "line-through") }>
+            <TaskProjectSelect
+              projects={projects}
+              value={task.projectId ?? null}
+              onValueChange={handleProjectChange}
+              disabled={isCompleted}
+            />
+          </div>
+        </td>
+        <td className={cn(
+          "px-2 py-1.5 align-middle border-y border-r-0",
+          notesExpanded && "border-b-0"
+        )}>
           <div className={cn("min-w-[6rem]", isCompleted && "line-through") }>
             <RecurrenceSelect
               value={task.repeatType}
@@ -297,7 +316,7 @@ export function TaskRow({ task, sortMode, onUpdate, onDelete, onComplete, onUnco
       {/* Notes Panel - Expanded row with colspan */}
       {notesExpanded && (
         <tr className="bg-card">
-          <td colSpan={6} className="px-2 py-2 border-x border-b rounded-b">
+          <td colSpan={7} className="px-2 py-2 border-x border-b rounded-b">
             <TaskNotesPanel taskId={task.id} initialNotes={task.notes} />
           </td>
         </tr>
