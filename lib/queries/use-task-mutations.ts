@@ -163,15 +163,33 @@ export function useCreateTask() {
       // Note: We no longer calculate importanceV1 optimistically
       // It will be calculated on render from base properties
 
-      // Optimistically add task to all task queries
-      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
-        // Don't update if no data exists yet
-        if (!oldTasks || !Array.isArray(oldTasks)) {
-          return oldTasks;
-        }
+      // Optimistically add task ONLY to relevant task queries
+      // - Global (all tasks) queries
+      // - Project-specific queries that match the task's projectId (including null for "No Project")
+      const matchingQueries = queryClient.getQueriesData<Task[]>({ queryKey: ["tasks"] });
+      matchingQueries.forEach(([queryKey, data]) => {
+        const key = queryKey as unknown as readonly unknown[];
+        const params = (Array.isArray(key) && key.length > 1 && typeof key[1] === "object"
+          ? (key[1] as Record<string, unknown>)
+          : undefined);
 
-        // Add the new task at the beginning
-        return [optimisticTask, ...oldTasks];
+        const keyProjectId = params && Object.prototype.hasOwnProperty.call(params, "projectId")
+          ? (params!["projectId"] as number | null | undefined)
+          : undefined;
+
+        const includeInThisQuery =
+          // All tasks queries (no projectId filter specified)
+          keyProjectId === undefined ||
+          // No Project queries
+          (keyProjectId === null && optimisticTask.projectId === null) ||
+          // Project-specific queries that match
+          (typeof keyProjectId === "number" && keyProjectId === optimisticTask.projectId);
+
+        if (!includeInThisQuery) return;
+
+        if (!data || !Array.isArray(data)) return;
+
+        queryClient.setQueryData<Task[]>(queryKey, [optimisticTask, ...data]);
       });
 
       return { previousTasks, optimisticId: optimisticTask.id };
@@ -281,15 +299,37 @@ export function useUpdateTask() {
       });
     },
     onSuccess: (updatedTask) => {
-      // CRITICAL: Replace optimistic update with authoritative server response
-      // This ensures ALL queries have correct importanceV1 and other server-calculated fields
-      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
-        if (!oldTasks || !Array.isArray(oldTasks)) {
-          return oldTasks;
+      // Replace optimistic update with authoritative server response
+      // and ensure membership matches each query's filter (projectId)
+      const queries = queryClient.getQueriesData<Task[]>({ queryKey: ["tasks"] });
+      queries.forEach(([queryKey, data]) => {
+        if (!data || !Array.isArray(data)) return;
+
+        const key = queryKey as unknown as readonly unknown[];
+        const params = (Array.isArray(key) && key.length > 1 && typeof key[1] === "object"
+          ? (key[1] as Record<string, unknown>)
+          : undefined);
+
+        const keyProjectId = params && Object.prototype.hasOwnProperty.call(params, "projectId")
+          ? (params!["projectId"] as number | null | undefined)
+          : undefined;
+
+        const shouldBelong =
+          keyProjectId === undefined ||
+          (keyProjectId === null && updatedTask.projectId === null) ||
+          (typeof keyProjectId === "number" && keyProjectId === updatedTask.projectId);
+
+        const exists = data.some((t) => t.id === updatedTask.id);
+
+        if (shouldBelong) {
+          const next = exists
+            ? data.map((t) => (t.id === updatedTask.id ? updatedTask : t))
+            : [updatedTask, ...data];
+          queryClient.setQueryData<Task[]>(queryKey, next);
+        } else if (exists) {
+          // Remove from queries where it no longer belongs
+          queryClient.setQueryData<Task[]>(queryKey, data.filter((t) => t.id !== updatedTask.id));
         }
-        return oldTasks.map((task) =>
-          task.id === updatedTask.id ? updatedTask : task
-        );
       });
     },
   });

@@ -149,7 +149,7 @@ export function ProjectsSidebar({
           <button
             onClick={() => onSelectProject("all")}
             className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-full text-xs font-medium transition-colors",
+              "flex h-10 w-10 items-center justify-center rounded-full text-xs font-medium transition-colors cursor-pointer",
               selectedProjectId === "all" ? "bg-accent text-accent-foreground" : "bg-background hover:bg-accent"
             )}
             aria-label="Select all projects"
@@ -164,7 +164,7 @@ export function ProjectsSidebar({
       <button
         onClick={() => onSelectProject("all")}
         className={cn(
-          "mb-2 flex w-full items-center justify-between rounded pl-3 pr-2 py-2 text-sm transition-colors hover:bg-accent",
+          "mb-2 flex w-full items-center justify-between rounded pl-3 pr-2 py-2 text-sm transition-colors hover:bg-accent cursor-pointer",
           selectedProjectId === "all" && "bg-accent font-medium"
         )}
       >
@@ -183,7 +183,7 @@ export function ProjectsSidebar({
       <button
         onClick={() => onSelectProject(null)}
         className={cn(
-          "mb-4 flex w-full items-center justify-between rounded pl-3 pr-2 py-2 text-sm transition-colors hover:bg-accent",
+          "mb-4 flex w-full items-center justify-between rounded pl-3 pr-2 py-2 text-sm transition-colors hover:bg-accent cursor-pointer",
           selectedProjectId === null && "bg-accent font-medium"
         )}
       >

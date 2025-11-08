@@ -171,6 +171,48 @@ export function TaskNotesPanel({ taskId, initialNotes }: { taskId: number; initi
     }
   };
 
+  // Convert plain text to React nodes with clickable links
+  const linkifyText = (text: string) => {
+    if (!text) return ["\u00A0"] as (string | JSX.Element)[];
+    const nodes: (string | JSX.Element)[] = [];
+    const urlRegex = /(https?:\/\/[^\s<>")\]}]+)([)\]}.,!?;:]*)/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = urlRegex.exec(text)) !== null) {
+      const [full, url, trailing = ""] = match;
+      const start = match.index;
+      const end = start + full.length;
+
+      if (start > lastIndex) {
+        nodes.push(text.slice(lastIndex, start));
+      }
+
+      // Stop click bubbling so clicking a link doesn't enter edit mode
+      nodes.push(
+        <a
+          key={`${start}-${end}`}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="underline text-blue-600 dark:text-blue-300 hover:opacity-90"
+        >
+          {url}
+        </a>
+      );
+
+      if (trailing) nodes.push(trailing);
+      lastIndex = end;
+    }
+
+    if (lastIndex < text.length) {
+      nodes.push(text.slice(lastIndex));
+    }
+
+    return nodes.length > 0 ? nodes : [text];
+  };
+
   return (
     <div className="mt-0 rounded bg-[#FFFACD] dark:bg-[#6b5d4f] p-3 shadow-sm dark:shadow-[0_1px_3px_rgba(120,53,15,0.3)]">
       {isLoading ? (
@@ -199,7 +241,7 @@ export function TaskNotesPanel({ taskId, initialNotes }: { taskId: number; initi
                     onMouseLeave={() => setHoveredLineIndex(null)}
                   >
                     <div className="text-sm pr-32 text-gray-800 dark:text-gray-200">
-                      {(row.currentText || "\u00A0")} {showDebug && typeof row.ordinal === 'number' && (
+                      {linkifyText(row.currentText || "\u00A0")} {showDebug && typeof row.ordinal === 'number' && (
                         <span className="text-xs text-muted-foreground">[ord {row.ordinal}]</span>
                       )}
                     </div>
