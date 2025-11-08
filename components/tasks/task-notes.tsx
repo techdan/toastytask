@@ -181,8 +181,8 @@ export function TaskNotesPanel({ taskId, initialNotes }: { taskId: number; initi
                     onMouseLeave={() => setHoveredLineIndex(null)}
                   >
                     <div className="text-sm pr-32 text-gray-800 dark:text-gray-200">
-                      {(row.currentText || "\u00A0")} {showDebug && typeof (row as any).ordinal === 'number' && (
-                        <span className="text-xs text-muted-foreground">[ord {(row as any).ordinal}]</span>
+                      {(row.currentText || "\u00A0")} {showDebug && typeof row.ordinal === 'number' && (
+                        <span className="text-xs text-muted-foreground">[ord {row.ordinal}]</span>
                       )}
                     </div>
 

@@ -21,6 +21,7 @@ export interface INoteRepository {
   updateNoteRow(noteRowId: number, text: string): Promise<NoteRowWithVersion>;
   deleteNoteRow(noteRowId: number): Promise<void>;
   reorderNoteRows(taskId: number, ordinals: Record<number, number>): Promise<void>;
+  reorderNoteRowsBulk(taskId: number, ordinals: Record<number, number>): Promise<void>;
   getNoteVersionHistory(noteRowId: number): Promise<NoteRowVersion[]>;
   restoreVersion(noteRowId: number, versionId: number): Promise<NoteRowWithVersion>;
 }

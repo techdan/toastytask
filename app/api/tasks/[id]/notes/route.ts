@@ -98,42 +98,8 @@ export async function POST(
     const updatedNotes: typeof existingNotes = [];
     const usedOld = new Set<number>();
 
-    const existingOrdinals = existingNotes.map(n => n.ordinal);
-    const minOrdinal = existingOrdinals.length ? Math.min(...existingOrdinals) : 0;
-    const maxOrdinal = existingOrdinals.length ? Math.max(...existingOrdinals) : -1;
-
-    // Helper to compute an ordinal for a new insertion that avoids touching other rows
-    const computeInsertOrdinal = (newIndex: number): number => {
-      if (existingNotes.length === 0) return 0;
-      if (newIndex === 0) return minOrdinal - 1;
-      // Find prev placed row in updatedNotes
-      let prevOrdinal: number | null = null;
-      for (let i = newIndex - 1; i >= 0; i--) {
-        const prev = updatedNotes[i];
-        if (prev) { prevOrdinal = prev.ordinal; break; }
-      }
-      // Find next existing row that will end up after this index
-      let nextOrdinal: number | null = null;
-      for (let i = newIndex + 1; i <= updatedNotes.length; i++) {
-        const nxt = updatedNotes[i];
-        if (nxt) { nextOrdinal = nxt.ordinal; break; }
-      }
-      if (prevOrdinal == null && nextOrdinal == null) {
-        return maxOrdinal + 1;
-      }
-      if (prevOrdinal == null) {
-        // Insert before first known
-        return (nextOrdinal as number) - 1;
-      }
-      if (nextOrdinal == null) {
-        return prevOrdinal + 1;
-      }
-      // Try midpoint if there is room
-      if ((nextOrdinal as number) - (prevOrdinal as number) >= 2) {
-        return Math.floor(((prevOrdinal as number) + (nextOrdinal as number)) / 2);
-      }
-      return prevOrdinal + 1;
-    };
+    // Note: we assign new rows provisional ordinals equal to their newIndex.
+    // We normalize to contiguous ordinals [0..n-1] below.
 
     // First pass: process equal/replace/insert in order of new indices
     // We will collect deletions after by looking at unused old indices
@@ -186,14 +152,6 @@ export async function POST(
     // Assemble final notes in the new line order
     const finalNotesUnordered = updatedNotes.filter(n => n !== undefined);
 
-    // Detect duplicates or mismatches and normalize ordinals when needed
-    const seen = new Set<number>();
-    let hasDuplicate = false;
-    for (const row of finalNotesUnordered) {
-      if (seen.has(row.ordinal)) { hasDuplicate = true; break; }
-      seen.add(row.ordinal);
-    }
-
     // Always normalize to contiguous ordinals [0..n-1] after save
     {
       // Compute contiguous ordinals [0..n-1] in the displayed order
@@ -201,15 +159,17 @@ export async function POST(
       finalNotesUnordered.forEach((row, idx) => {
         if (row.ordinal !== idx) {
           ordinalsToUpdate[row.id] = idx;
-          (row as any).ordinal = idx;
         }
       });
       if (Object.keys(ordinalsToUpdate).length > 0) {
-        // Use bulk update when available; falls back to per-row updates otherwise
-        if (typeof (noteRepository as any).reorderNoteRowsBulk === 'function') {
-          await (noteRepository as any).reorderNoteRowsBulk(taskId, ordinalsToUpdate);
-        } else {
-          await noteRepository.reorderNoteRows(taskId, ordinalsToUpdate);
+        await noteRepository.reorderNoteRowsBulk(taskId, ordinalsToUpdate);
+      }
+      // Apply updated ordinals in-memory for the response
+      for (let i = 0; i < finalNotesUnordered.length; i++) {
+        const row = finalNotesUnordered[i];
+        const newOrd = ordinalsToUpdate[row.id];
+        if (typeof newOrd === 'number') {
+          (finalNotesUnordered[i] = { ...row, ordinal: newOrd });
         }
       }
     }
