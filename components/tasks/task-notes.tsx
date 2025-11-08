@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { Notebook, NotebookText, NotebookPen } from "lucide-react";
@@ -173,8 +173,8 @@ export function TaskNotesPanel({ taskId, initialNotes }: { taskId: number; initi
 
   // Convert plain text to React nodes with clickable links
   const linkifyText = (text: string) => {
-    if (!text) return ["\u00A0"] as (string | JSX.Element)[];
-    const nodes: (string | JSX.Element)[] = [];
+    if (!text) return ["\u00A0"] as ReactNode[];
+    const nodes: ReactNode[] = [];
     const urlRegex = /(https?:\/\/[^\s<>")\]}]+)([)\]}.,!?;:]*)/g;
     let lastIndex = 0;
     let match: RegExpExecArray | null;
