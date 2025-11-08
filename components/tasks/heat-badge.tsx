@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Tooltip,
@@ -137,12 +138,6 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
                   </div>
                 )}
               </div>
-              <div className="border-t pt-2">
-                <div className="flex justify-between items-center text-xs font-semibold gap-4">
-                  <span>Total Importance:</span>
-                  <span className="font-mono tabular-nums">{importance}/14 ({Math.round((importance / 14) * 100)}%)</span>
-                </div>
-              </div>
             </div>
           </TooltipContent>
         </Tooltip>
@@ -160,17 +155,15 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="flex items-center gap-1">
-            <div
-              className={cn(
-                "flex h-5 w-6 shrink-0 items-center justify-center rounded text-[10px] font-bold",
-                isCompleted
-                  ? "bg-muted/40 text-muted-foreground/60"
-                  : "text-white " + getHeatColorFromConfig(heat)
-              )}
-            >
-              {heatDisplay}
-            </div>
+          <div
+            className={cn(
+              "flex h-5 w-6 shrink-0 items-center justify-center rounded text-[10px] font-bold",
+              isCompleted
+                ? "bg-muted/40 text-muted-foreground/60"
+                : "text-white " + getHeatColorFromConfig(heat)
+            )}
+          >
+            {heatDisplay}
           </div>
         </TooltipTrigger>
         <TooltipContent className="max-w-sm">
@@ -203,6 +196,8 @@ function HeatBreakdownTooltip({
   task,
   stageLabel,
 }: HeatBreakdownTooltipProps) {
+  const searchParams = useSearchParams();
+  const showDebug = ((searchParams.get("DEBUG") || "").toLowerCase() === "true");
   const heatDisplay = Math.round(breakdown.totalHeat); // V4: Display as points (0-145)
   const starLabels = ['None', 'Blue (+1)', 'Yellow (+2)', 'Orange (+3)'];
 
@@ -227,9 +222,11 @@ function HeatBreakdownTooltip({
         <div className="font-semibold">
           Heat: {heatDisplay} ({stageLabel})
         </div>
-        <div className="text-[10px] text-muted-foreground/60 font-mono">
-          Task ID: {task.id}
-        </div>
+        {showDebug && (
+          <div className="text-[10px] text-muted-foreground/60 font-mono">
+            Task ID: {task.id}
+          </div>
+        )}
       </div>
 
       {/* Components */}
@@ -239,12 +236,12 @@ function HeatBreakdownTooltip({
           <div className="flex justify-between items-center gap-4">
             <span className="text-muted-foreground">Base Importance:</span>
             <span className="font-mono tabular-nums">
-              {breakdown.importancePoints} pts ({calculateImportanceV1(task)}/14)
+              {breakdown.importancePoints} pts ({calculateImportanceV1(task)})
             </span>
           </div>
           <div className="text-muted-foreground/80 text-[10px] ml-2 space-y-0.5">
             <div className="text-muted-foreground/60">
-              Raw: {breakdown.importancePointsUnrounded.toFixed(2)} → Rounded: {breakdown.importancePoints}
+              Raw: {breakdown.importancePointsUnrounded.toFixed(2)}
             </div>
             <div>Priority ({task.priority}): {task.priority === 'low' ? 2 : task.priority === 'medium' ? 3 : task.priority === 'high' ? 4 : 5} pts</div>
             {task.dueAt && (
@@ -309,7 +306,7 @@ function HeatBreakdownTooltip({
                   {breakdown.heatAdjustment > 0 ? "Heated" : "Cooled"} {formatTimeAgo(task.lastHeatTouchedAt)}
                 </div>
                 <div className="text-muted-foreground/60">
-                  Original: {breakdown.heatAdjustment >= 0 ? '+' : ''}{breakdown.heatAdjustment} pts (integer)
+                  Original: {breakdown.heatAdjustment >= 0 ? '+' : ''}{breakdown.heatAdjustment} pts
                 </div>
                 {breakdown.decayFactor < 0.999 && (
                   <>
@@ -319,7 +316,7 @@ function HeatBreakdownTooltip({
                       {breakdown.heatAdjustment > 0 ? '7d' : '3d'} half-life)
                     </div>
                     <div className="text-muted-foreground/60">
-                      After decay: {breakdown.decayedAdjustmentUnrounded.toFixed(2)} → {breakdown.decayedAdjustmentRounded} pts
+                      After decay: {breakdown.decayedAdjustmentUnrounded.toFixed(2)} pts
                     </div>
                   </>
                 )}
@@ -338,7 +335,7 @@ function HeatBreakdownTooltip({
           </div>
           <div className="text-muted-foreground/80 text-[10px] ml-2 space-y-0.5">
             <div className="text-muted-foreground/60">
-              Raw: {breakdown.recencyPointsUnrounded.toFixed(2)} → Rounded: {breakdown.recencyPoints}
+              Raw: {breakdown.recencyPointsUnrounded.toFixed(2)}
             </div>
             <div>
               Last touched {formatTimeAgo(task.lastTouchedAt)}
@@ -347,18 +344,7 @@ function HeatBreakdownTooltip({
         </div>
       </div>
 
-      {/* Total with Calculation */}
-      <div className="border-t pt-2">
-        <div className="flex justify-between items-center text-xs font-semibold gap-4">
-          <span>Total Heat:</span>
-          <span className="font-mono tabular-nums">
-            {heatDisplay} pts (of 145)
-          </span>
-        </div>
-        <div className="text-muted-foreground/60 text-[10px] mt-1 font-mono">
-          = {breakdown.importancePoints} + {breakdown.adjustmentPoints >= 0 ? '+' : ''}{breakdown.adjustmentPoints} + {breakdown.recencyPoints}
-        </div>
-      </div>
+      {/* Total removed per design: no summary row */}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { Notebook, NotebookText, NotebookPen } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,16 +16,29 @@ interface TaskNotesProps {
   notesLastModified?: Date | null;
 }
 
-export function TaskNotes({ isExpanded, onToggle, notesCount = 0, notesLastModified = null }: TaskNotesProps) {
+export function TaskNotes({ taskId, isExpanded, onToggle, notesCount = 0, notesLastModified = null }: TaskNotesProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Prefer local cache for instant UX after edits
+  const cachedNotes = queryClient.getQueryData<NoteRowData[]>(["notes", taskId]) || [];
+  const hasLocalNotes = cachedNotes.length > 0;
 
   // Derive metadata from task props (passed from API)
-  const hasContent = notesCount > 0;
+  const hasContent = hasLocalNotes || notesCount > 0;
   // Convert to Date object if it's not already (handles serialization from API)
   const lastModifiedDate = notesLastModified
     ? notesLastModified instanceof Date
       ? notesLastModified
       : new Date(notesLastModified)
+      : null;
+
+  // If cache has notes, prefer the latest updatedAt from cache for hover text
+  const cachedLastModified = hasLocalNotes
+    ? cachedNotes.reduce<Date | null>((acc, n) => {
+        const d = n.updatedAt instanceof Date ? n.updatedAt : new Date(n.updatedAt);
+        return !acc || d > acc ? d : acc;
+      }, null)
     : null;
 
   // Format the last modified date for display
@@ -64,7 +78,11 @@ export function TaskNotes({ isExpanded, onToggle, notesCount = 0, notesLastModif
             hasContent ? "text-foreground/70 hover:text-foreground" :
             "text-muted-foreground/40 hover:text-muted-foreground"
         )}
-        title={hasContent ? (lastModifiedDate ? `Notes (${formatLastModified(lastModifiedDate)})` : "Notes") : "Add notes"}
+        title={hasContent
+          ? ((cachedLastModified || lastModifiedDate)
+              ? `Notes (${formatLastModified(cachedLastModified || (lastModifiedDate as Date))})`
+              : "Notes")
+          : "Add notes"}
       >
         {isExpanded ? (
           <NotebookPen className="h-4 w-4" />
