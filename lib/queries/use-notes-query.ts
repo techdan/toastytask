@@ -4,6 +4,7 @@ export interface NoteRowData {
   id: number;
   currentText: string;
   updatedAt: number | Date;
+  ordinal?: number;
 }
 
 interface NotesResponse {

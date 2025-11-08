@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Notebook, NotebookText, NotebookPen } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -89,6 +90,8 @@ export function TaskNotesPanel({ taskId, initialNotes }: { taskId: number; initi
   const [isEditing, setIsEditing] = useState(false);
   const [notesText, setNotesText] = useState("");
   const [hoveredLineIndex, setHoveredLineIndex] = useState<number | null>(null);
+  const searchParams = useSearchParams();
+  const showDebug = (searchParams.get("DEBUG") || "").toLowerCase() === "true";
 
   // Use query hook for fetching notes with caching
   // If initialNotes are provided (from task cache), use them for instant display
@@ -177,7 +180,11 @@ export function TaskNotesPanel({ taskId, initialNotes }: { taskId: number; initi
                     onMouseEnter={() => setHoveredLineIndex(index)}
                     onMouseLeave={() => setHoveredLineIndex(null)}
                   >
-                    <div className="text-sm pr-32 text-gray-800 dark:text-gray-200">{row.currentText || "\u00A0"}</div>
+                    <div className="text-sm pr-32 text-gray-800 dark:text-gray-200">
+                      {(row.currentText || "\u00A0")} {showDebug && typeof (row as any).ordinal === 'number' && (
+                        <span className="text-xs text-muted-foreground">[ord {(row as any).ordinal}]</span>
+                      )}
+                    </div>
 
                     {/* Last modified date on hover - right edge */}
                     {hoveredLineIndex === index && (

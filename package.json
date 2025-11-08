@@ -16,6 +16,8 @@
     "pg:create": "node lib/db/scripts/create-postgres-database.js",
     "pg:migrate": "node lib/db/scripts/apply-postgres-migration.js",
     "pg:verify": "node lib/db/scripts/verify-postgres-schema.js",
+    "pg:apply:notes-trigger": "node lib/db/scripts/apply-sql-file.js lib/db/migrations/0004_fix_note_rows_updated_at_trigger.sql",
+    "pg:show:note-rows-trigger": "node lib/db/scripts/show-note-rows-trigger.js",
     "pg:import": "node lib/db/scripts/migrate-sqlite-to-postgres.js",
     "supabase:setup": "node lib/db/scripts/setup-supabase.js",
     "supabase:import": "node lib/db/scripts/import-to-supabase.js"

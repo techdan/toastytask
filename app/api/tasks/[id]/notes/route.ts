@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { noteRepository, taskRepository } from "@/lib/db/repositories";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
 import { calculateHeat } from "@/lib/scoring/heat-v3";
+import { diffNoteLines, trimTrailingBlanks, defaultNormalize } from "@/lib/notes/diff-note-lines";
 
 // Force Node.js runtime for better-sqlite3 compatibility
 export const runtime = 'nodejs';
@@ -86,47 +87,135 @@ export async function POST(
       return NextResponse.json({ notes: [] });
     }
 
-    // Split text into lines
-    const lines = text.split("\n");
+    // Split and normalize lines: trim trailing blanks; equality ignores whitespace
+    const rawLines = text.split("\n");
+    const nextLines = trimTrailingBlanks(rawLines);
 
-    // Update or create note rows - only update if text actually changed
-    const updatedNotes = [];
+    const oldLines = existingNotes.map(r => r.currentText || "");
+    const { ops } = diffNoteLines(oldLines, nextLines, { normalize: defaultNormalize });
 
-    for (let i = 0; i < lines.length; i++) {
-      const lineText = lines[i];
+    // Build new ordered list and track required changes
+    const updatedNotes: typeof existingNotes = [];
+    const usedOld = new Set<number>();
 
-      if (existingNotes[i]) {
-        // Only update if the text has actually changed
-        if (existingNotes[i].currentText !== lineText) {
-          const updated = await noteRepository.updateNoteRow(existingNotes[i].id, lineText);
-          updatedNotes.push(updated);
+    const existingOrdinals = existingNotes.map(n => n.ordinal);
+    const minOrdinal = existingOrdinals.length ? Math.min(...existingOrdinals) : 0;
+    const maxOrdinal = existingOrdinals.length ? Math.max(...existingOrdinals) : -1;
+
+    // Helper to compute an ordinal for a new insertion that avoids touching other rows
+    const computeInsertOrdinal = (newIndex: number): number => {
+      if (existingNotes.length === 0) return 0;
+      if (newIndex === 0) return minOrdinal - 1;
+      // Find prev placed row in updatedNotes
+      let prevOrdinal: number | null = null;
+      for (let i = newIndex - 1; i >= 0; i--) {
+        const prev = updatedNotes[i];
+        if (prev) { prevOrdinal = prev.ordinal; break; }
+      }
+      // Find next existing row that will end up after this index
+      let nextOrdinal: number | null = null;
+      for (let i = newIndex + 1; i <= updatedNotes.length; i++) {
+        const nxt = updatedNotes[i];
+        if (nxt) { nextOrdinal = nxt.ordinal; break; }
+      }
+      if (prevOrdinal == null && nextOrdinal == null) {
+        return maxOrdinal + 1;
+      }
+      if (prevOrdinal == null) {
+        // Insert before first known
+        return (nextOrdinal as number) - 1;
+      }
+      if (nextOrdinal == null) {
+        return prevOrdinal + 1;
+      }
+      // Try midpoint if there is room
+      if ((nextOrdinal as number) - (prevOrdinal as number) >= 2) {
+        return Math.floor(((prevOrdinal as number) + (nextOrdinal as number)) / 2);
+      }
+      return prevOrdinal + 1;
+    };
+
+    // First pass: process equal/replace/insert in order of new indices
+    // We will collect deletions after by looking at unused old indices
+    for (const op of ops) {
+      if (op.op === "equal") {
+        const row = existingNotes[op.oldIndex];
+        // If only whitespace differs, ignore update; keep original text
+        // Always position to newIndex
+        updatedNotes[op.newIndex] = row;
+        usedOld.add(op.oldIndex);
+        if (!op.textEqual) {
+          // Whitespace-only difference: do not count as change
+        }
+      } else if (op.op === "replace") {
+        const row = existingNotes[op.oldIndex];
+        const newText = nextLines[op.newIndex];
+        if (row.currentText !== newText) {
+          const updated = await noteRepository.updateNoteRow(row.id, newText);
+          updatedNotes[op.newIndex] = updated;
           notesChanged = true;
         } else {
-          // No change - keep existing note row as-is
-          updatedNotes.push(existingNotes[i]);
+          // Exact text equal fallback (should be rare) -> treat as equal
+          updatedNotes[op.newIndex] = row;
         }
-      } else {
-        // Create new row
+        usedOld.add(op.oldIndex);
+      } else if (op.op === "insert") {
+        const newText = nextLines[op.newIndex];
         const created = await noteRepository.createNoteRow(
           {
             taskId,
-            ordinal: i,
+            // Assign target index; final compaction will normalize to contiguous ordinals
+            ordinal: op.newIndex,
             activeVersionId: null,
           },
-          lineText
+          newText
         );
-        updatedNotes.push(created);
+        updatedNotes[op.newIndex] = created;
         notesChanged = true;
       }
     }
 
-    // Delete any extra rows
-    if (lines.length < existingNotes.length) {
-      for (let i = lines.length; i < existingNotes.length; i++) {
+    // Deletions: any old index not used (includes trimmed trailing blanks)
+    for (let i = 0; i < existingNotes.length; i++) {
+      if (!usedOld.has(i)) {
         await noteRepository.deleteNoteRow(existingNotes[i].id);
         notesChanged = true;
       }
     }
+
+    // Assemble final notes in the new line order
+    const finalNotesUnordered = updatedNotes.filter(n => n !== undefined);
+
+    // Detect duplicates or mismatches and normalize ordinals when needed
+    const seen = new Set<number>();
+    let hasDuplicate = false;
+    for (const row of finalNotesUnordered) {
+      if (seen.has(row.ordinal)) { hasDuplicate = true; break; }
+      seen.add(row.ordinal);
+    }
+
+    // Always normalize to contiguous ordinals [0..n-1] after save
+    {
+      // Compute contiguous ordinals [0..n-1] in the displayed order
+      const ordinalsToUpdate: Record<number, number> = {};
+      finalNotesUnordered.forEach((row, idx) => {
+        if (row.ordinal !== idx) {
+          ordinalsToUpdate[row.id] = idx;
+          (row as any).ordinal = idx;
+        }
+      });
+      if (Object.keys(ordinalsToUpdate).length > 0) {
+        // Use bulk update when available; falls back to per-row updates otherwise
+        if (typeof (noteRepository as any).reorderNoteRowsBulk === 'function') {
+          await (noteRepository as any).reorderNoteRowsBulk(taskId, ordinalsToUpdate);
+        } else {
+          await noteRepository.reorderNoteRows(taskId, ordinalsToUpdate);
+        }
+      }
+    }
+
+    // Sort by ordinal for response consistency
+    const finalNotes = finalNotesUnordered.sort((a, b) => a.ordinal - b.ordinal);
 
     if (notesChanged) {
       const touchedTask = await taskRepository.touch(taskId, userId);
@@ -139,7 +228,7 @@ export async function POST(
     // V3: Note edits no longer tracked for engagement (removed otherTouchCount)
     // Heat V3 relies on manual heat/cool adjustments only
 
-    return NextResponse.json({ notes: updatedNotes });
+    return NextResponse.json({ notes: finalNotes });
   } catch (error) {
     console.error("Failed to update notes:", error);
     return NextResponse.json({ error: "Failed to update notes" }, { status: 500 });

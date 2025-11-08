@@ -197,13 +197,32 @@ export class NoteRepository implements INoteRepository {
   }
 
   async reorderNoteRows(taskId: number, ordinals: Record<number, number>): Promise<void> {
-    // Update ordinals for all affected rows
+    // Update ordinals for all affected rows WITHOUT touching updatedAt
     for (const [noteRowId, ordinal] of Object.entries(ordinals)) {
       await this.db
         .update(noteRows)
-        .set({ ordinal, updatedAt: new Date() })
+        .set({ ordinal })
         .where(eq(noteRows.id, parseInt(noteRowId)));
     }
+  }
+
+  // Bulk reorder ordinals using a single UPDATE ... FROM (VALUES ...) for Postgres
+  async reorderNoteRowsBulk(taskId: number, ordinals: Record<number, number>): Promise<void> {
+    const pairs = Object.entries(ordinals);
+    if (pairs.length === 0) return;
+
+    // Build VALUES list: (id, ordinal)
+    const valuesSql = pairs
+      .map(([id, ord]) => `(${parseInt(id)}, ${ord})`)
+      .join(", ");
+
+    // Execute bulk update (Postgres specific)
+    await this.db.execute(sql`
+      UPDATE ${noteRows} AS nr
+      SET ordinal = v.ordinal
+      FROM (VALUES ${sql.raw(valuesSql)}) AS v(id, ordinal)
+      WHERE nr.id = v.id AND nr.task_id = ${taskId} AND (nr.ordinal IS DISTINCT FROM v.ordinal)
+    `);
   }
 
   async getNoteVersionHistory(noteRowId: number): Promise<NoteRowVersion[]> {

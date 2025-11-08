@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { NoteRowData } from "./use-notes-query";
+import { diffNoteLines, trimTrailingBlanks, defaultNormalize } from "@/lib/notes/diff-note-lines";
 
 interface SaveNotesData {
   taskId: number;
@@ -47,15 +48,59 @@ export function useSaveNotes() {
         return { previousNotes };
       }
 
-      // Optimistically update the cache with the new text
-      const lines = text.split("\n");
-      const optimisticNotes: NoteRowData[] = lines.map((line, index) => ({
-        id: previousNotes?.[index]?.id ?? index, // Keep existing IDs or use index temporarily
-        currentText: line,
-        updatedAt: new Date(), // Set to current time
-      }));
+      // Optimistically update using smart diff so unchanged lines keep timestamps
+      const nextLines = trimTrailingBlanks(text.split("\n"));
+      const oldLines = (previousNotes ?? []).map(r => r.currentText ?? "");
+      const { ops } = diffNoteLines(oldLines, nextLines, { normalize: defaultNormalize });
 
-      queryClient.setQueryData(["notes", taskId], optimisticNotes);
+      const optimisticNotes: NoteRowData[] = [];
+      const usedOld = new Set<number>();
+
+      for (const op of ops) {
+        if (op.op === "equal") {
+          const row = previousNotes?.[op.oldIndex];
+          if (row) {
+            optimisticNotes[op.newIndex] = { ...row }; // preserve updatedAt and ordinal as-is for visibility
+            usedOld.add(op.oldIndex);
+          }
+        } else if (op.op === "replace") {
+          const row = previousNotes?.[op.oldIndex];
+          const newText = nextLines[op.newIndex];
+          if (row) {
+            optimisticNotes[op.newIndex] = {
+              ...row,
+              currentText: newText,
+              updatedAt: new Date(),
+              // keep existing ordinal for visibility during optimism
+              ordinal: row.ordinal,
+            };
+            usedOld.add(op.oldIndex);
+          } else {
+            optimisticNotes[op.newIndex] = {
+              id: -1000000 - op.newIndex, // temporary unique ID
+              currentText: newText,
+              updatedAt: new Date(),
+              ordinal: op.newIndex,
+            };
+          }
+        } else if (op.op === "insert") {
+          const newText = nextLines[op.newIndex];
+          optimisticNotes[op.newIndex] = {
+            // ensure unique temporary ID that won't collide with existing rows
+            id: -1000000 - op.newIndex,
+            currentText: newText,
+            updatedAt: new Date(),
+            ordinal: op.newIndex,
+          };
+        }
+      }
+
+      // Deletions are implicit: we simply don't include unused old indices
+
+      // Densify array
+      const dense = optimisticNotes.filter(n => n !== undefined);
+
+      queryClient.setQueryData(["notes", taskId], dense);
 
       // Return context with the previous value for rollback
       return { previousNotes };
