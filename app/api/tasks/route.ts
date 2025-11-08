@@ -27,8 +27,20 @@ export async function GET(request: Request) {
 
     // Filter by project if specified
     if (projectId !== null) {
-      const pid = projectId === "null" ? null : parseInt(projectId, 10);
-      tasks = tasks.filter((task) => task.projectId === pid);
+      // Acceptable values:
+      // - "null"   → filter for tasks with no project
+      // - number    → filter for that project id
+      // Any other value (e.g., "all", "undefined", "") is treated as "no filter" for resilience
+      if (projectId === "null") {
+        tasks = tasks.filter((task) => task.projectId === null);
+      } else if (projectId.trim().length > 0) {
+        const parsed = Number(projectId);
+        if (Number.isFinite(parsed)) {
+          const pid = parsed;
+          tasks = tasks.filter((task) => task.projectId === pid);
+        }
+        // else: ignore invalid projectId value
+      }
     }
 
     // Calculate importance for heat calculation and sorting

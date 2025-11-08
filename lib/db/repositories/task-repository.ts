@@ -282,6 +282,7 @@ export class TaskRepository implements ITaskRepository {
         .update(tasks)
         .set({
           dueAt: nextDueDate,
+          lastTouchedAt: new Date(),
           updatedAt: new Date(),
         })
         .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
@@ -294,6 +295,7 @@ export class TaskRepository implements ITaskRepository {
       .update(tasks)
       .set({
         completedAt: new Date(),
+        lastTouchedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
@@ -306,6 +308,7 @@ export class TaskRepository implements ITaskRepository {
       .update(tasks)
       .set({
         completedAt: null,
+        lastTouchedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
