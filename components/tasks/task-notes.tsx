@@ -222,7 +222,7 @@ export function TaskNotesPanel({ taskId, initialNotes }: { taskId: number; initi
           value={notesText}
           onChange={(e) => setNotesText(e.target.value)}
           onBlur={handleBlur}
-          className="min-h-[100px] resize-y bg-transparent text-sm border-0 focus-visible:ring-0 text-gray-800 dark:text-gray-200"
+          className="min-h-[100px] resize-y bg-transparent text-sm leading-5 border-0 focus-visible:ring-0 text-gray-800 dark:text-gray-200"
           placeholder="Add notes here..."
           autoFocus
         />
@@ -236,11 +236,11 @@ export function TaskNotesPanel({ taskId, initialNotes }: { taskId: number; initi
                 return (
                   <div
                     key={row.id}
-                    className="group/line relative py-1 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                    className="group/line relative hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                     onMouseEnter={() => setHoveredLineIndex(index)}
                     onMouseLeave={() => setHoveredLineIndex(null)}
                   >
-                    <div className="text-sm pr-32 text-gray-800 dark:text-gray-200">
+                    <div className="text-sm leading-5 pr-32 text-gray-800 dark:text-gray-200">
                       {linkifyText(row.currentText || "\u00A0")} {showDebug && typeof row.ordinal === 'number' && (
                         <span className="text-xs text-muted-foreground">[ord {row.ordinal}]</span>
                       )}

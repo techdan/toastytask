@@ -24,6 +24,7 @@ export interface INoteRepository {
   reorderNoteRowsBulk(taskId: number, ordinals: Record<number, number>): Promise<void>;
   getNoteVersionHistory(noteRowId: number): Promise<NoteRowVersion[]>;
   restoreVersion(noteRowId: number, versionId: number): Promise<NoteRowWithVersion>;
+  getNoteRowById(noteRowId: number): Promise<NoteRowWithVersion | undefined>;
 }
 
 export class NoteRepository implements INoteRepository {
@@ -128,6 +129,28 @@ export class NoteRepository implements INoteRepository {
     }
 
     return rowsWithText;
+  }
+
+  async getNoteRowById(noteRowId: number): Promise<NoteRowWithVersion | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(noteRows)
+      .where(eq(noteRows.id, noteRowId))
+      .limit(1);
+
+    if (!row) return undefined;
+
+    let currentText = "";
+    if (row.activeVersionId) {
+      const [version] = await this.db
+        .select()
+        .from(noteRowVersions)
+        .where(eq(noteRowVersions.id, row.activeVersionId))
+        .limit(1);
+      currentText = version?.text || "";
+    }
+
+    return { ...row, currentText };
   }
 
   async createNoteRow(noteRow: NewNoteRow, text: string): Promise<NoteRowWithVersion> {

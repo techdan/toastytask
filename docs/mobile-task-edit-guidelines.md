@@ -43,8 +43,20 @@ Notes on the top row:
 - Notes (multi‑line text)
   - Fetch: `task.notes` array (attached by server in GET /api/tasks)
     - Shape: `{ id, currentText, updatedAt }[]` plus `notesCount`, `notesLastModified`
-  - Update: Notes editing endpoints are not yet exposed under `/api/notes` in this repo. Mobile can display and, if needed, stage edits locally for a future endpoint (out of scope of current API). Task save (PATCH) does not accept notes content.
+  - Update (full‑text only): `POST /api/tasks/{taskId}/notes`
+    - Body: `{ "text": "Line 1\nLine 2\nLine 3" }`
+    - Server behavior: Splits into lines, diffs against existing rows, updates only changed lines (versioned), deletes removed lines, inserts new lines, and normalizes ordinals to 0..n‑1. Trailing blank lines are trimmed. Unchanged lines keep timestamps to avoid noisy updates.
+    - Side effects: Touches the parent task, recomputes importance and heat, and updates `lastTouchedAt`.
   - Display behavior: Plain text is rendered; any `http://` or `https://` URLs are auto‑linked and open in a new browser tab/window (`target="_blank"`, `rel="noopener noreferrer"`). Tapping a link does not enter edit mode.
+
+Example full‑text save:
+
+```http
+POST /api/tasks/123/notes
+Content-Type: application/json
+
+{ "text": "Draft copy ready\nQA checklist\nShip plan" }
+```
 
 - Priority
   - Values: `"low" | "medium" | "high" | "top"`

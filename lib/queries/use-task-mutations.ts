@@ -393,23 +393,47 @@ function calculateOptimisticNextDueDate(currentDueDate: Date | null | number, re
     baseDate = now;
   }
 
-  const nextDate = new Date(baseDate);
+  // Helper: days in month
+  const daysInMonth = (year: number, monthIndex: number) => new Date(year, monthIndex + 1, 0).getDate();
 
   switch (repeatType) {
-    case "daily":
-      nextDate.setDate(nextDate.getDate() + 1);
-      break;
-    case "weekly":
-      nextDate.setDate(nextDate.getDate() + 7);
-      break;
-    case "monthly":
-      nextDate.setMonth(nextDate.getMonth() + 1);
-      break;
+    case "daily": {
+      const next = new Date(baseDate);
+      next.setDate(next.getDate() + 1);
+      return next;
+    }
+    case "weekly": {
+      const next = new Date(baseDate);
+      next.setDate(next.getDate() + 7);
+      return next;
+    }
+    case "monthly": {
+      const anchor = baseDate.getDate();
+      const ref = now > baseDate ? now : baseDate;
+
+      let year = ref.getFullYear();
+      let month = ref.getMonth();
+
+      if (ref.getDate() >= anchor) {
+        month += 1;
+        if (month > 11) {
+          month = 0;
+          year += 1;
+        }
+      }
+
+      const dim = daysInMonth(year, month);
+      const day = Math.min(anchor, dim);
+
+      const next = new Date(baseDate);
+      next.setFullYear(year);
+      next.setMonth(month);
+      next.setDate(day);
+      return next;
+    }
     default:
       return baseDate;
   }
-
-  return nextDate;
 }
 
 // Hook: Complete task (handles recurring tasks)

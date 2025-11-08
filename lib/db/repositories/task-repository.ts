@@ -12,24 +12,58 @@ import { getDatabase } from "@/lib/db/client";
 function calculateNextDueDate(currentDueDate: Date | null, repeatType: string): Date {
   const now = new Date();
   const baseDate = currentDueDate || now;
-  const nextDate = new Date(baseDate);
+
+  // Helper: days in month
+  const daysInMonth = (year: number, monthIndex: number) => {
+    return new Date(year, monthIndex + 1, 0).getDate();
+  };
 
   switch (repeatType) {
-    case RepeatType.DAILY:
-      nextDate.setDate(nextDate.getDate() + 1);
-      break;
-    case RepeatType.WEEKLY:
-      nextDate.setDate(nextDate.getDate() + 7);
-      break;
-    case RepeatType.MONTHLY:
-      nextDate.setMonth(nextDate.getMonth() + 1);
-      break;
+    case RepeatType.DAILY: {
+      const next = new Date(baseDate);
+      next.setDate(next.getDate() + 1);
+      return next;
+    }
+    case RepeatType.WEEKLY: {
+      const next = new Date(baseDate);
+      next.setDate(next.getDate() + 7);
+      return next;
+    }
+    case RepeatType.MONTHLY: {
+      // Smarter monthly advance:
+      // - Keep the same day-of-month as the original due date when possible
+      // - If completing late, advance to the next occurrence that is not in the past
+      // - If target month has fewer days, clamp to last day of that month
+      const anchor = baseDate.getDate();
+
+      // Reference point: the later of current due date or now
+      const ref = now > baseDate ? now : baseDate;
+
+      let year = ref.getFullYear();
+      let month = ref.getMonth();
+
+      // If the reference day has already passed (>= anchor), move to next month
+      if (ref.getDate() >= anchor) {
+        month += 1;
+        if (month > 11) {
+          month = 0;
+          year += 1;
+        }
+      }
+
+      const dim = daysInMonth(year, month);
+      const day = Math.min(anchor, dim);
+
+      const next = new Date(baseDate);
+      next.setFullYear(year);
+      next.setMonth(month);
+      next.setDate(day);
+      return next;
+    }
     default:
-      // If no repeat type or "none", return the current date
+      // If no repeat type or "none", return the current date (no change)
       return baseDate;
   }
-
-  return nextDate;
 }
 
 export class TaskRepository implements ITaskRepository {

@@ -271,6 +271,20 @@ Both endpoints accept optional context from the client to avoid refetching the e
   - Blank/whitespace-only text deletes all note rows.
 - **Response:** `{ "notes": NoteRow[] }` (post-update snapshot).
 
+#### `PATCH /api/notes/{noteId}`
+- **Purpose:** Update a single note line's text.
+- **Body:** `{ "text": "Revised line" }`
+- **Behavior:**
+  - Creates a new version for the note row and advances `activeVersionId`.
+  - If the text is unchanged (strict equality), returns existing note without side effects.
+  - Touches the parent task, recomputes importance and heat.
+- **Response:** `{ "note": NoteRow }` (with `currentText` reflecting the new version).
+
+#### `DELETE /api/notes/{noteId}`
+- **Purpose:** Delete a single note line.
+- **Behavior:** Removes the row, compacts ordinals for remaining lines, touches the parent task, and recomputes heat.
+- **Response:** `{ "success": true }`
+
 ### 4.7 Projects
 
 #### `GET /api/projects`
