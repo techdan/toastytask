@@ -269,3 +269,31 @@
     filter: drop-shadow(0 0 0 #E8E4D8);
   }
 }
+
+/* Search highlight animation */
+.search-highlight {
+  animation: highlight-pulse 2s ease-in-out;
+}
+
+@keyframes highlight-pulse {
+  0% {
+    background-color: transparent;
+  }
+  10% {
+    background-color: rgba(251, 146, 60, 0.2);
+  }
+  50% {
+    background-color: rgba(251, 146, 60, 0.15);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* Search result text highlighting */
+mark {
+  background-color: rgba(251, 146, 60, 0.3);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+}

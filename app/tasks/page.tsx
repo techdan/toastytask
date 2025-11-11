@@ -1,14 +1,15 @@
 "use client";
 
-import Image from "next/image";
-
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, Suspense } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRouter, useSearchParams } from "next/navigation";
 import { QuickAdd } from "@/components/tasks/quick-add";
 import { TaskList } from "@/components/tasks/task-list";
 import { ProjectsSidebar } from "@/components/projects/projects-sidebar";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { UserAccountDropdown } from "@/components/auth/user-account-dropdown";
+import { SearchBar } from "@/components/search/search-bar";
+import { SearchDropdown } from "@/components/search/search-dropdown";
 import {
   useTasksQuery,
   useProjectsQuery,
@@ -27,7 +28,10 @@ import {
 } from "@/lib/queries";
 import { calculateHeat } from "@/lib/scoring/heat-v3";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
+import { searchTasks, filterResultsByProject } from "@/lib/search/search-utils";
+import { navigateToTask, navigateToNote } from "@/lib/search/navigation-utils";
 import type { Task, NewTask, Project, SortMode, TaskWithFreshValues } from "@/types";
+import type { SearchResult } from "@/lib/search/search-utils";
 
 // Number of days to show completed tasks when visibility is enabled
 const COMPLETED_TASKS_VISIBLE_DAYS = 7;
@@ -124,8 +128,17 @@ const coerceCompletedDate = (value: Date | string | number | null | undefined) =
   return new Date(value);
 };
 
-export default function TasksPage() {
-  const [selectedProjectId, setSelectedProjectId] = useState<number | null | "all">("all");
+function TasksPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const searchQuery = searchParams?.get("q") || "";
+  const isSearchMode = searchParams?.get("mode") === "search";
+
+  // Read project from URL params, with fallback to "all"
+  const projectParam = searchParams?.get("project");
+  const initialProjectId = projectParam === "null" ? null : projectParam === "all" ? "all" : projectParam ? parseInt(projectParam, 10) : "all";
+
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null | "all">(initialProjectId);
   const [showCompleted, setShowCompleted] = useState(() => {
     // Read from localStorage on initial load, default to false (hide completed)
     if (typeof window !== "undefined") {
@@ -139,7 +152,24 @@ export default function TasksPage() {
   // Track tasks that should appear active again before the server confirms uncompletion.
   const [optimisticActiveIds, setOptimisticActiveIds] = useState<Set<number>>(() => new Set());
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [searchInputValue, setSearchInputValue] = useState(searchQuery);
+  const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
   const queryClient = useQueryClient();
+
+  // Sync searchInputValue with URL searchQuery when it changes
+  useEffect(() => {
+    setSearchInputValue(searchQuery);
+  }, [searchQuery]);
+
+  // Sync selectedProjectId with URL params when they change
+  useEffect(() => {
+    const projectParam = searchParams?.get("project");
+    const urlProjectId = projectParam === "null" ? null : projectParam === "all" ? "all" : projectParam ? parseInt(projectParam, 10) : "all";
+
+    if (urlProjectId !== selectedProjectId) {
+      setSelectedProjectId(urlProjectId);
+    }
+  }, [searchParams, selectedProjectId]);
 
   // Query hooks - TanStack Query handles caching and state
   // Always fetch ALL tasks (completed and uncompleted) for instant client-side filtering
@@ -473,7 +503,7 @@ export default function TasksPage() {
 
     // If the deleted project was selected, switch to "all"
     if (selectedProjectId === id) {
-      setSelectedProjectId("all");
+      handleSelectProject("all");
     }
   };
 
@@ -485,6 +515,29 @@ export default function TasksPage() {
   const handleSortModeChange = (sortMode: SortMode) => {
     updateSettingsMutation.mutate({ sortMode });
   };
+
+  // Handle project selection with URL update
+  const handleSelectProject = useCallback((projectId: number | null | "all") => {
+    setSelectedProjectId(projectId);
+
+    // Clear search input when changing views
+    setSearchInputValue("");
+    setIsSearchDropdownOpen(false);
+
+    // Build new URL with project param, clear search params
+    const params = new URLSearchParams();
+    if (projectId === null) {
+      params.set("project", "null");
+    } else if (projectId !== "all") {
+      params.set("project", projectId.toString());
+    }
+    // If projectId is "all", don't set project param (default)
+
+    const newUrl = params.toString() ? `/tasks?${params.toString()}` : "/tasks";
+
+    // Update URL without triggering navigation (use cached data for instant UI update)
+    window.history.pushState(null, "", newUrl);
+  }, []);
 
   const handleRefreshOrder = async () => {
     if (isRefreshingOrder) {
@@ -528,6 +581,81 @@ export default function TasksPage() {
     }
   };
 
+  // Search handlers
+  const handleSearch = useCallback((query: string) => {
+    setSearchInputValue(query);
+
+    if (query.trim()) {
+      setIsSearchDropdownOpen(true);
+    } else {
+      setIsSearchDropdownOpen(false);
+      // Clear search mode when query is empty
+      if (isSearchMode) {
+        router.push("/tasks");
+      }
+    }
+  }, [isSearchMode, router]);
+
+  const handleSearchEnter = useCallback((query: string) => {
+    // Close dropdown and navigate to search results page
+    setIsSearchDropdownOpen(false);
+    router.push(`/tasks?q=${encodeURIComponent(query)}&mode=search`);
+  }, [router]);
+
+  const handleSelectSearchResult = useCallback((result: SearchResult) => {
+    setIsSearchDropdownOpen(false);
+
+    // Navigate to the task
+    if (result.type === "task") {
+      navigateToTask(result.taskId);
+    } else {
+      navigateToNote(result.taskId);
+    }
+  }, []);
+
+  // Compute search results
+  const projectsMap = useMemo(() => {
+    const map = new Map<number, string>();
+    projects.forEach(project => {
+      map.set(project.id, project.name);
+    });
+    return map;
+  }, [projects]);
+
+  const searchResults = useMemo(() => {
+    if (!searchInputValue.trim()) {
+      return [];
+    }
+
+    // Search in all tasks (for dropdown, don't filter by project)
+    const results = searchTasks(allTasks, searchInputValue, projectsMap);
+
+    // If in search mode, apply project filter
+    if (isSearchMode) {
+      return filterResultsByProject(results, selectedProjectId);
+    }
+
+    return results;
+  }, [searchInputValue, allTasks, projectsMap, isSearchMode, selectedProjectId]);
+
+  // In search mode, filter tasks based on search results
+  const finalDisplayedTasks = useMemo(() => {
+    if (isSearchMode && searchQuery.trim()) {
+      // If in search mode but no results, return empty array
+      if (searchResults.length === 0) {
+        return [];
+      }
+
+      // Get unique task IDs from search results
+      const taskIds = new Set(searchResults.map(r => r.taskId));
+
+      // Filter displayed tasks to only show matching ones
+      return displayedTasks.filter(task => taskIds.has(task.id));
+    }
+
+    return displayedTasks;
+  }, [isSearchMode, searchQuery, searchResults, displayedTasks]);
+
   // Calculate task counts per project from ALL tasks (exclude completed)
   const taskCounts = useMemo(() => {
     const counts: Record<number, number> = {};
@@ -549,7 +677,7 @@ export default function TasksPage() {
       <ProjectsSidebar
         projects={projects}
         selectedProjectId={selectedProjectId}
-        onSelectProject={setSelectedProjectId}
+        onSelectProject={handleSelectProject}
         onCreateProject={handleCreateProject}
         onUpdateProject={handleUpdateProject}
         onDeleteProject={handleDeleteProject}
@@ -596,18 +724,34 @@ export default function TasksPage() {
               </p>
             </div>
             <div className="flex items-center gap-3">
+              {/* Search Bar */}
+              <div className="relative w-80">
+                <SearchBar
+                  onSearch={handleSearch}
+                  onEnter={handleSearchEnter}
+                  initialValue={searchInputValue}
+                />
+                <SearchDropdown
+                  results={searchResults}
+                  isOpen={isSearchDropdownOpen}
+                  onClose={() => setIsSearchDropdownOpen(false)}
+                  onSelectResult={handleSelectSearchResult}
+                />
+              </div>
               <ThemeToggle />
               <UserAccountDropdown />
             </div>
           </div>
 
-          {/* Quick Add */}
-          <div className="mb-6">
-            <QuickAdd
-              onAdd={handleAddTask}
-              currentProjectId={selectedProjectId === "all" ? null : selectedProjectId}
-            />
-          </div>
+          {/* Quick Add - Hidden in search mode */}
+          {!isSearchMode && (
+            <div className="mb-6">
+              <QuickAdd
+                onAdd={handleAddTask}
+                currentProjectId={selectedProjectId === "all" ? null : selectedProjectId}
+              />
+            </div>
+          )}
 
           {/* Task List */}
           {isLoading ? (
@@ -615,23 +759,42 @@ export default function TasksPage() {
               <p className="text-muted-foreground">Loading tasks...</p>
             </div>
           ) : (
-            <TaskList
-              tasks={displayedTasks}
-              projects={projects}
-              showCompleted={showCompleted}
-              onToggleCompleted={handleToggleCompleted}
-              sortMode={sortMode}
-              onSortModeChange={handleSortModeChange}
-              onRefreshOrder={handleRefreshOrder}
-              isRefreshingOrder={isRefreshingOrder}
-              onUpdate={handleUpdateTask}
-              onDelete={handleDeleteTask}
-              onComplete={handleCompleteTask}
-              onUncomplete={handleUncompleteTask}
-            />
+            <>
+              {isSearchMode && searchQuery.trim() && (
+                <div className="mb-4 text-sm text-muted-foreground">
+                  {finalDisplayedTasks.length} {finalDisplayedTasks.length === 1 ? 'result' : 'results'} for &ldquo;{searchQuery}&rdquo;
+                </div>
+              )}
+              <TaskList
+                tasks={finalDisplayedTasks}
+                projects={projects}
+                showCompleted={showCompleted}
+                onToggleCompleted={handleToggleCompleted}
+                sortMode={sortMode}
+                onSortModeChange={handleSortModeChange}
+                onRefreshOrder={handleRefreshOrder}
+                isRefreshingOrder={isRefreshingOrder}
+                onUpdate={handleUpdateTask}
+                onDelete={handleDeleteTask}
+                onComplete={handleCompleteTask}
+                onUncomplete={handleUncompleteTask}
+              />
+            </>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+export default function TasksPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-screen items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    }>
+      <TasksPageContent />
+    </Suspense>
   );
 }

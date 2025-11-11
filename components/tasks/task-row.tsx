@@ -141,6 +141,7 @@ export function TaskRow({ task, projects, sortMode, onUpdate, onDelete, onComple
   return (
     <>
       <tr
+        data-task-id={task.id}
         className={cn(
           "group bg-card transition-colors hover:bg-accent/30",
           isCompleted && "text-muted-foreground italic"

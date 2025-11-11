@@ -103,12 +103,12 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
     const starLabels = ['None', 'Blue (+1)', 'Yellow (+2)', 'Orange (+3)'];
 
     return (
-      <TooltipProvider>
+      <TooltipProvider delayDuration={300} disableHoverableContent={false}>
         <Tooltip>
           <TooltipTrigger asChild>
             <div
               className={cn(
-                "flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-bold",
+                "flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-bold cursor-default",
                 isCompleted
                   ? "bg-muted/40 text-muted-foreground/60"
                   : "text-white " + getImportanceColorFromConfig(importance)
@@ -152,12 +152,12 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
   const stageLabel = getHeatLabelFromConfig(heat);
 
   return (
-    <TooltipProvider>
+    <TooltipProvider delayDuration={300} disableHoverableContent={false}>
       <Tooltip>
         <TooltipTrigger asChild>
           <div
             className={cn(
-              "flex h-5 w-6 shrink-0 items-center justify-center rounded text-[10px] font-bold",
+              "flex h-5 w-6 shrink-0 items-center justify-center rounded text-[10px] font-bold cursor-default",
               isCompleted
                 ? "bg-muted/40 text-muted-foreground/60"
                 : "text-white " + getHeatColorFromConfig(heat)
