@@ -1,0 +1,124 @@
+# Toasty Task Logo Styling Guide
+
+## Current Logo Variant: CSS Filled
+
+The **`toasty_task_logo_vectorized_filled_css.svg`** is our primary logo variant, now in use across the application header and favicon.
+
+### Key Features
+
+- **Single compound path** for unified styling
+- **CSS variable support** via `--line` and `--bg` variables for dynamic color control
+- **Theme-aware**: Automatically inherits foreground color from current theme
+- **Transparent background**: Seamlessly integrates with any background
+- **Optimized**: Vectorized with minimal file size (~17KB)
+
+### Implementation
+
+#### In Header (React/JSX)
+
+```tsx
+<svg
+  viewBox="0 0 512 512"
+  width={40}
+  height={40}
+  className="h-10 w-10"
+  style={{
+    "--line": "var(--foreground)",
+  } as React.CSSProperties & Record<string, string>}
+>
+  <style>{`
+    svg {
+      --bg: transparent;
+      --line: #efeedd;
+    }
+    .bg { fill: var(--bg); }
+    .line { fill: var(--line); }
+  `}</style>
+  <rect width="100%" height="100%" className="bg" />
+  <path
+    d="[compound path data]"
+    fillRule="evenodd"
+    className="line"
+  />
+</svg>
+```
+
+**Key points:**
+- Set `--line` to `var(--foreground)` to inherit the theme's text color
+- The `<style>` block defines default CSS variables as fallbacks
+- `fillRule="evenodd"` ensures proper fill rendering for complex paths
+
+#### In Favicon (Next.js)
+
+```tsx
+// app/layout.tsx
+export const metadata: Metadata = {
+  icons: {
+    icon: [
+      {
+        url: "/toasty_task_logo_vectorized_filled_css.svg",
+        type: "image/svg+xml",
+        sizes: "any",
+      },
+    ],
+    shortcut: [
+      {
+        url: "/toasty_task_logo_vectorized_filled_css.svg",
+        type: "image/svg+xml",
+        sizes: "any",
+      },
+    ],
+  },
+};
+```
+
+### CSS Variable Usage
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `--bg` | `transparent` | Background fill—defaults to transparent but can be customized to any color (e.g., `#ffffff`, `rgba(0,0,0,0.1)`) |
+| `--line` | `#efeedd` | Toast outline and check mark color |
+
+#### Customizing the Background
+
+To add a background color, override the `--bg` variable:
+
+```tsx
+<svg
+  style={{
+    "--bg": "#ffffff",        // White background
+    "--line": "var(--foreground)",
+  } as React.CSSProperties & Record<string, string>}
+>
+  {/* ... */}
+</svg>
+```
+
+Or in CSS:
+```css
+svg {
+  --bg: #f0f0f0;  /* Light gray background */
+  --line: #1b1b1b; /* Dark text */
+}
+```
+
+### Light/Dark Mode Colors
+
+The logo automatically respects the system's `prefers-color-scheme` preference:
+
+- **Light mode**: Uses `--foreground` (typically #1b1b1b or dark gray)
+- **Dark mode**: Uses `--foreground` (typically #E8E4D8 or light beige)
+
+No additional CSS is needed—the theme system handles this automatically.
+
+### When to Use Each Variant
+
+| Logo | Use Case | File |
+|------|----------|------|
+| **CSS Filled** | Header, favicon, primary branding | `toasty_task_logo_vectorized_filled_css.svg` |
+| **CSS Stroked** | Alternate designs, custom stroke control | `toasty_task_logo_css_stroked_split_widths.svg` |
+| **Original Filled** | Legacy support (uses drop-shadow filter) | `toasty_task_logo_vectorized_filled.svg` |
+
+### Demo Page
+
+View all logo variants and compare them at `/logo-demo` to see the CSS variables in action.

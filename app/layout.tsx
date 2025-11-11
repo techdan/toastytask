@@ -19,6 +19,22 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Toodle - Smart Task Management",
   description: "Intelligent task prioritization with importance-based scoring and heat dynamics",
+  icons: {
+    icon: [
+      {
+        url: "/toasty_task_logo_vectorized_filled_css.svg",
+        type: "image/svg+xml",
+        sizes: "any",
+      },
+    ],
+    shortcut: [
+      {
+        url: "/toasty_task_logo_vectorized_filled_css.svg",
+        type: "image/svg+xml",
+        sizes: "any",
+      },
+    ],
+  },
 };
 
 export default function RootLayout({

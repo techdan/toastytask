@@ -248,3 +248,24 @@
     rgba(96, 165, 250, 0.1) 80%,
     transparent 100%);
 }
+
+/* Logo styling with dynamic color scheme support */
+.logo-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  filter: drop-shadow(0 0 0 #1b1b1b);
+}
+
+@media (prefers-color-scheme: light) {
+  .logo-icon {
+    filter: drop-shadow(0 0 0 #1b1b1b);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .logo-icon {
+    filter: drop-shadow(0 0 0 #E8E4D8);
+  }
+}
