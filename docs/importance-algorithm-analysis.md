@@ -12,7 +12,7 @@ This document provides a detailed analysis of the current importance algorithm i
 
 The importance algorithm is a **cached calculation system** that assigns a numeric score (2-14) to tasks based on three factors:
 - **Priority** (low/medium/high/top): 2-5 points
-- **Due Date** (none/future/today/overdue): 0-6 points
+- **Due Date** (none/future/next week/this week/tomorrow or day after/today/overdue): 0-6 points
 - **Star Level** (0-3): 0-3 points
 
 **Current Architecture:** Importance is **calculated and stored** in the database, then recalculated selectively to handle time-based staleness.
@@ -38,12 +38,15 @@ Range: 2-14 points
 - top:    5 points
 ```
 
-#### Due Date Weights (Lines 48-53)
+#### Due Date Weights (Lines 48-56)
 ```typescript
-- none (no due date):  0 points
-- future (≥1 day):     3 points
-- today:               5 points
-- overdue (past):      6 points
+- none (no due date):         0 points
+- future (≥8 days):           1 point
+- next week (4-7 days):       2 points
+- this week (3 days):         3 points
+- tomorrow/day after (1-2):   4 points
+- today:                      5 points
+- overdue (past):             6 points
 ```
 
 #### Star Points (Lines 54-59)

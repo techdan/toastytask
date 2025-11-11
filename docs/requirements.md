@@ -128,7 +128,7 @@
 
 **Importance v1 (Compatibility Mode)**
 - Priority weight: Low=2, Med=3, High=4, Top=5.
-- Due weight: None=0, Future=3, Today=5, Past Due=6.
+- Due weight: None=0, Future (8+ days)=1, Next week (4-7 days)=2, This week (3 days)=3, Tomorrow/Day after (1-2 days)=4, Today=5, Past Due=6.
 - Star: +1.
 - Importance = PriorityWeight + DueWeight + Star.
 - Display 2–12 range consistent with Toodledo semantics.

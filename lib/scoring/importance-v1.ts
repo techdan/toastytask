@@ -21,7 +21,7 @@ import type { Priority, Task } from "@/types";
  *
  * Components:
  * - Priority weight: Low=2, Medium=3, High=4, Top=5
- * - Due date weight: None=0, Future=3, Today=5, Past=6
+ * - Due date weight: None=0, Future=1, Next week=2, This week=3, Tomorrow/Day after=4, Today=5, Past Due=6
  * - Star bonus (Heat v3): None=0, Blue=+1, Yellow=+2, Orange=+3
  *
  * Formula: priority_weight + due_weight + star_level
@@ -46,10 +46,13 @@ export const IMPORTANCE_CONFIG = {
     top: 5,
   },
   DUE_WEIGHTS: {
-    none: 0,      // No due date
-    future: 3,    // >= 1 day away
-    today: 5,     // Due today
-    overdue: 6,   // Past due
+    none: 0,           // No due date
+    future: 1,         // >= 8 days away
+    nextWeek: 2,       // 4-7 days away
+    thisWeek: 3,       // 2-3 days away
+    tomorrowOrNext: 4, // 1-2 days away
+    today: 5,          // Due today
+    overdue: 6,        // Past due
   },
   STAR_POINTS: {
     0: 0,  // None
@@ -84,7 +87,7 @@ function getPriorityWeight(priority: Priority): number {
  */
 function getDueWeight(dueAt: Date | number | string | null | undefined, now: Date = new Date()): number {
   if (!dueAt) {
-    return 0; // No due date
+    return IMPORTANCE_CONFIG.DUE_WEIGHTS.none; // No due date
   }
 
   // Robust date conversion - handle Date objects, Unix timestamps (seconds), and ISO strings
@@ -99,12 +102,12 @@ function getDueWeight(dueAt: Date | number | string | null | undefined, now: Dat
     dueDate = new Date(dueAt);
   } else {
     // Fallback for unknown types
-    return 0;
+    return IMPORTANCE_CONFIG.DUE_WEIGHTS.none;
   }
 
   // Validate the date is valid
   if (isNaN(dueDate.getTime())) {
-    return 0;
+    return IMPORTANCE_CONFIG.DUE_WEIGHTS.none;
   }
 
   // Reset hours for date-only comparison
@@ -115,11 +118,17 @@ function getDueWeight(dueAt: Date | number | string | null | undefined, now: Dat
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
   if (diffDays < 0) {
-    return 6; // Past due
+    return IMPORTANCE_CONFIG.DUE_WEIGHTS.overdue; // Past due = 6
   } else if (diffDays === 0) {
-    return 5; // Due today
+    return IMPORTANCE_CONFIG.DUE_WEIGHTS.today; // Due today = 5
+  } else if (diffDays === 1 || diffDays === 2) {
+    return IMPORTANCE_CONFIG.DUE_WEIGHTS.tomorrowOrNext; // Tomorrow / day after = 4
+  } else if (diffDays === 3) {
+    return IMPORTANCE_CONFIG.DUE_WEIGHTS.thisWeek; // This week = 3
+  } else if (diffDays >= 4 && diffDays <= 7) {
+    return IMPORTANCE_CONFIG.DUE_WEIGHTS.nextWeek; // Next week = 2
   } else {
-    return 3; // Future
+    return IMPORTANCE_CONFIG.DUE_WEIGHTS.future; // Future (8+ days) = 1
   }
 }
 

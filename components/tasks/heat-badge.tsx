@@ -252,14 +252,24 @@ function HeatBreakdownTooltip({
                   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
                   const dueStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
                   const diffDays = Math.floor((dueStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
-                  return diffDays < 0 ? "Overdue" : diffDays === 0 ? "Today" : "Future";
+                  if (diffDays < 0) return "Overdue";
+                  if (diffDays === 0) return "Today";
+                  if (diffDays === 1 || diffDays === 2) return "Tomorrow/Day after";
+                  if (diffDays === 3) return "This week";
+                  if (diffDays >= 4 && diffDays <= 7) return "Next week";
+                  return "Future";
                 })() : "None"}): {task.dueAt ? (() => {
                   const dueDate = new Date(task.dueAt);
                   const today = new Date();
                   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
                   const dueStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
                   const diffDays = Math.floor((dueStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
-                  return diffDays < 0 ? 6 : diffDays === 0 ? 5 : 3;
+                  if (diffDays < 0) return 6;  // Overdue
+                  if (diffDays === 0) return 5;  // Today
+                  if (diffDays === 1 || diffDays === 2) return 4;  // Tomorrow/Day after
+                  if (diffDays === 3) return 3;  // This week
+                  if (diffDays >= 4 && diffDays <= 7) return 2;  // Next week
+                  return 1;  // Future (8+ days)
                 })() : 0} pts
               </div>
             )}
