@@ -4,6 +4,12 @@ import { useEffect, useState } from "react";
 import { Plus, ChevronDown, ChevronRight, ChevronLeft, Archive, Folder } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/types";
 import { ProjectItem } from "./project-item";
@@ -145,18 +151,71 @@ export function ProjectsSidebar({
       </div>
 
       {isCollapsed ? (
-        <div className="flex flex-1 flex-col items-center gap-4">
-          <button
-            onClick={() => onSelectProject("all")}
-            className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-full text-xs font-medium transition-colors cursor-pointer",
-              selectedProjectId === "all" ? "bg-accent text-accent-foreground" : "bg-background hover:bg-accent"
-            )}
-            aria-label="Select all projects"
-          >
-            <Folder className="h-4 w-4" />
-          </button>
-        </div>
+        <TooltipProvider>
+          <div className="flex flex-1 flex-col items-center gap-2 overflow-y-auto">
+            {/* All Projects Icon */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => onSelectProject("all")}
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-medium transition-colors cursor-pointer",
+                    selectedProjectId === "all" ? "bg-accent text-accent-foreground" : "bg-background hover:bg-accent"
+                  )}
+                  aria-label="All Projects"
+                >
+                  <Folder className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <p>All Projects</p>
+              </TooltipContent>
+            </Tooltip>
+
+            {/* No Project Icon */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => onSelectProject(null)}
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-medium transition-colors cursor-pointer",
+                    selectedProjectId === null ? "bg-accent text-accent-foreground" : "bg-background hover:bg-accent"
+                  )}
+                  aria-label="No Project"
+                >
+                  <div className="h-3 w-3 rounded-full border-2 border-muted-foreground" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <p>No Project</p>
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Active Project Icons */}
+            {orderedActiveProjects.map((project) => (
+              <Tooltip key={project.id}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => onSelectProject(project.id)}
+                    className={cn(
+                      "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-medium transition-colors cursor-pointer",
+                      selectedProjectId === project.id ? "bg-accent text-accent-foreground" : "bg-background hover:bg-accent"
+                    )}
+                    aria-label={project.name}
+                  >
+                    <div
+                      className="h-3 w-3 rounded-full"
+                      style={{ backgroundColor: project.colorHex }}
+                    />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p>{project.name}</p>
+                </TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
+        </TooltipProvider>
       ) : (
         <>
 

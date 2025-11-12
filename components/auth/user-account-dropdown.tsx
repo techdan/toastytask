@@ -11,9 +11,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { User, Settings, LogOut } from "lucide-react";
+import { User, Settings, LogOut, Menu } from "lucide-react";
 import { SettingsDrawer } from "@/components/settings/settings-drawer";
 import { useSettingsQuery } from "@/lib/queries/use-settings-query";
 
@@ -36,19 +35,12 @@ export function UserAccountDropdown() {
     return null;
   }
 
-  const userInitials = user.firstName && user.lastName
-    ? `${user.firstName[0]}${user.lastName[0]}`
-    : user.emailAddresses[0]?.emailAddress[0]?.toUpperCase() || "U";
-
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="relative h-9 w-9 rounded-full">
-            <Avatar className="h-9 w-9">
-              <AvatarImage src={user.imageUrl} alt={user.fullName || "User"} />
-              <AvatarFallback>{userInitials}</AvatarFallback>
-            </Avatar>
+          <Button variant="ghost" size="icon" className="cursor-pointer">
+            <Menu className="h-5 w-5" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-56" align="end" forceMount>

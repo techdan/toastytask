@@ -28,7 +28,7 @@ export function ThemeToggle() {
   };
 
   return (
-    <Button variant="outline" size="icon" onClick={toggleTheme}>
+    <Button variant="outline" size="icon" onClick={toggleTheme} className="cursor-pointer">
       {resolvedTheme === "dark" ? (
         <Sun className="h-4 w-4" />
       ) : (

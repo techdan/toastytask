@@ -113,7 +113,6 @@ export function ProjectItem({
         isSelected && "bg-accent font-medium",
         project.archived && "opacity-60",
         "cursor-pointer",
-        draggable && "active:cursor-grabbing",
         isDragging && "cursor-grabbing opacity-70"
       )}
       draggable={draggable}
@@ -148,10 +147,7 @@ export function ProjectItem({
           }
           onSelect();
         }}
-        className={cn(
-          "flex flex-1 items-center gap-2 overflow-hidden cursor-pointer",
-          draggable && "active:cursor-grabbing"
-        )}
+        className="flex flex-1 items-center gap-2 overflow-hidden"
       >
         <div
           className="h-3 w-3 shrink-0 rounded-full"

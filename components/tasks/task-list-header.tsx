@@ -87,7 +87,7 @@ export function TaskListHeader({
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6"
+              className="h-6 w-6 cursor-pointer"
               onClick={onRefreshOrder}
               title="Refresh order"
               disabled={isRefreshingOrder}
@@ -103,7 +103,7 @@ export function TaskListHeader({
               variant="ghost"
               size="sm"
               className={cn(
-                "h-6 px-2 text-xs",
+                "h-6 px-2 text-xs cursor-pointer",
                 showCompleted ? "bg-accent" : ""
               )}
               onClick={onToggleCompleted}
