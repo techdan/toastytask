@@ -274,6 +274,7 @@ export function TaskRow({ task, projects, sortMode, onUpdate, onDelete, onComple
               value={task.priority}
               onValueChange={handlePriorityChange}
               disabled={isCompleted}
+              isCompleted={isCompleted}
             />
           </div>
         </td>
@@ -320,7 +321,7 @@ export function TaskRow({ task, projects, sortMode, onUpdate, onDelete, onComple
       {notesExpanded && (
         <tr className="bg-card">
           <td colSpan={7} className="px-2 py-2 border-x border-b rounded-b">
-            <TaskNotesPanel taskId={task.id} initialNotes={task.notes} />
+            <TaskNotesPanel taskId={task.id} initialNotes={task.notes} isCompleted={isCompleted} />
           </td>
         </tr>
       )}

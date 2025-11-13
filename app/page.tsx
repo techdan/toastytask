@@ -23,7 +23,7 @@ export default async function Home() {
           </h1>
         </div>
         <p className="mb-8 text-xl text-muted-foreground">
-          Smart task management with intelligent prioritization
+          Your tasks rise to the top when they matter.
         </p>
         <p className="mb-12 text-lg text-muted-foreground">
           Automatically surfaces hot work with minimal upkeep.

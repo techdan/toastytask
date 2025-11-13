@@ -15,6 +15,7 @@ interface PrioritySelectProps {
   value: Priority;
   onValueChange: (value: Priority) => void;
   disabled?: boolean;
+  isCompleted?: boolean;
 }
 
 const priorityLabels: Record<Priority, string> = {
@@ -34,7 +35,7 @@ const priorityStyles: Record<Priority, string> = {
 // Reverse order: Top → Low for quick access to high priorities
 const priorityOrder: Priority[] = ["top", "high", "medium", "low"];
 
-export function PrioritySelect({ value, onValueChange, disabled }: PrioritySelectProps) {
+export function PrioritySelect({ value, onValueChange, disabled, isCompleted = false }: PrioritySelectProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const handleValueChange = (newValue: Priority) => {
@@ -43,13 +44,16 @@ export function PrioritySelect({ value, onValueChange, disabled }: PrioritySelec
   };
 
   // If not open, show as text button
+  const completedPriorityClass = "line-through text-muted-foreground";
+  const activePriorityClass = isCompleted ? completedPriorityClass : priorityStyles[value];
+
   if (!isOpen) {
     return (
       <button
         className={cn(
           "flex h-6 w-full items-center text-left text-xs transition-colors hover:underline",
           "cursor-pointer px-0",
-          priorityStyles[value],
+          activePriorityClass,
           disabled && "opacity-50 cursor-not-allowed hover:no-underline"
         )}
         onClick={() => !disabled && setIsOpen(true)}
@@ -72,13 +76,19 @@ export function PrioritySelect({ value, onValueChange, disabled }: PrioritySelec
     >
       <SelectTrigger className="priority-trigger">
         <SelectValue>
-          <span className={priorityStyles[value]}>{priorityLabels[value]}</span>
+          <span className={activePriorityClass}>{priorityLabels[value]}</span>
         </SelectValue>
       </SelectTrigger>
       <SelectContent className="text-xs">
         {priorityOrder.map((priority) => (
-          <SelectItem key={priority} value={priority} className="text-xs py-1 pl-2 pr-6">
-            <span className={priorityStyles[priority]}>{priorityLabels[priority]}</span>
+          <SelectItem
+            key={priority}
+            value={priority}
+            className="text-xs py-1 pl-2 pr-6"
+          >
+            <span className={isCompleted ? completedPriorityClass : priorityStyles[priority]}>
+              {priorityLabels[priority]}
+            </span>
           </SelectItem>
         ))}
       </SelectContent>

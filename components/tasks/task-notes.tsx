@@ -104,7 +104,15 @@ export function TaskNotes({ taskId, isExpanded, onToggle, notesCount = 0, notesL
 }
 
 // Separate component for the notes panel
-export function TaskNotesPanel({ taskId, initialNotes }: { taskId: number; initialNotes?: NoteRowData[] }) {
+export function TaskNotesPanel({
+  taskId,
+  initialNotes,
+  isCompleted = false,
+}: {
+  taskId: number;
+  initialNotes?: NoteRowData[];
+  isCompleted?: boolean;
+}) {
   const [isEditing, setIsEditing] = useState(false);
   const [notesText, setNotesText] = useState("");
   const [hoveredLineIndex, setHoveredLineIndex] = useState<number | null>(null);
@@ -213,6 +221,20 @@ export function TaskNotesPanel({ taskId, initialNotes }: { taskId: number; initi
     return nodes.length > 0 ? nodes : [text];
   };
 
+  const noteTextClass = cn(
+    "text-sm leading-5 pr-32",
+    isCompleted
+      ? "text-muted-foreground italic line-through"
+      : "text-gray-800 dark:text-gray-200"
+  );
+
+  const placeholderClass = cn(
+    "text-sm",
+    isCompleted
+      ? "text-muted-foreground italic line-through"
+      : "text-gray-600 dark:text-gray-400"
+  );
+
   return (
     <div className="mt-0 rounded bg-[#FFFACD] dark:bg-[#6b5d4f] p-3 shadow-sm dark:shadow-[0_1px_3px_rgba(120,53,15,0.3)]">
       {isLoading ? (
@@ -240,7 +262,7 @@ export function TaskNotesPanel({ taskId, initialNotes }: { taskId: number; initi
                     onMouseEnter={() => setHoveredLineIndex(index)}
                     onMouseLeave={() => setHoveredLineIndex(null)}
                   >
-                    <div className="text-sm leading-5 pr-32 text-gray-800 dark:text-gray-200">
+                    <div className={noteTextClass}>
                       {linkifyText(row.currentText || "\u00A0")} {showDebug && typeof row.ordinal === 'number' && (
                         <span className="text-xs text-muted-foreground">[ord {row.ordinal}]</span>
                       )}
@@ -257,7 +279,7 @@ export function TaskNotesPanel({ taskId, initialNotes }: { taskId: number; initi
               })}
             </div>
           ) : (
-            <span className="text-gray-600 dark:text-gray-400 text-sm">Click to add notes...</span>
+            <span className={placeholderClass}>Click to add notes...</span>
           )}
         </div>
       )}
