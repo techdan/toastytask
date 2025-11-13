@@ -478,6 +478,8 @@ export function useCompleteTask() {
 
       return { previousTasks };
     },
+    // Note: onSuccess removed - cache updates handled in page-level handler
+    // to allow checking for stale responses (out-of-order completion race)
     onError: (error, _variables, context) => {
       // Rollback on error
       if (context?.previousTasks) {
@@ -489,10 +491,8 @@ export function useCompleteTask() {
         description: error instanceof Error ? error.message : "Unknown error",
       });
     },
-    onSettled: () => {
-      // Refetch to get the actual updated task from server
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-    },
+    // Note: onSettled removed - caller must handle invalidation to prevent race conditions
+    // during rapid mutations. See handleCompleteTask/handleUncompleteTask in app/tasks/page.tsx
   });
 }
 
@@ -523,6 +523,8 @@ export function useUncompleteTask() {
 
       return { previousTasks };
     },
+    // Note: onSuccess removed - cache updates handled in page-level handler
+    // to allow checking for stale responses (out-of-order completion race)
     onError: (error, _variables, context) => {
       // Rollback on error
       if (context?.previousTasks) {
@@ -534,10 +536,8 @@ export function useUncompleteTask() {
         description: error instanceof Error ? error.message : "Unknown error",
       });
     },
-    onSettled: () => {
-      // Refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-    },
+    // Note: onSettled removed - caller must handle invalidation to prevent race conditions
+    // during rapid mutations. See handleCompleteTask/handleUncompleteTask in app/tasks/page.tsx
   });
 }
 

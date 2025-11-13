@@ -23,19 +23,19 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "Toodle - Smart Task Management",
+  title: "Toasty Task - Smart Task Management",
   description: "Intelligent task prioritization with importance-based scoring and heat dynamics",
   icons: {
     icon: [
       {
-        url: "/toasty_task_logo_vectorized_filled_css.svg",
+        url: "/toasty_task_filled_css-v2.svg",
         type: "image/svg+xml",
         sizes: "any",
       },
     ],
     shortcut: [
       {
-        url: "/toasty_task_logo_vectorized_filled_css.svg",
+        url: "/toasty_task_filled_css-v2.svg",
         type: "image/svg+xml",
         sizes: "any",
       },
@@ -60,6 +60,7 @@ export default function RootLayout({
               defaultTheme="system"
               enableSystem
               disableTransitionOnChange
+              themes={["light", "dark", "theme-toast", "theme-lavender", "theme-mint", "theme-sage"]}
             >
               {children}
               <Toaster position="bottom-right" richColors />

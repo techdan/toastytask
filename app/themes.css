@@ -1,0 +1,123 @@
+/* Custom Theme Definitions */
+/* Each theme defines foreground and background colors from theme-options.md */
+/* Plus derived UI colors for consistent appearance */
+
+/* Theme 1: Toast - Orange/Gray */
+:root.theme-toast, .theme-toast {
+  --background: #c4c9cc;
+  --foreground: #f24c05;
+  --card: #d0d4d7;
+  --card-foreground: #f24c05;
+  --popover: #d0d4d7;
+  --popover-foreground: #f24c05;
+  --primary: #f24c05;
+  --primary-foreground: #ffffff;
+  --secondary: #b8bdc0;
+  --secondary-foreground: #2a2a2a;
+  --muted: #b8bdc0;
+  --muted-foreground: #4a4a4a;
+  --accent: #e84a00;
+  --accent-foreground: #ffffff;
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: #a8adb0;
+  --input: #a8adb0;
+  --ring: #f24c05;
+  --sidebar: #d0d4d7;
+  --sidebar-foreground: #f24c05;
+  --sidebar-primary: #f24c05;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #b8bdc0;
+  --sidebar-accent-foreground: #2a2a2a;
+  --sidebar-border: #a8adb0;
+  --sidebar-ring: #f24c05;
+}
+
+/* Theme 2: Lavender - Lavender/Brown */
+:root.theme-lavender, .theme-lavender {
+  --background: #b37447;
+  --foreground: #c3c8e3;
+  --card: #a66a3f;
+  --card-foreground: #c3c8e3;
+  --popover: #a66a3f;
+  --popover-foreground: #c3c8e3;
+  --primary: #c3c8e3;
+  --primary-foreground: #2a2a2a;
+  --secondary: #c68555;
+  --secondary-foreground: #ffffff;
+  --muted: #c68555;
+  --muted-foreground: #e8e8e8;
+  --accent: #d4d9f2;
+  --accent-foreground: #2a2a2a;
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: #8d5e38;
+  --input: #8d5e38;
+  --ring: #c3c8e3;
+  --sidebar: #a66a3f;
+  --sidebar-foreground: #c3c8e3;
+  --sidebar-primary: #c3c8e3;
+  --sidebar-primary-foreground: #2a2a2a;
+  --sidebar-accent: #c68555;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #8d5e38;
+  --sidebar-ring: #c3c8e3;
+}
+
+/* Theme 3: Mint - Teal/Yellow */
+:root.theme-mint, .theme-mint {
+  --background: #f5c951;
+  --foreground: #84adb8;
+  --card: #f7d16b;
+  --card-foreground: #84adb8;
+  --popover: #f7d16b;
+  --popover-foreground: #84adb8;
+  --primary: #84adb8;
+  --primary-foreground: #ffffff;
+  --secondary: #f3c137;
+  --secondary-foreground: #2a2a2a;
+  --muted: #f3c137;
+  --muted-foreground: #4a4a4a;
+  --accent: #6d99a3;
+  --accent-foreground: #ffffff;
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: #e8b82f;
+  --input: #e8b82f;
+  --ring: #84adb8;
+  --sidebar: #f7d16b;
+  --sidebar-foreground: #84adb8;
+  --sidebar-primary: #84adb8;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f3c137;
+  --sidebar-accent-foreground: #2a2a2a;
+  --sidebar-border: #e8b82f;
+  --sidebar-ring: #84adb8;
+}
+
+/* Theme 4: Sage - Mint/Dark Green */
+:root.theme-sage, .theme-sage {
+  --background: #26422a;
+  --foreground: #d5ebe9;
+  --card: #2f4f35;
+  --card-foreground: #d5ebe9;
+  --popover: #2f4f35;
+  --popover-foreground: #d5ebe9;
+  --primary: #d5ebe9;
+  --primary-foreground: #1a2a1d;
+  --secondary: #3a5f40;
+  --secondary-foreground: #d5ebe9;
+  --muted: #3a5f40;
+  --muted-foreground: #b8d8d5;
+  --accent: #c0e0dd;
+  --accent-foreground: #1a2a1d;
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: #1f3522;
+  --input: #1f3522;
+  --ring: #d5ebe9;
+  --sidebar: #2f4f35;
+  --sidebar-foreground: #d5ebe9;
+  --sidebar-primary: #d5ebe9;
+  --sidebar-primary-foreground: #1a2a1d;
+  --sidebar-accent: #3a5f40;
+  --sidebar-accent-foreground: #d5ebe9;
+  --sidebar-border: #1f3522;
+  --sidebar-ring: #d5ebe9;
+}

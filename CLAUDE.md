@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Toodle is a task management application inspired by Toodledo, featuring automatic importance scoring and a heat model for intelligent task prioritization. See [docs/requirements.md](docs/requirements.md) for detailed functional specifications.
+Toasty Task is a task management application inspired by Toodledo, featuring automatic importance scoring and a heat model for intelligent task prioritization. See [docs/requirements.md](docs/requirements.md) for the original functional specifications.
 
 For tech stack, architecture, and development commands, see [AGENTS.md](AGENTS.md).
 

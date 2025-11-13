@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { Plus, ChevronDown, ChevronRight, ChevronLeft, Archive, Folder } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import {
-  Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
@@ -132,13 +132,20 @@ export function ProjectsSidebar({
       )}
     >
       {/* Header */}
-      <div className={cn(
-        "mb-4 flex w-full items-center",
-        isCollapsed ? "justify-center" : "justify-between pr-2"
-      )}>
-        {!isCollapsed && (
-          <h2 className="text-sm font-semibold text-muted-foreground">PROJECTS</h2>
+      <div
+        className={cn(
+          "mb-4 flex w-full items-center",
+          isCollapsed ? "justify-center" : "justify-between pr-2"
         )}
+      >
+        <h2
+          className={cn(
+            "text-sm font-semibold text-muted-foreground",
+            isCollapsed && "hidden"
+          )}
+        >
+          PROJECTS
+        </h2>
         <Button
           variant="ghost"
           size="icon"
@@ -151,10 +158,10 @@ export function ProjectsSidebar({
       </div>
 
       {isCollapsed ? (
-        <TooltipProvider>
-          <div className="flex flex-1 flex-col items-center gap-2 overflow-y-auto">
+          <TooltipProvider delayDuration={0}>
+            <div className="flex flex-1 flex-col items-center gap-2 overflow-y-auto">
             {/* All Projects Icon */}
-            <Tooltip>
+            <TooltipPrimitive.Root>
               <TooltipTrigger asChild>
                 <button
                   onClick={() => onSelectProject("all")}
@@ -170,10 +177,10 @@ export function ProjectsSidebar({
               <TooltipContent side="right">
                 <p>All Projects</p>
               </TooltipContent>
-            </Tooltip>
+            </TooltipPrimitive.Root>
 
             {/* No Project Icon */}
-            <Tooltip>
+            <TooltipPrimitive.Root>
               <TooltipTrigger asChild>
                 <button
                   onClick={() => onSelectProject(null)}
@@ -189,11 +196,11 @@ export function ProjectsSidebar({
               <TooltipContent side="right">
                 <p>No Project</p>
               </TooltipContent>
-            </Tooltip>
+            </TooltipPrimitive.Root>
 
             {/* Active Project Icons */}
             {orderedActiveProjects.map((project) => (
-              <Tooltip key={project.id}>
+              <TooltipPrimitive.Root key={project.id}>
                 <TooltipTrigger asChild>
                   <button
                     onClick={() => onSelectProject(project.id)}
@@ -212,7 +219,7 @@ export function ProjectsSidebar({
                 <TooltipContent side="right">
                   <p>{project.name}</p>
                 </TooltipContent>
-              </Tooltip>
+              </TooltipPrimitive.Root>
             ))}
           </div>
         </TooltipProvider>

@@ -66,7 +66,11 @@ export function TaskRow({ task, projects, sortMode, onUpdate, onDelete, onComple
     }
   };
 
-  const handleCheckboxChange = (checked: boolean) => {
+  const handleCheckboxChange = (checked: boolean, event?: React.MouseEvent) => {
+    // Prevent row click from firing when checkbox is clicked
+    if (event) {
+      event.stopPropagation();
+    }
     if (checked) {
       onComplete(task.id);
     } else {
@@ -157,6 +161,7 @@ export function TaskRow({ task, projects, sortMode, onUpdate, onDelete, onComple
               checked={isCompleted}
               onCheckedChange={handleCheckboxChange}
               className="h-4 w-4 cursor-pointer shrink-0"
+              onClick={(e) => e.stopPropagation()}
             />
             <HeatBadge task={task} mode={sortMode} isCompleted={isCompleted} />
             <button
@@ -298,7 +303,7 @@ export function TaskRow({ task, projects, sortMode, onUpdate, onDelete, onComple
           </div>
         </td>
         <td className={cn(
-          "px-2 py-1.5 align-middle border-y border-r",
+          "px-2 py-1.5 align-middle border-y border-r text-right",
           notesExpanded ? "rounded-tr border-b-0" : "last:rounded-r"
         )}>
           <button

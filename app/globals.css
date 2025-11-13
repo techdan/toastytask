@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "./themes.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -297,4 +298,47 @@ mark {
   color: inherit;
   padding: 0 2px;
   border-radius: 2px;
+}
+
+/* Logo SVG styling - light and dark mode support */
+svg.logo-svg {
+  --logo-bg: transparent;
+  --logo-line: #f24c05;
+  --logo-toast: var(--logo-line);
+  --logo-check: var(--logo-line);
+  --bg: var(--logo-bg);
+  --line: var(--logo-line);
+  --toast: var(--logo-toast);
+  --check: var(--logo-check);
+}
+
+.dark svg.logo-svg {
+  --logo-line: #ec672f;
+  --logo-toast: var(--logo-line);
+  --logo-check: var(--logo-line);
+}
+
+svg.logo-svg .bg {
+  fill: var(--bg);
+}
+
+svg.logo-svg .line {
+  fill: var(--line);
+}
+
+svg.logo-svg .toast {
+  fill: var(--toast);
+}
+
+svg.logo-svg .check {
+  fill: var(--check);
+}
+
+/* Logo text styling - light and dark mode support */
+.logo-text {
+  color: #f24c05;
+}
+
+.dark .logo-text {
+  color: #ec672f;
 }
