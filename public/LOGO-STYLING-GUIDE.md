@@ -2,7 +2,7 @@
 
 ## Current Logo Variant: CSS Filled
 
-The **`toasty_task_filled_css-v2.svg`** is our primary logo variant, now in use across the application header and favicon.
+The **`toasty_task_filled_css-v4.svg`** is our primary logo variant, now in use across the application header and favicon.
 
 ### Key Features
 
@@ -56,14 +56,14 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
-        url: "/toasty_task_filled_css-v2.svg",
+        url: "/toasty_task_filled_css-v4-favicon.svg",
         type: "image/svg+xml",
         sizes: "any",
       },
     ],
     shortcut: [
       {
-        url: "/toasty_task_filled_css-v2.svg",
+        url: "/toasty_task_filled_css-v4-favicon.svg",
         type: "image/svg+xml",
         sizes: "any",
       },
@@ -71,6 +71,8 @@ export const metadata: Metadata = {
   },
 };
 ```
+
+The favicon variant (`toasty_task_filled_css-v4-favicon.svg`) inlines `--toast` and `--check` as `#ec672f` so browsers without our CSS variables still render the orange toast/check while keeping the background transparent.
 
 ### CSS Variable Usage
 
@@ -119,7 +121,7 @@ No additional CSS is needed—the theme system handles this automatically.
 
 | Logo | Use Case | File |
 |------|----------|------|
-| **CSS Filled** | Header, favicon, primary branding | `toasty_task_filled_css-v2.svg` |
+| **CSS Filled** | Header, favicon, primary branding | `toasty_task_filled_css-v4.svg` (app) / `toasty_task_filled_css-v4-favicon.svg` (favicon) |
 | **CSS Stroked** | Alternate designs, custom stroke control | `toasty_task_logo_css_stroked_split_widths.svg` |
 | **Original Filled** | Legacy support (uses drop-shadow filter) | `toasty_task_logo_vectorized_filled.svg` |
 

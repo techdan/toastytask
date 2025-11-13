@@ -28,14 +28,14 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
-        url: "/toasty_task_filled_css-v2.svg",
+        url: "/toasty_task_filled_css-v4-favicon.svg",
         type: "image/svg+xml",
         sizes: "any",
       },
     ],
     shortcut: [
       {
-        url: "/toasty_task_filled_css-v2.svg",
+        url: "/toasty_task_filled_css-v4-favicon.svg",
         type: "image/svg+xml",
         sizes: "any",
       },

@@ -5,7 +5,7 @@ import type { CSSProperties } from "react";
 
 import { cn } from "@/lib/utils";
 
-const DEFAULT_LOGO_SRC = "/toasty_task_filled_css-v2.svg";
+const DEFAULT_LOGO_SRC = "/toasty_task_filled_css-v4.svg";
 
 type LogoColors = {
   bg?: string;
