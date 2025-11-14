@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { QueryKey } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
 import {
@@ -10,6 +11,10 @@ import {
 import { HEAT_CONFIG } from "@/lib/scoring/heat-config";
 import type { Task, NewTask } from "@/types";
 import type { HeatV3Breakdown } from "@/lib/scoring/heat-v3";
+
+const PRIMARY_TASKS_QUERY_KEY = ["tasks", { includeCompleted: true }] as const;
+
+const queryKeysEqual = (a: QueryKey, b: QueryKey) => JSON.stringify(a) === JSON.stringify(b);
 
 interface TaskResponse {
   task: Task;
@@ -650,7 +655,7 @@ export function useMarkTaskTouched() {
 }
 
 // Hook: Heat task - Context-aware positioning (moves up 1 position)
-export function useTouchTask() {
+export function useTouchTask(intentTracker?: React.MutableRefObject<Map<number, { adjustment: number; timestamp: number }>>) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -663,72 +668,136 @@ export function useTouchTask() {
       // Snapshot for rollback
       const previousTasks = queryClient.getQueriesData({ queryKey: ["tasks"] });
 
-      // Optimistic update
-      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
+      console.log('━━━━━ [HEAT onMutate] START ━━━━━');
+      console.log('[HEAT onMutate] Task ID:', taskId);
+      console.log('[HEAT onMutate] All cached queries:', previousTasks.map(([key]) => JSON.stringify(key)));
+      console.log('[HEAT onMutate] Number of cached queries:', previousTasks.length);
+
+      if (!visibleTaskIds || visibleTaskIds.length === 0) {
+        console.warn('[HEAT onMutate] Missing visibleTaskIds, skipping optimistic update.');
+        return { previousTasks };
+      }
+
+      const snapshotEntries = previousTasks.filter(
+        (entry): entry is [QueryKey, Task[]] => Array.isArray(entry[1])
+      );
+
+      const preferredSnapshot = snapshotEntries.find(
+        ([key, tasks]) =>
+          queryKeysEqual(key, PRIMARY_TASKS_QUERY_KEY) &&
+          tasks.some((task) => task.id === taskId)
+      );
+
+      const fallbackSnapshot =
+        preferredSnapshot ||
+        snapshotEntries.find(([, tasks]) => tasks.some((task) => task.id === taskId));
+
+      if (!fallbackSnapshot) {
+        console.warn('[HEAT onMutate] Unable to locate task snapshot in cache.');
+        return { previousTasks };
+      }
+
+      const [snapshotKey, snapshotTasks] = fallbackSnapshot;
+      const currentTask = snapshotTasks.find((task) => task.id === taskId);
+
+      if (!currentTask) {
+        console.warn('[HEAT onMutate] Task missing from snapshot after selection.');
+        return { previousTasks };
+      }
+
+      console.log('[HEAT onMutate] Using snapshot key:', JSON.stringify(snapshotKey));
+      console.log('[HEAT onMutate] visibleTaskIds:', visibleTaskIds);
+      console.log('[HEAT onMutate] Current task heat adjustment:', currentTask.heatAdjustment);
+
+      const now = new Date();
+
+      const currentImportance = calculateImportanceV1(currentTask, now);
+      const currentHeat = calculateHeat(currentTask, now, currentImportance);
+
+      console.log('[HEAT onMutate] Current heat:', currentHeat);
+      console.log('[HEAT onMutate] Current task snapshot:', {
+        id: currentTask.id,
+        importance: currentImportance,
+        heat: Number(currentHeat.toFixed(2)),
+        adjustment: currentTask.heatAdjustment ?? 0,
+      });
+
+      const contextDebug: Array<{ id: number; importance: number; heat: number }> = [];
+      const contextTasks = snapshotTasks
+        .filter((task) => visibleTaskIds.includes(task.id) && task.id !== taskId)
+        .map((task) => {
+          const importance = calculateImportanceV1(task, now);
+          const heat = calculateHeat(task, now, importance);
+          contextDebug.push({ id: task.id, importance, heat: Number(heat.toFixed(2)) });
+          return { id: task.id, heat };
+        });
+
+      console.log('[HEAT onMutate] Context tasks snapshot:', contextDebug);
+
+      const boostDelta = calculateHeatBoost(
+        { heat: currentHeat, id: currentTask.id },
+        contextTasks
+      );
+      console.log('[HEAT onMutate] Calculated boost delta:', boostDelta);
+
+      const targetHeat = Math.min(
+        Math.max(
+          currentHeat + boostDelta,
+          HEAT_CONFIG.MIN_FINAL_SCORE
+        ),
+        HEAT_CONFIG.MAX_FINAL_SCORE
+      );
+
+      console.log('[HEAT onMutate] Target heat:', targetHeat);
+
+      const { newAdjustment } = resolveAdjustmentForTargetHeat(
+        targetHeat,
+        {
+          heatAdjustment: currentTask.heatAdjustment ?? 0,
+          lastTouchedAt: currentTask.lastTouchedAt,
+          lastHeatTouchedAt: currentTask.lastHeatTouchedAt,
+        },
+        now,
+        currentImportance
+      );
+
+      console.log('[HEAT onMutate] New adjustment:', newAdjustment, '(was:', currentTask.heatAdjustment, ')');
+
+      if (intentTracker) {
+        intentTracker.current.set(taskId, {
+          adjustment: newAdjustment,
+          timestamp: now.getTime(),
+        });
+        console.log('[HEAT onMutate] Stored intent in tracker');
+      }
+
+      const applyOptimisticUpdate = (oldTasks: Task[] | undefined) => {
         if (!oldTasks || !Array.isArray(oldTasks)) return oldTasks;
-        if (!visibleTaskIds || visibleTaskIds.length === 0) return oldTasks;
-
-        const now = new Date();
-
-        // Step 1: Find current task
-        const currentTask = oldTasks.find((t) => t.id === taskId);
-        if (!currentTask) return oldTasks;
-
-        // Step 2: Calculate fresh importance + heat ONLY for current task
-        const currentImportance = calculateImportanceV1(currentTask, now);
-        const currentHeat = calculateHeat(currentTask, now, currentImportance);
-
-        // Step 3: Build context from nearby tasks ONLY (not all tasks)
-        const contextTasks = oldTasks
-          .filter((t) => visibleTaskIds.includes(t.id) && t.id !== taskId)
-          .map((t) => {
-            const importance = calculateImportanceV1(t, now);
-            return { id: t.id, heat: calculateHeat(t, now, importance) };
-          });
-
-        // Step 4: Calculate boost delta (how much to move)
-        const boostDelta = calculateHeatBoost(
-          { heat: currentHeat, id: currentTask.id },
-          contextTasks
-        );
-
-        // Step 5: Calculate target heat
-        const targetHeat = Math.min(
-          Math.max(
-            currentHeat + boostDelta,
-            HEAT_CONFIG.MIN_FINAL_SCORE
-          ),
-          HEAT_CONFIG.MAX_FINAL_SCORE
-        );
-
-        // Step 6: Resolve what adjustment is needed to reach target heat
-        const { newAdjustment } = resolveAdjustmentForTargetHeat(
-          targetHeat,
-          {
-            heatAdjustment: currentTask.heatAdjustment ?? 0,
-            lastTouchedAt: currentTask.lastTouchedAt,
-            lastHeatTouchedAt: currentTask.lastHeatTouchedAt,
-          },
-          now,
-          currentImportance
-        );
-
-        // Step 7: Apply optimistic update (only ONE task changes)
-        return oldTasks.map((t) =>
-          t.id === taskId
+        return oldTasks.map((task) =>
+          task.id === taskId
             ? {
-                ...t,
+                ...task,
                 heatAdjustment: newAdjustment,
                 lastHeatTouchedAt: now,
                 lastTouchedAt: now,
               }
-            : t
+            : task
         );
-      });
+      };
+
+      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, applyOptimisticUpdate);
+
+      console.log('━━━━━ [HEAT onMutate] END ━━━━━');
 
       return { previousTasks };
     },
-    onError: (error, _variables, context) => {
+    onError: (error, variables, context) => {
+      // Clear intent on error
+      if (intentTracker) {
+        intentTracker.current.delete(variables.taskId);
+        console.log('[HEAT onError] Cleared intent for task', variables.taskId);
+      }
+
       // Rollback on error
       if (context?.previousTasks) {
         context.previousTasks.forEach(([queryKey, data]) => {
@@ -740,6 +809,16 @@ export function useTouchTask() {
       });
     },
     onSuccess: (response) => {
+      console.log('━━━━━ [HEAT onSuccess] START ━━━━━');
+      console.log('[HEAT onSuccess] Server returned task', response.task.id);
+      console.log('[HEAT onSuccess] Server heatAdjustment:', response.task.heatAdjustment);
+
+      // Clear intent now that server confirmed the change
+      if (intentTracker) {
+        intentTracker.current.delete(response.task.id);
+        console.log('[HEAT onSuccess] Cleared intent for task', response.task.id);
+      }
+
       // Replace optimistic update with authoritative server response
       queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
         if (!oldTasks || !Array.isArray(oldTasks)) return oldTasks;
@@ -747,6 +826,8 @@ export function useTouchTask() {
           task.id === response.task.id ? response.task : task
         );
       });
+
+      console.log('━━━━━ [HEAT onSuccess] END ━━━━━');
 
       toast.success("Task heated", {
         description: `Heat adjustment: ${response.adjustmentDelta >= 0 ? "+" : ""}${response.adjustmentDelta.toFixed(0)} pts`,
@@ -756,7 +837,7 @@ export function useTouchTask() {
 }
 
 // Hook: Cool task - Context-aware positioning (moves down 3 positions)
-export function useCoolTask() {
+export function useCoolTask(intentTracker?: React.MutableRefObject<Map<number, { adjustment: number; timestamp: number }>>) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -769,72 +850,135 @@ export function useCoolTask() {
       // Snapshot for rollback
       const previousTasks = queryClient.getQueriesData({ queryKey: ["tasks"] });
 
-      // Optimistic update
-      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
+      console.log('━━━━━ [COOL onMutate] START ━━━━━');
+      console.log('[COOL onMutate] Task ID:', taskId);
+      console.log('[COOL onMutate] All cached queries:', previousTasks.map(([key]) => JSON.stringify(key)));
+      console.log('[COOL onMutate] Number of cached queries:', previousTasks.length);
+
+      if (!visibleTaskIds || visibleTaskIds.length === 0) {
+        console.warn('[COOL onMutate] Missing visibleTaskIds, skipping optimistic update.');
+        return { previousTasks };
+      }
+
+      const snapshotEntries = previousTasks.filter(
+        (entry): entry is [QueryKey, Task[]] => Array.isArray(entry[1])
+      );
+
+      const preferredSnapshot = snapshotEntries.find(
+        ([key, tasks]) =>
+          queryKeysEqual(key, PRIMARY_TASKS_QUERY_KEY) &&
+          tasks.some((task) => task.id === taskId)
+      );
+
+      const fallbackSnapshot =
+        preferredSnapshot ||
+        snapshotEntries.find(([, tasks]) => tasks.some((task) => task.id === taskId));
+
+      if (!fallbackSnapshot) {
+        console.warn('[COOL onMutate] Unable to locate task snapshot in cache.');
+        return { previousTasks };
+      }
+
+      const [snapshotKey, snapshotTasks] = fallbackSnapshot;
+      const currentTask = snapshotTasks.find((task) => task.id === taskId);
+
+      if (!currentTask) {
+        console.warn('[COOL onMutate] Task missing from snapshot after selection.');
+        return { previousTasks };
+      }
+
+      console.log('[COOL onMutate] Using snapshot key:', JSON.stringify(snapshotKey));
+      console.log('[COOL onMutate] visibleTaskIds:', visibleTaskIds);
+      console.log('[COOL onMutate] Current task heat adjustment:', currentTask.heatAdjustment);
+
+      const now = new Date();
+
+      const currentImportance = calculateImportanceV1(currentTask, now);
+      const currentHeat = calculateHeat(currentTask, now, currentImportance);
+
+      console.log('[COOL onMutate] Current heat:', currentHeat);
+      console.log('[COOL onMutate] Current task snapshot:', {
+        id: currentTask.id,
+        importance: currentImportance,
+        heat: Number(currentHeat.toFixed(2)),
+        adjustment: currentTask.heatAdjustment ?? 0,
+      });
+
+      const contextDebug: Array<{ id: number; importance: number; heat: number }> = [];
+      const contextTasks = snapshotTasks
+        .filter((task) => visibleTaskIds.includes(task.id) && task.id !== taskId)
+        .map((task) => {
+          const importance = calculateImportanceV1(task, now);
+          const heat = calculateHeat(task, now, importance);
+          contextDebug.push({ id: task.id, importance, heat: Number(heat.toFixed(2)) });
+          return { id: task.id, heat };
+        });
+      console.log('[COOL onMutate] Context tasks snapshot:', contextDebug);
+
+      const dropDelta = calculateCoolDrop(
+        { heat: currentHeat, id: currentTask.id },
+        contextTasks
+      );
+      console.log('[COOL onMutate] Calculated drop delta:', dropDelta);
+
+      const targetHeat = Math.min(
+        Math.max(
+          currentHeat + dropDelta,
+          HEAT_CONFIG.MIN_FINAL_SCORE
+        ),
+        HEAT_CONFIG.MAX_FINAL_SCORE
+      );
+
+      console.log('[COOL onMutate] Target heat:', targetHeat);
+
+      const { newAdjustment } = resolveAdjustmentForTargetHeat(
+        targetHeat,
+        {
+          heatAdjustment: currentTask.heatAdjustment ?? 0,
+          lastTouchedAt: currentTask.lastTouchedAt,
+          lastHeatTouchedAt: currentTask.lastHeatTouchedAt,
+        },
+        now,
+        currentImportance
+      );
+
+      console.log('[COOL onMutate] New adjustment:', newAdjustment, '(was:', currentTask.heatAdjustment, ')');
+
+      if (intentTracker) {
+        intentTracker.current.set(taskId, {
+          adjustment: newAdjustment,
+          timestamp: now.getTime(),
+        });
+        console.log('[COOL onMutate] Stored intent in tracker');
+      }
+
+      const applyOptimisticUpdate = (oldTasks: Task[] | undefined) => {
         if (!oldTasks || !Array.isArray(oldTasks)) return oldTasks;
-        if (!visibleTaskIds || visibleTaskIds.length === 0) return oldTasks;
-
-        const now = new Date();
-
-        // Step 1: Find current task
-        const currentTask = oldTasks.find((t) => t.id === taskId);
-        if (!currentTask) return oldTasks;
-
-        // Step 2: Calculate fresh importance + heat ONLY for current task
-        const currentImportance = calculateImportanceV1(currentTask, now);
-        const currentHeat = calculateHeat(currentTask, now, currentImportance);
-
-        // Step 3: Build context from nearby tasks ONLY (not all tasks)
-        const contextTasks = oldTasks
-          .filter((t) => visibleTaskIds.includes(t.id) && t.id !== taskId)
-          .map((t) => {
-            const importance = calculateImportanceV1(t, now);
-            return { id: t.id, heat: calculateHeat(t, now, importance) };
-          });
-
-        // Step 4: Calculate drop delta (how much to move down)
-        const dropDelta = calculateCoolDrop(
-          { heat: currentHeat, id: currentTask.id },
-          contextTasks
-        );
-
-        // Step 5: Calculate target heat (dropDelta is negative)
-        const targetHeat = Math.min(
-          Math.max(
-            currentHeat + dropDelta,
-            HEAT_CONFIG.MIN_FINAL_SCORE
-          ),
-          HEAT_CONFIG.MAX_FINAL_SCORE
-        );
-
-        // Step 6: Resolve what adjustment is needed to reach target heat
-        const { newAdjustment } = resolveAdjustmentForTargetHeat(
-          targetHeat,
-          {
-            heatAdjustment: currentTask.heatAdjustment ?? 0,
-            lastTouchedAt: currentTask.lastTouchedAt,
-            lastHeatTouchedAt: currentTask.lastHeatTouchedAt,
-          },
-          now,
-          currentImportance
-        );
-
-        // Step 7: Apply optimistic update (only ONE task changes)
-        return oldTasks.map((t) =>
-          t.id === taskId
+        return oldTasks.map((task) =>
+          task.id === taskId
             ? {
-                ...t,
+                ...task,
                 heatAdjustment: newAdjustment,
                 lastHeatTouchedAt: now,
                 lastTouchedAt: now,
               }
-            : t
+            : task
         );
-      });
+      };
+
+      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, applyOptimisticUpdate);
+
+      console.log('━━━━━ [COOL onMutate] END ━━━━━');
 
       return { previousTasks };
     },
-    onError: (error, _variables, context) => {
+    onError: (error, variables, context) => {
+      // Clear intent on error
+      if (intentTracker) {
+        intentTracker.current.delete(variables.taskId);
+        console.log('[COOL onError] Cleared intent for task', variables.taskId);
+      }
+
       // Rollback on error
       if (context?.previousTasks) {
         context.previousTasks.forEach(([queryKey, data]) => {
@@ -846,6 +990,16 @@ export function useCoolTask() {
       });
     },
     onSuccess: (response) => {
+      console.log('━━━━━ [COOL onSuccess] START ━━━━━');
+      console.log('[COOL onSuccess] Server returned task', response.task.id);
+      console.log('[COOL onSuccess] Server heatAdjustment:', response.task.heatAdjustment);
+
+      // Clear intent now that server confirmed the change
+      if (intentTracker) {
+        intentTracker.current.delete(response.task.id);
+        console.log('[COOL onSuccess] Cleared intent for task', response.task.id);
+      }
+
       // Replace optimistic update with authoritative server response
       queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
         if (!oldTasks || !Array.isArray(oldTasks)) return oldTasks;
@@ -853,6 +1007,8 @@ export function useCoolTask() {
           task.id === response.task.id ? response.task : task
         );
       });
+
+      console.log('━━━━━ [COOL onSuccess] END ━━━━━');
 
       toast.success("Task cooled", {
         description: `Heat adjustment: ${response.adjustmentDelta >= 0 ? "+" : ""}${response.adjustmentDelta.toFixed(0)} pts`,

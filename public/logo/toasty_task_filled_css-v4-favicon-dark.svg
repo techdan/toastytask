@@ -3,8 +3,8 @@
   <style>
     :root {
       --bg: transparent;
-      --toast: #ec672f;
-      --check: #ec672f;
+      --toast: #c4c9cc;
+      --check: #c4c9cc;
       --line: var(--toast);
     }
   </style>

@@ -21,6 +21,7 @@ interface TaskListProps {
   onDelete: (id: number) => void;
   onComplete: (id: number) => void;
   onUncomplete: (id: number) => void;
+  latestHeatIntent?: React.MutableRefObject<Map<number, { adjustment: number; timestamp: number }>>;
 }
 
 export function TaskList({
@@ -35,10 +36,11 @@ export function TaskList({
   onUpdate,
   onDelete,
   onComplete,
-  onUncomplete
+  onUncomplete,
+  latestHeatIntent
 }: TaskListProps) {
-  const touchTaskMutation = useTouchTask();
-  const coolTaskMutation = useCoolTask();
+  const touchTaskMutation = useTouchTask(latestHeatIntent);
+  const coolTaskMutation = useCoolTask(latestHeatIntent);
   const markTaskTouchedMutation = useMarkTaskTouched();
 
   // Helper function to get nearby task IDs for optimistic updates

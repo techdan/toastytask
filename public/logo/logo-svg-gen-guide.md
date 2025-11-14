@@ -1,4 +1,6 @@
-Start from toasty_task_filled_css-v4.svg
+Start from `/logo/toasty_task_filled_css-v4.svg`
+
+Keep the CSS hooks for `--bg`, `--toast`, and `--check` intact so the runtime config (`lib/logo-color-config.ts` / `components/theme/logo-theme-vars.tsx`) can push colors down to the asset.
 
 *How we moved the inner arc (and thickened the outer)*
 		1) Isolate the three shapes from the PNG

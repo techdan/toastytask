@@ -56,23 +56,37 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
-        url: "/toasty_task_filled_css-v4-favicon.svg",
+        url: "/logo/toasty_task_filled_css-v4-favicon-light.svg",
         type: "image/svg+xml",
         sizes: "any",
+        media: "(prefers-color-scheme: light)",
+      },
+      {
+        url: "/logo/toasty_task_filled_css-v4-favicon-dark.svg",
+        type: "image/svg+xml",
+        sizes: "any",
+        media: "(prefers-color-scheme: dark)",
       },
     ],
     shortcut: [
       {
-        url: "/toasty_task_filled_css-v4-favicon.svg",
+        url: "/logo/toasty_task_filled_css-v4-favicon-light.svg",
         type: "image/svg+xml",
         sizes: "any",
+        media: "(prefers-color-scheme: light)",
+      },
+      {
+        url: "/logo/toasty_task_filled_css-v4-favicon-dark.svg",
+        type: "image/svg+xml",
+        sizes: "any",
+        media: "(prefers-color-scheme: dark)",
       },
     ],
   },
 };
 ```
 
-The favicon variant (`toasty_task_filled_css-v4-favicon.svg`) inlines `--toast` and `--check` as `#ec672f` so browsers without our CSS variables still render the orange toast/check while keeping the background transparent.
+The favicon metadata now exposes two SVGs so browsers can pick a color that matches the active scheme: the `-light` file keeps the fiery orange toast/check defined in `logoColorConfig.light`, while the `-dark` file hard-codes `#c4c9cc` so tabs render the pale tone even before our CSS variables hydrate.
 
 ### CSS Variable Usage
 
@@ -82,6 +96,12 @@ The favicon variant (`toasty_task_filled_css-v4-favicon.svg`) inlines `--toast` 
 | `--toast` | `#f24c05` | Toast icon fill (envelope body) |
 | `--check` | `#f24c05` | Check mark and accent fill inside the grouped path |
 | `--line` | `#f24c05` | Legacy alias for single-path logos; use when a file exposes only one `line` class |
+| `--logo-title-toasty` | `#f24c05` | Color applied to the “Toasty” segment of the heading/badge text |
+| `--logo-title-task` | `#c4c9cc` | Color applied to the “Task” segment for the two-tone treatment |
+
+### Central color config
+
+`lib/logo-color-config.ts` exports `logoColorConfig`, which lists the light/dark values for `favicon`, `toast`, `check`, `titleToasty`, and `titleTask`. The client helper `components/theme/logo-theme-vars.tsx` reads that config and pushes those colors into the CSS variables above so every logo or heading tag follows the same palette.
 
 #### Customizing the Background
 
@@ -121,9 +141,9 @@ No additional CSS is needed—the theme system handles this automatically.
 
 | Logo | Use Case | File |
 |------|----------|------|
-| **CSS Filled** | Header, favicon, primary branding | `toasty_task_filled_css-v4.svg` (app) / `toasty_task_filled_css-v4-favicon.svg` (favicon) |
-| **CSS Stroked** | Alternate designs, custom stroke control | `toasty_task_logo_css_stroked_split_widths.svg` |
-| **Original Filled** | Legacy support (uses drop-shadow filter) | `toasty_task_logo_vectorized_filled.svg` |
+| **CSS Filled** | Header, favicon, primary branding | `logo/toasty_task_filled_css-v4.svg` (app) / `logo/toasty_task_filled_css-v4-favicon-light.svg` + `logo/toasty_task_filled_css-v4-favicon-dark.svg` (favicon) |
+| **CSS Stroked** | Alternate designs, custom stroke control | `logo/toasty_task_logo_css_stroked_split_widths.svg` |
+| **Original Filled** | Legacy support (uses drop-shadow filter) | `logo/toasty_task_logo_vectorized_filled.svg` |
 
 ### Demo Page
 

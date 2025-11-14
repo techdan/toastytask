@@ -303,9 +303,9 @@ mark {
 /* Logo SVG styling - light and dark mode support */
 svg.logo-svg {
   --logo-bg: transparent;
-  --logo-line: #f24c05;
-  --logo-toast: var(--logo-line);
-  --logo-check: var(--logo-line);
+  --logo-toast: #f24c05;
+  --logo-check: #f24c05;
+  --logo-line: var(--logo-toast);
   --bg: var(--logo-bg);
   --line: var(--logo-line);
   --toast: var(--logo-toast);
@@ -313,9 +313,9 @@ svg.logo-svg {
 }
 
 .dark svg.logo-svg {
-  --logo-line: #ec672f;
-  --logo-toast: var(--logo-line);
-  --logo-check: var(--logo-line);
+  --logo-toast: #c4c9cc;
+  --logo-check: #c4c9cc;
+  --logo-line: var(--logo-toast);
 }
 
 svg.logo-svg .bg {
@@ -336,9 +336,14 @@ svg.logo-svg .check {
 
 /* Logo text styling - light and dark mode support */
 .logo-text {
-  color: #f24c05;
+  display: inline-flex;
+  gap: 0.35rem;
 }
 
-.dark .logo-text {
-  color: #ec672f;
+.logo-text .logo-word-toasty {
+  color: var(--logo-title-toasty, #f24c05);
+}
+
+.logo-text .logo-word-task {
+  color: var(--logo-title-task, #c4c9cc);
 }

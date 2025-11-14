@@ -5,7 +5,7 @@ import type { CSSProperties } from "react";
 
 import { cn } from "@/lib/utils";
 
-const DEFAULT_LOGO_SRC = "/toasty_task_filled_css-v4.svg";
+const DEFAULT_LOGO_SRC = "/logo/toasty_task_filled_css-v4.svg";
 
 type LogoColors = {
   bg?: string;
@@ -112,8 +112,8 @@ export function Logo({
     height,
     "--logo-bg": colors?.bg,
     "--logo-line": colors?.line,
-    "--logo-toast": colors?.toast ?? colors?.line,
-    "--logo-check": colors?.check ?? colors?.line,
+    "--logo-toast": colors?.toast,
+    "--logo-check": colors?.check,
   };
 
   if (loadError) {

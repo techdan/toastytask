@@ -171,6 +171,8 @@ function TasksPageContent() {
   const invalidationTimeout = useRef<NodeJS.Timeout | undefined>(undefined);
   // Track the latest intended completion state to ignore out-of-order responses
   const latestCompletionIntent = useRef(new Map<number, { shouldBeCompleted: boolean; timestamp: number }>());
+  // Track the latest intended heat adjustment to survive HMR cache restoration
+  const latestHeatIntent = useRef(new Map<number, { adjustment: number; timestamp: number }>());
   // Track corrections that need to be applied
   const [correctionsNeeded, setCorrectionsNeeded] = useState(new Map<number, boolean>());
 
@@ -207,6 +209,16 @@ function TasksPageContent() {
     projectId: undefined, // No filter - get all tasks
     includeCompleted: true, // Fetch completed tasks too for accurate counts
   });
+
+  // Debug: Log which query key is being used
+  useEffect(() => {
+    const queryKey = JSON.stringify(["tasks", { projectId: undefined, includeCompleted: true }]);
+    const normalizedKey = JSON.stringify(["tasks", { includeCompleted: true }]);
+    console.log('[PAGE] useTasksQuery params:', { projectId: undefined, includeCompleted: true });
+    console.log('[PAGE] Expected query key (with undefined):', queryKey);
+    console.log('[PAGE] Normalized query key (undefined removed):', normalizedKey);
+    console.log('[PAGE] Note: React Query removes undefined from query keys');
+  }, []);
 
   // Filter tasks client-side based on selected project for instant updates
   const allFetchedTasks = useMemo(() => {
@@ -424,11 +436,37 @@ function TasksPageContent() {
         }
       }
 
-      const freshImportance = calculateImportanceV1(task, now);
+      // INTENT OVERRIDE: Apply pending heat intent if newer than cached value (survives HMR!)
+      const intent = latestHeatIntent.current.get(task.id);
+      const cachedTimestamp = task.lastHeatTouchedAt ? new Date(task.lastHeatTouchedAt).getTime() : 0;
+      const shouldApplyIntent = intent && intent.timestamp > cachedTimestamp;
+
+      // Use intent adjustment if it's newer, otherwise use cached value
+      const effectiveTask = shouldApplyIntent
+        ? { ...task, heatAdjustment: intent.adjustment }
+        : task;
+
+      if (shouldApplyIntent && task.id === 81) {
+        console.log('[RENDER] Applying intent override! Intent:', intent.adjustment, 'Cached:', task.heatAdjustment);
+      }
+
+      const freshImportance = calculateImportanceV1(effectiveTask, now);
+      const freshHeat = calculateHeat(effectiveTask, now, freshImportance);
+
+      // Debug logging for specific tasks we're tracking (Task 81)
+      if (task.id === 81) {
+        console.log('━━━━━ [RENDER] Task', task.id, '━━━━━');
+        console.log('[RENDER] Cached heatAdjustment:', task.heatAdjustment ?? 'null');
+        console.log('[RENDER] Effective heatAdjustment:', effectiveTask.heatAdjustment ?? 'null');
+        console.log('[RENDER] Calculated heat:', freshHeat.toFixed(1));
+        console.log('[RENDER] Intent exists:', !!intent);
+        console.log('[RENDER] Should apply intent:', shouldApplyIntent);
+      }
+
       const enrichedTask: TaskWithFreshValues = {
         ...task,
         _freshImportance: freshImportance,
-        _freshHeat: calculateHeat(task, now, freshImportance),
+        _freshHeat: freshHeat,
         // Override completedAt based on our React state to prevent flicker during rapid mutations
         ...(isOptimisticActive ? { completedAt: null } : {}),
         ...(shouldLinger && !isCompleted ? { completedAt: new Date() } : {}),
@@ -874,7 +912,8 @@ function TasksPageContent() {
                 >
                   <Logo width={40} height={40} className="h-10 w-10" />
                   <span className="font-fraunces text-4xl font-bold tracking-tight logo-text">
-                    Toasty Task
+                    <span className="logo-word-toasty">Toasty</span>
+                    <span className="logo-word-task">Task</span>
                   </span>
                 </button>
               </h1>
@@ -934,6 +973,7 @@ function TasksPageContent() {
                 onDelete={handleDeleteTask}
                 onComplete={handleCompleteTask}
                 onUncomplete={handleUncompleteTask}
+                latestHeatIntent={latestHeatIntent}
               />
             </>
           )}

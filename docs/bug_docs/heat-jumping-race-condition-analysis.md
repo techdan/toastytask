@@ -1,12 +1,15 @@
 # Bug Analysis: Heat Adjustment Value Jumping During Updates
 
-**Date:** 2025-11-13
-**Severity:** Medium
-**Status:** Under Investigation 🔍
+**Date Created:** 2025-11-13
+**Last Updated:** 2025-11-13 22:45 UTC
+**Severity:** Medium → Low
+**Status:** Partially Resolved ✅ (Phase 1 Complete)
 
 ## Summary
 
 When clicking heat/cool buttons, the heat adjustment value briefly jumps to another number before settling at the final value. This appears to be a cache synchronization issue similar to the [task-disappearing-race-condition](task-disappearing-race-condition.md) but manifesting differently.
+
+**UPDATE 2025-11-13:** Phase 1 fixes (exact query matching) have been successfully implemented and deployed. The issue is now significantly reduced in normal use. Remaining phases (intent tracking and debounced invalidation) are planned for edge case protection (rapid clicks, slow networks).
 
 ## Symptoms
 
@@ -641,12 +644,106 @@ When implementing fixes:
 - [Current Heat Algorithm](../current-heat-algorithm.md)
 - React Query: [Optimistic Updates Guide](https://tanstack.com/query/latest/docs/react/guides/optimistic-updates)
 
+## Implementation Progress
+
+### 2025-11-13 - Initial Implementation
+
+#### Phase 1: Quick Fixes ✅ **COMPLETE & WORKING**
+
+**Date Completed:** 2025-11-13 22:30 UTC
+
+**What Was Implemented:**
+
+1. **Exact query matching in useTouchTask** ([use-task-mutations.ts:745](../lib/queries/use-task-mutations.ts#L745))
+   ```typescript
+   queryClient.setQueriesData<Task[]>(
+     { queryKey: ["tasks", { projectId: undefined, includeCompleted: true }], exact: true },
+     (oldTasks) => {
+       // Update logic
+     }
+   );
+   ```
+
+2. **Exact query matching in useCoolTask** ([use-task-mutations.ts:854](../lib/queries/use-task-mutations.ts#L854))
+   - Same implementation as useTouchTask
+   - Prevents updates to multiple query caches
+
+3. **Calculation time snapshotting** (Already in place)
+   - Both functions already snapshot `const now = new Date()` once
+   - Used consistently throughout all calculations
+
+**Results:**
+- ✅ Heat/cool buttons work correctly
+- ✅ Reduced cache update collisions
+- ✅ Fewer unnecessary re-renders
+- ✅ Simpler, more predictable mutation behavior
+- ✅ No observable flickering in normal use
+
+**Files Modified:**
+- `lib/queries/use-task-mutations.ts` (lines 745, 854)
+
+---
+
+#### Phase 2: Core Fix ⏸️ **ATTEMPTED BUT ROLLED BACK**
+
+**Date Attempted:** 2025-11-13 22:35 UTC
+**Date Rolled Back:** 2025-11-13 22:40 UTC
+
+**What Was Attempted:**
+
+1. **Intent tracking refs** added to `app/tasks/page.tsx`
+   - `latestHeatIntent` ref for tracking mutation timestamps
+   - `pendingHeatMutations` ref for tracking pending mutations
+   - `scheduleHeatInvalidation` callback for debounced invalidation
+
+2. **Handler updates** in `components/tasks/task-list.tsx`
+   - Modified `handleHeat` and `handleCool` to record timestamps
+   - Added pending mutation tracking before mutation calls
+
+3. **Mutation updates** in `lib/queries/use-task-mutations.ts`
+   - Added parameters to `useTouchTask` and `useCoolTask` for intent tracking
+   - Added timestamp parameter to mutation function signatures
+   - Implemented stale response detection in `onSuccess`
+   - Added `onSettled` handlers for cleanup
+
+**Why It Was Rolled Back:**
+- ❌ Heat/cool buttons stopped working completely
+- ❌ Breaking change needs incremental implementation
+- ❌ Need to identify which specific change caused the break
+
+**Lesson Learned:**
+Phase 2 needs to be implemented one component at a time with testing between each change to identify what breaks.
+
+---
+
+#### Phase 3: Polish ⏸️ **NOT YET ATTEMPTED**
+
+**Status:** Pending Phase 2 completion
+
+**Planned Implementation:**
+- Debounced invalidation for heat/cool mutations
+- Pending mutation tracking for refetch prevention
+
+---
+
+### Current Status
+
+**Working:** Phase 1 (exact query matching)
+**Blocked:** Phases 2 & 3 pending incremental implementation
+
+**Next Actions:**
+1. Implement Phase 2 components incrementally
+2. Test after each change to identify breaking point
+3. Fix or adjust approach based on findings
+
+---
+
 ## Next Steps
 
-1. Review this analysis with team
-2. Confirm which solutions to implement
-3. Start with Phase 1 (quick fixes) for immediate improvement
-4. Proceed to Phase 2 (core fix) for complete solution
+1. ~~Review this analysis with team~~ ✅ Complete
+2. ~~Confirm which solutions to implement~~ ✅ Complete
+3. ~~Start with Phase 1 (quick fixes) for immediate improvement~~ ✅ Complete
+4. **Current:** Proceed to Phase 2 (core fix) with incremental implementation
 5. Monitor production after deployment
 
 ---

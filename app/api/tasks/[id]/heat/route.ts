@@ -49,11 +49,21 @@ export async function POST(
       );
     }
 
+    console.log("━━━━━ [SERVER HEAT] START ━━━━━");
+    console.log("[SERVER HEAT] Task ID:", taskId);
+    console.log("[SERVER HEAT] visibleTaskIds:", visibleTaskIds);
+
     // Get existing task
     const existingTask = await taskRepository.findById(taskId, userId);
     if (!existingTask) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
+    console.log("[SERVER HEAT] Existing task snapshot:", {
+      id: existingTask.id,
+      heatAdjustment: existingTask.heatAdjustment ?? 0,
+      lastHeatTouchedAt: existingTask.lastHeatTouchedAt,
+      lastTouchedAt: existingTask.lastTouchedAt,
+    });
 
     // Calculate old heat for delta
     const storedAdjustment = existingTask.heatAdjustment || 0;
@@ -81,7 +91,6 @@ export async function POST(
     let contextTasks: Array<{id: number; heat: number}> = [];
     if (neighborIds.length > 0) {
       const neighborRecords = await taskRepository.findManyByIds(neighborIds, userId);
-
       contextTasks = neighborRecords.map((neighbor) => {
         // Recalculate importanceV1 fresh (don't trust DB value)
         // importanceV1 is time-dependent and can become stale in the database
@@ -89,6 +98,11 @@ export async function POST(
         const freshHeat = calculateHeat({ ...neighbor, importanceV1: freshImportance }, now);
         return { id: neighbor.id, heat: freshHeat };
       });
+      console.log("[SERVER HEAT] Neighbor IDs:", neighborIds);
+      console.log("[SERVER HEAT] Context tasks snapshot:", contextTasks.map((task) => ({
+        id: task.id,
+        heat: Number(task.heat.toFixed(2)),
+      })));
     }
 
     // Calculate context-aware boost (move up 1 position)
@@ -99,11 +113,14 @@ export async function POST(
             { heat: contextCurrentHeat, id: existingTask.id },
             contextTasks
           );
+    console.log("[SERVER HEAT] boostHeatDelta:", boostHeatDelta);
 
     const targetHeat = Math.min(
       Math.max(contextCurrentHeat + boostHeatDelta, HEAT_CONFIG.MIN_FINAL_SCORE),
       HEAT_CONFIG.MAX_FINAL_SCORE
     );
+    console.log("[SERVER HEAT] contextCurrentHeat:", Number(contextCurrentHeat.toFixed(2)));
+    console.log("[SERVER HEAT] targetHeat:", Number(targetHeat.toFixed(2)));
 
     const {
       newAdjustment,
@@ -136,6 +153,14 @@ export async function POST(
 
     // Calculate deltas
     const heatDelta = newHeat - baselineHeat;
+    console.log("[SERVER HEAT] Adjustment results:", {
+      newAdjustment,
+      adjustmentDelta,
+      baselineHeat: Number(baselineHeat.toFixed(2)),
+      newHeat: Number(newHeat.toFixed(2)),
+      heatDelta: Number(heatDelta.toFixed(2)),
+    });
+    console.log("━━━━━ [SERVER HEAT] END ━━━━━");
 
     return NextResponse.json({
       task: updatedTask,

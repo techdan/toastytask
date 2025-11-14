@@ -12,3 +12,7 @@ Foreground / Background Combos
 #e8c974 / #d8560e
 #5c2432 / #cbd183
 
+## Logo Color Config
+
+`lib/logo-color-config.ts` centralizes the Toasty Task palette. Light mode keeps the orange toast/check/title colors, while dark mode overrides the same five slots (`favicon`, `logo toast`, `logo check`, `title “Toasty”`, `title “Task”`) with `#c4c9cc` so the icon and text stay readable against dark tabs.
+

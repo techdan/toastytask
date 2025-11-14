@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { LogoThemeVars } from "@/components/theme/logo-theme-vars";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -28,16 +29,30 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
-        url: "/toasty_task_filled_css-v4-favicon.svg",
+        url: "/logo/toasty_task_filled_css-v4-favicon-light.svg",
         type: "image/svg+xml",
         sizes: "any",
+        media: "(prefers-color-scheme: light)",
+      },
+      {
+        url: "/logo/toasty_task_filled_css-v4-favicon-dark.svg",
+        type: "image/svg+xml",
+        sizes: "any",
+        media: "(prefers-color-scheme: dark)",
       },
     ],
     shortcut: [
       {
-        url: "/toasty_task_filled_css-v4-favicon.svg",
+        url: "/logo/toasty_task_filled_css-v4-favicon-light.svg",
         type: "image/svg+xml",
         sizes: "any",
+        media: "(prefers-color-scheme: light)",
+      },
+      {
+        url: "/logo/toasty_task_filled_css-v4-favicon-dark.svg",
+        type: "image/svg+xml",
+        sizes: "any",
+        media: "(prefers-color-scheme: dark)",
       },
     ],
   },
@@ -55,16 +70,17 @@ export default function RootLayout({
           className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} antialiased`}
         >
           <QueryProvider>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-              themes={["light", "dark", "theme-toast", "theme-lavender", "theme-mint", "theme-sage"]}
-            >
-              {children}
-              <Toaster position="bottom-right" richColors />
-            </ThemeProvider>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange
+                themes={["light", "dark", "theme-toast", "theme-lavender", "theme-mint", "theme-sage"]}
+              >
+                <LogoThemeVars />
+                {children}
+                <Toaster position="bottom-right" richColors />
+              </ThemeProvider>
           </QueryProvider>
         </body>
       </html>

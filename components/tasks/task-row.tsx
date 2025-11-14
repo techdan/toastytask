@@ -120,10 +120,20 @@ export function TaskRow({ task, projects, sortMode, onUpdate, onDelete, onComple
     }
   };
 
+  const handleHeatButtonClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    handleTouchClick();
+  };
+
   const handleCoolClick = () => {
     if (!isCompleted) {
       onCool(task.id);
     }
+  };
+
+  const handleCoolButtonClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    handleCoolClick();
   };
 
   const handleRowClick = (event: React.MouseEvent<HTMLTableRowElement>) => {
@@ -196,7 +206,7 @@ export function TaskRow({ task, projects, sortMode, onUpdate, onDelete, onComple
                       : "text-orange-400/60 hover:text-orange-400 cursor-pointer"
                   )}
                   data-level={(task.heatAdjustment ?? 0) > 0 ? getGlowLevel(task.heatAdjustment ?? 0) : 0}
-                  onClick={handleTouchClick}
+                  onClick={handleHeatButtonClick}
                   disabled={isCompleted}
                   aria-label="Heat task (move up)"
                   title="Heat (move up 1 position)"
@@ -211,7 +221,7 @@ export function TaskRow({ task, projects, sortMode, onUpdate, onDelete, onComple
                       : "text-blue-400/60 hover:text-blue-400 cursor-pointer"
                   )}
                   data-level={(task.heatAdjustment ?? 0) < 0 ? getGlowLevel(task.heatAdjustment ?? 0) : 0}
-                  onClick={handleCoolClick}
+                  onClick={handleCoolButtonClick}
                   disabled={isCompleted}
                   aria-label="Cool task (move down)"
                   title="Cool (move down 3 positions)"

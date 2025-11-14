@@ -16,12 +16,13 @@ export default async function Home() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-background to-muted">
       <div className="container mx-auto max-w-4xl px-4 text-center">
-        <div className="mb-4 flex items-center justify-center gap-3">
-          <Logo width={60} height={60} className="h-15 w-15" />
-          <h1 className="font-fraunces text-5xl font-bold tracking-tight logo-text">
-            Toasty Task
-          </h1>
-        </div>
+          <div className="mb-4 flex items-center justify-center gap-3">
+            <Logo width={60} height={60} className="h-15 w-15" />
+            <h1 className="font-fraunces text-5xl font-bold tracking-tight logo-text">
+              <span className="logo-word-toasty">Toasty</span>
+              <span className="logo-word-task">Task</span>
+            </h1>
+          </div>
         <p className="mb-8 text-xl text-muted-foreground">
           Your tasks rise to the top when they matter.
         </p>
