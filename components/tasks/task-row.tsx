@@ -26,6 +26,7 @@ interface TaskRowProps {
   projects: Project[];
   sortMode: SortMode;
   onUpdate: (id: number, updates: Partial<Task>) => void;
+  onStar: (id: number) => void;
   onDelete: (id: number) => void;
   onComplete: (id: number) => void;
   onUncomplete: (id: number) => void;
@@ -34,7 +35,7 @@ interface TaskRowProps {
   onTouch: (taskId: number) => void;
 }
 
-export function TaskRow({ task, projects, sortMode, onUpdate, onDelete, onComplete, onUncomplete, onHeat, onCool, onTouch }: TaskRowProps) {
+export function TaskRow({ task, projects, sortMode, onUpdate, onStar, onDelete, onComplete, onUncomplete, onHeat, onCool, onTouch }: TaskRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(task.title);
   const [notesExpanded, setNotesExpanded] = useState(false);
@@ -78,24 +79,12 @@ export function TaskRow({ task, projects, sortMode, onUpdate, onDelete, onComple
     }
   };
 
-  const handleStarClick = async () => {
-    // Cycle star level optimistically and revert on failure
-    const previousStarLevel = task.starLevel ?? 0;
-    const newStarLevel = (previousStarLevel + 1) % 4;
-
-    onUpdate(task.id, { starLevel: newStarLevel });
-
-    try {
-      const response = await fetch(`/api/tasks/${task.id}/star`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        throw new Error("Failed to cycle star");
-      }
-    } catch (error) {
-      console.error("Failed to cycle star:", error);
-      onUpdate(task.id, { starLevel: previousStarLevel });
+  const handleStarClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (isCompleted) {
+      return;
     }
+    onStar(task.id);
   };
 
   const handlePriorityChange = (priority: Priority) => {

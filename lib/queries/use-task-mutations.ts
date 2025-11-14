@@ -12,7 +12,7 @@ import { HEAT_CONFIG } from "@/lib/scoring/heat-config";
 import { PRIMARY_TASKS_QUERY_KEY } from "./task-query-keys";
 import type { Task, NewTask } from "@/types";
 import type { HeatV3Breakdown } from "@/lib/scoring/heat-v3";
-import { mergeTaskWithCachedNotes } from "./task-cache-helpers";
+import { applyStarLevelToTask, mergeTaskWithCachedNotes } from "./task-cache-helpers";
 
 interface TaskResponse {
   task: Task;
@@ -36,6 +36,21 @@ interface CoolTaskResponse {
   drop: number;
   baselineHeat: number;
   targetHeat: number;
+}
+
+interface StarTaskResponse {
+  task: Task;
+  oldStarLevel: number;
+  newStarLevel: number;
+  starPoints: number;
+}
+
+interface StarMutationVariables {
+  taskId: number;
+  targetLevel?: number;
+  intentTimestamp?: number;
+  optimisticApplied?: boolean;
+  snapshotBeforeOptimism?: Task[] | undefined;
 }
 
 interface UpdateTaskData {
@@ -115,6 +130,37 @@ async function uncompleteTask(id: number): Promise<Task> {
 
   const data: TaskResponse = await response.json();
   return data.task;
+}
+
+// Star task - set/cycle star level
+async function starTask({
+  id,
+  targetLevel,
+  intentTimestamp,
+}: {
+  id: number;
+  targetLevel?: number;
+  intentTimestamp?: number;
+}): Promise<StarTaskResponse> {
+  const payload: Record<string, unknown> = {};
+  if (typeof targetLevel === "number") {
+    payload.targetLevel = targetLevel;
+  }
+  if (typeof intentTimestamp === "number") {
+    payload.intentVersion = intentTimestamp;
+  }
+  const hasBody = Object.keys(payload).length > 0;
+  const response = await fetch(`/api/tasks/${id}/star`, {
+    method: "POST",
+    headers: hasBody ? { "Content-Type": "application/json" } : undefined,
+    body: hasBody ? JSON.stringify(payload) : undefined,
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to update star");
+  }
+
+  return response.json();
 }
 
 // Hook: Create task with optimistic update
@@ -332,6 +378,113 @@ export function useDeleteTask() {
     onSettled: () => {
       // Refetch to ensure consistency
       queryClient.invalidateQueries({ queryKey: PRIMARY_TASKS_QUERY_KEY, exact: true });
+    },
+  });
+}
+
+// Hook: Star task (cycle star level with intent tracking)
+interface UseStarTaskOptions {
+  getLatestIntentTimestamp?: (taskId: number) => number | undefined;
+}
+
+export function useStarTask(options?: UseStarTaskOptions) {
+  const queryClient = useQueryClient();
+  const latestStarIntent = useRef(new Map<number, number>());
+
+  return useMutation({
+    mutationFn: ({ taskId, targetLevel, intentTimestamp }: StarMutationVariables) =>
+      starTask({ id: taskId, targetLevel, intentTimestamp }),
+    onMutate: async (variables: StarMutationVariables) => {
+      const { taskId, targetLevel, optimisticApplied, snapshotBeforeOptimism } = variables;
+      await queryClient.cancelQueries({ queryKey: PRIMARY_TASKS_QUERY_KEY, exact: true });
+
+      const timestamp = variables.intentTimestamp ?? Date.now();
+      latestStarIntent.current.set(taskId, timestamp);
+
+      const previousTasks =
+        snapshotBeforeOptimism ?? queryClient.getQueryData<Task[]>(PRIMARY_TASKS_QUERY_KEY);
+
+      if (optimisticApplied) {
+        return { previousTasks, taskId, timestamp };
+      }
+
+      if (!previousTasks || !Array.isArray(previousTasks)) {
+        return { previousTasks, taskId, timestamp };
+      }
+
+      const now = new Date();
+      const updatedTasks = previousTasks.map((task) => {
+        if (task.id !== taskId) {
+          return task;
+        }
+        const resolvedLevel =
+          typeof targetLevel === "number"
+            ? targetLevel
+            : ((task.starLevel ?? 0) + 1) % 4;
+        return applyStarLevelToTask(task, resolvedLevel, now);
+      });
+
+      queryClient.setQueryData<Task[]>(PRIMARY_TASKS_QUERY_KEY, updatedTasks);
+
+      return { previousTasks, taskId, timestamp };
+    },
+    onError: (error, variables, context) => {
+      if (context?.previousTasks) {
+        queryClient.setQueryData(PRIMARY_TASKS_QUERY_KEY, context.previousTasks);
+      }
+      if (variables?.taskId !== undefined && context?.timestamp !== undefined) {
+        const latestTimestamp = latestStarIntent.current.get(variables.taskId);
+        if (latestTimestamp === context.timestamp) {
+          latestStarIntent.current.delete(variables.taskId);
+        }
+      }
+      toast.error("Failed to update star", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    },
+    onSuccess: (response, variables, context) => {
+      const taskId = variables?.taskId;
+      if (taskId !== undefined && context?.timestamp !== undefined) {
+        const callerLatestTimestamp = options?.getLatestIntentTimestamp?.(taskId);
+        if (
+          callerLatestTimestamp !== undefined &&
+          callerLatestTimestamp > context.timestamp
+        ) {
+          return;
+        }
+        const latestTimestamp = latestStarIntent.current.get(taskId);
+        if (latestTimestamp !== undefined && latestTimestamp !== context.timestamp) {
+          // A newer click exists; ignore stale response
+          return;
+        }
+        latestStarIntent.current.delete(taskId);
+      }
+
+      const resolvedLevel =
+        typeof variables?.targetLevel === "number"
+          ? variables.targetLevel
+          : response.task.starLevel ?? response.newStarLevel ?? 0;
+
+      const serverTouchDate = response.task.lastTouchedAt
+        ? new Date(response.task.lastTouchedAt)
+        : new Date();
+
+      const authoritativeTask =
+        typeof variables?.targetLevel === "number"
+          ? applyStarLevelToTask(response.task, resolvedLevel, serverTouchDate, {
+              touchTimestamp: serverTouchDate,
+            })
+          : response.task;
+
+      queryClient.setQueryData<Task[]>(PRIMARY_TASKS_QUERY_KEY, (oldTasks) => {
+        if (!oldTasks || !Array.isArray(oldTasks)) {
+          return oldTasks;
+        }
+
+        return oldTasks.map((task) =>
+          task.id === authoritativeTask.id ? mergeTaskWithCachedNotes(task, authoritativeTask) : task
+        );
+      });
     },
   });
 }

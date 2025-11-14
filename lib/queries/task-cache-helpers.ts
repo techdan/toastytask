@@ -1,4 +1,6 @@
 import type { Task } from "@/types";
+import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
+import { calculateHeat } from "@/lib/scoring/heat-v3";
 
 /**
  * Merge fields that are absent on an incoming task response with the cached copy.
@@ -42,4 +44,30 @@ export function replaceTaskPreservingNotes(
   });
 
   return didReplace ? next : tasks;
+}
+
+/**
+ * Apply a new star level to a task, updating timestamps and recalculating heat.
+ */
+export function applyStarLevelToTask(
+  task: Task,
+  targetLevel: number,
+  now: Date,
+  options?: { touchTimestamp?: Date }
+): Task {
+  const effectiveLastTouchedAt = options?.touchTimestamp ?? now;
+
+  const updatedTask = {
+    ...task,
+    starLevel: targetLevel,
+    lastTouchedAt: effectiveLastTouchedAt,
+  };
+
+  const freshImportance = calculateImportanceV1(updatedTask, effectiveLastTouchedAt);
+
+  return {
+    ...updatedTask,
+    heat: calculateHeat(updatedTask, effectiveLastTouchedAt, freshImportance),
+    heatCalculatedAt: effectiveLastTouchedAt,
+  };
 }

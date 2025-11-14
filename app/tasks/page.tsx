@@ -19,6 +19,7 @@ import {
   useCreateTask,
   useUpdateTask,
   useDeleteTask,
+  useStarTask,
   useCompleteTask,
   useUncompleteTask,
   useCreateProject,
@@ -29,7 +30,7 @@ import {
   useTouchAllTasks,
 } from "@/lib/queries";
 import { PRIMARY_TASKS_QUERY_KEY } from "@/lib/queries/task-query-keys";
-import { mergeTaskWithCachedNotes } from "@/lib/queries/task-cache-helpers";
+import { applyStarLevelToTask, mergeTaskWithCachedNotes } from "@/lib/queries/task-cache-helpers";
 import { calculateHeat } from "@/lib/scoring/heat-v3";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
 import { searchTasks, filterResultsByProject } from "@/lib/search/search-utils";
@@ -39,6 +40,13 @@ import type { SearchResult } from "@/lib/search/search-utils";
 
 // Number of days to show completed tasks when visibility is enabled
 const COMPLETED_TASKS_VISIBLE_DAYS = 7;
+const STAR_DEBOUNCE_MS = 150;
+
+type PendingStarIntent = {
+  targetLevel: number;
+  intentTimestamp: number;
+  snapshotBeforeOptimism?: Task[] | undefined;
+};
 
 const toMilliseconds = (value: Date | string | number | null | undefined) => {
   if (!value) {
@@ -176,6 +184,9 @@ function TasksPageContent() {
   const latestCompletionIntent = useRef(new Map<number, { shouldBeCompleted: boolean; timestamp: number }>());
   // Track corrections that need to be applied
   const [correctionsNeeded, setCorrectionsNeeded] = useState(new Map<number, boolean>());
+  const pendingStarIntents = useRef(new Map<number, PendingStarIntent>());
+  const pendingStarTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+  const inflightStarRequests = useRef(new Map<number, boolean>());
 
   // Initialize collapsed state from localStorage after mount to avoid hydration issues
   useEffect(() => {
@@ -380,6 +391,11 @@ function TasksPageContent() {
   const createTaskMutation = useCreateTask();
   const updateTaskMutation = useUpdateTask();
   const deleteTaskMutation = useDeleteTask();
+  const latestStarIntentTimestamps = useRef(new Map<number, number>());
+  const { mutateAsync: starTaskMutateAsync } = useStarTask({
+    getLatestIntentTimestamp: (taskId) =>
+      latestStarIntentTimestamps.current.get(taskId),
+  });
   const completeTaskMutation = useCompleteTask();
   const uncompleteTaskMutation = useUncompleteTask();
   const createProjectMutation = useCreateProject();
@@ -523,6 +539,92 @@ function TasksPageContent() {
     createTaskMutation.mutate(taskData as NewTask);
   };
 
+  const applyOptimisticStarLevel = useCallback((taskId: number, targetLevel: number) => {
+    const now = new Date();
+    queryClient.setQueryData<Task[]>(PRIMARY_TASKS_QUERY_KEY, (oldTasks) => {
+      if (!oldTasks || !Array.isArray(oldTasks)) {
+        return oldTasks;
+      }
+
+      return oldTasks.map((task) =>
+        task.id === taskId ? applyStarLevelToTask(task, targetLevel, now) : task
+      );
+    });
+  }, [queryClient]);
+
+  const flushStarIntent = useCallback((taskId: number) => {
+    if (inflightStarRequests.current.get(taskId)) {
+      return;
+    }
+
+    const intent = pendingStarIntents.current.get(taskId);
+    if (!intent) {
+      return;
+    }
+
+    pendingStarIntents.current.delete(taskId);
+
+    const run = async () => {
+      inflightStarRequests.current.set(taskId, true);
+      try {
+        await starTaskMutateAsync({
+          taskId,
+          targetLevel: intent.targetLevel,
+          intentTimestamp: intent.intentTimestamp,
+          optimisticApplied: true,
+          snapshotBeforeOptimism: intent.snapshotBeforeOptimism,
+        });
+      } catch {
+        // Error handling occurs inside the mutation hook (toast + rollback)
+      } finally {
+        inflightStarRequests.current.delete(taskId);
+        if (pendingStarIntents.current.has(taskId)) {
+          flushStarIntent(taskId);
+        }
+      }
+    };
+
+    void run();
+  }, [starTaskMutateAsync]);
+
+  const handleStarTask = useCallback((taskId: number) => {
+    const pendingIntent = pendingStarIntents.current.get(taskId);
+    const currentTask = enrichedTaskMap.get(taskId);
+    if (!currentTask && !pendingIntent) {
+      return;
+    }
+    const currentLevel =
+      pendingIntent?.targetLevel ??
+      (currentTask?.starLevel ?? 0);
+    const nextLevel = (currentLevel + 1) % 4;
+
+    const snapshot =
+      pendingIntent?.snapshotBeforeOptimism ??
+      queryClient.getQueryData<Task[]>(PRIMARY_TASKS_QUERY_KEY);
+
+    applyOptimisticStarLevel(taskId, nextLevel);
+
+    const intentTimestamp = Date.now();
+    latestStarIntentTimestamps.current.set(taskId, intentTimestamp);
+    pendingStarIntents.current.set(taskId, {
+      targetLevel: nextLevel,
+      intentTimestamp,
+      snapshotBeforeOptimism: snapshot,
+    });
+
+    const existingTimer = pendingStarTimers.current.get(taskId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    const timeoutId = setTimeout(() => {
+      pendingStarTimers.current.delete(taskId);
+      flushStarIntent(taskId);
+    }, STAR_DEBOUNCE_MS);
+
+    pendingStarTimers.current.set(taskId, timeoutId);
+  }, [applyOptimisticStarLevel, enrichedTaskMap, flushStarIntent, queryClient]);
+
   const handleUpdateTask = async (id: number, updates: Partial<Task>) => {
     updateTaskMutation.mutate({ id, updates });
   };
@@ -637,6 +739,17 @@ function TasksPageContent() {
     setCorrectionsNeeded(new Map());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [correctionsNeeded]); // handleCompleteTask and handleUncompleteTask are called but not dependencies
+
+  useEffect(() => {
+    const timers = pendingStarTimers.current;
+    const intents = pendingStarIntents.current;
+
+    return () => {
+      timers.forEach((timeoutId) => clearTimeout(timeoutId));
+      timers.clear();
+      intents.clear();
+    };
+  }, []);
 
   const handleToggleCompleted = () => {
     const newValue = !showCompleted;
@@ -966,6 +1079,7 @@ function TasksPageContent() {
                 onRefreshOrder={handleRefreshOrder}
                 isRefreshingOrder={isRefreshingOrder}
                 onUpdate={handleUpdateTask}
+                onStar={handleStarTask}
                 onDelete={handleDeleteTask}
                 onComplete={handleCompleteTask}
                 onUncomplete={handleUncompleteTask}

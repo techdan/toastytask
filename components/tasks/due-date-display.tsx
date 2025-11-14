@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { Calendar } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Calendar as CalendarIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Button } from "@/components/ui/button";
 
 interface DueDateDisplayProps {
   dueAt: Date | number | null;
@@ -12,18 +15,11 @@ interface DueDateDisplayProps {
 }
 
 export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted }: DueDateDisplayProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const formatDate = (date: Date | number | null): string => {
-    if (!date) return "";
-    const d = typeof date === "number" ? new Date(date * 1000) : new Date(date);
-    // Format as YYYY-MM-DD using local timezone to avoid date shifting
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
+  const [isOpen, setIsOpen] = useState(false);
+  const dueDate = useMemo(() => {
+    if (!dueAt) return null;
+    return typeof dueAt === "number" ? new Date(dueAt * 1000) : new Date(dueAt);
+  }, [dueAt]);
 
   const getDisplayText = (): {
     text: string;
@@ -88,66 +84,62 @@ export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted }: D
 
   const { text, textClassName, wrapperClassName } = getDisplayText();
 
-  const handleClick = () => {
-    if (!disabled) {
-      setIsEditing(true);
+  const handleSelect = (date?: Date) => {
+    if (!date || disabled) {
+      setIsOpen(false);
+      return;
     }
+    const selectedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    onDateChange(selectedDate);
+    setIsOpen(false);
   };
 
-  useEffect(() => {
-    if (isEditing && inputRef.current) {
-      inputRef.current.showPicker?.();
-    }
-  }, [isEditing]);
-
-  const handleDateSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    if (value) {
-      // Parse the date string as local date (YYYY-MM-DD) to avoid timezone issues
-      // HTML date input returns YYYY-MM-DD, which new Date() interprets as UTC midnight
-      // We need to create a date at local midnight instead
-      const [year, month, day] = value.split('-').map(Number);
-      const date = new Date(year, month - 1, day);
-      onDateChange(date);
-    } else {
-      onDateChange(null);
-    }
-    setIsEditing(false);
+  const handleClear = () => {
+    if (disabled) return;
+    onDateChange(null);
+    setIsOpen(false);
   };
-
-  const handleBlur = () => {
-    setIsEditing(false);
-  };
-
-  if (isEditing) {
-    return (
-      <input
-        ref={inputRef}
-        type="date"
-        value={formatDate(dueAt)}
-        onChange={handleDateSelect}
-        onBlur={handleBlur}
-        disabled={disabled}
-        className="date-input"
-        autoFocus
-      />
-    );
-  }
 
   return (
-    <button
-      onClick={handleClick}
-      disabled={disabled}
-      className={cn(
-        "flex h-6 w-full min-w-[5.75rem] items-center gap-1 text-left text-xs transition-opacity hover:opacity-70",
-        "cursor-pointer px-0",
-        disabled && "cursor-not-allowed opacity-50"
-      )}
-    >
-      <Calendar className="h-3 w-3" />
-      <span className={cn("whitespace-nowrap", wrapperClassName)}>
-        <span className={textClassName}>{text}</span>
-      </span>
-    </button>
+    <Popover open={isOpen} onOpenChange={(open) => !disabled && setIsOpen(open)}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          className={cn(
+            "flex h-6 w-full min-w-[5.75rem] items-center gap-1 text-left text-xs transition-opacity hover:opacity-70",
+            "cursor-pointer px-0",
+            disabled && "cursor-not-allowed opacity-50"
+          )}
+        >
+          <CalendarIcon className="h-3 w-3" />
+          <span className={cn("whitespace-nowrap", wrapperClassName)}>
+            <span className={textClassName}>{text}</span>
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={dueDate ?? undefined}
+          defaultMonth={dueDate ?? new Date()}
+          onSelect={handleSelect}
+          initialFocus
+        />
+        <div className="flex items-center justify-between border-t p-2">
+          <Button variant="ghost" size="sm" onClick={handleClear} disabled={!dueDate}>
+            <X className="mr-2 h-3 w-3" />
+            Clear date
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => handleSelect(new Date())}
+          >
+            Today
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

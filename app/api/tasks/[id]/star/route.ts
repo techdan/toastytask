@@ -37,6 +37,26 @@ export async function POST(
     const { id } = await params;
     const taskId = parseInt(id, 10);
 
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      body = undefined;
+    }
+
+    const payload = typeof body === "object" && body !== null ? body as Record<string, unknown> : undefined;
+
+    // Parse optional target star level (defaults to "cycle once" for backwards compatibility)
+    const requestedTargetLevel =
+      typeof payload?.targetLevel === "number" && Number.isFinite(payload.targetLevel)
+        ? Math.min(STAR_CONFIG.MAX_LEVEL, Math.max(0, Math.round(payload.targetLevel)))
+        : undefined;
+
+    const requestedIntentVersion =
+      typeof payload?.intentVersion === "number" && Number.isFinite(payload.intentVersion)
+        ? Math.trunc(payload.intentVersion)
+        : undefined;
+
     // Get existing task
     const existingTask = await taskRepository.findById(taskId, userId);
     if (!existingTask) {
@@ -46,8 +66,30 @@ export async function POST(
     // Get current star level (default to 0 if not set)
     const oldStarLevel = existingTask.starLevel ?? 0;
 
-    // Cycle to next level (0 → 1 → 2 → 3 → 0)
-    const newStarLevel = (oldStarLevel + 1) % (STAR_CONFIG.MAX_LEVEL + 1);
+    const existingIntentVersion = existingTask.starIntentVersion ?? 0;
+
+    // Determine target level: prefer caller-provided level, otherwise cycle once
+    const newStarLevel =
+      typeof requestedTargetLevel === "number"
+        ? requestedTargetLevel
+        : (oldStarLevel + 1) % (STAR_CONFIG.MAX_LEVEL + 1);
+
+    const effectiveIntentVersion =
+      typeof requestedIntentVersion === "number" ? requestedIntentVersion : Date.now();
+
+    if (
+      typeof requestedIntentVersion === "number" &&
+      requestedIntentVersion < existingIntentVersion
+    ) {
+      // Ignore stale request - client already has newer intent applied
+      return NextResponse.json({
+        task: existingTask,
+        oldStarLevel,
+        newStarLevel: existingTask.starLevel ?? oldStarLevel,
+        starPoints: STAR_CONFIG.POINTS[(existingTask.starLevel ?? 0) as keyof typeof STAR_CONFIG.POINTS],
+        skipped: true,
+      });
+    }
 
     // Update task with new star level
     const now = new Date();
@@ -55,6 +97,7 @@ export async function POST(
       starLevel: newStarLevel,
       // Update lastTouchedAt (but NOT lastHeatTouchedAt - star is not a heat action)
       lastTouchedAt: now,
+      starIntentVersion: effectiveIntentVersion,
     }, userId);
 
     // Calculate fresh importance (for heat calculation only - not persisted)

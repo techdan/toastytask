@@ -7,7 +7,8 @@ import {
   integer,
   boolean,
   timestamp,
-  index
+  index,
+  bigint
 } from "drizzle-orm/pg-core";
 
 // Projects table
@@ -43,6 +44,7 @@ export const tasks = pgTable("tasks", {
     .default("medium"),
   star: boolean("star").notNull().default(false), // DEPRECATED: Use starLevel instead
   starLevel: integer("star_level").notNull().default(0), // 0=none, 1=blue, 2=yellow, 3=orange
+  starIntentVersion: bigint("star_intent_version", { mode: "number" }).notNull().default(0),
   dueAt: timestamp("due_at", { mode: "date", withTimezone: true }),
 
   // Bucket (Phase 2)

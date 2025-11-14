@@ -18,6 +18,7 @@ interface TaskListProps {
   onRefreshOrder: () => Promise<void> | void;
   isRefreshingOrder: boolean;
   onUpdate: (id: number, updates: Partial<Task>) => void;
+  onStar: (id: number) => void;
   onDelete: (id: number) => void;
   onComplete: (id: number) => void;
   onUncomplete: (id: number) => void;
@@ -33,6 +34,7 @@ export function TaskList({
   onRefreshOrder,
   isRefreshingOrder,
   onUpdate,
+  onStar,
   onDelete,
   onComplete,
   onUncomplete
@@ -116,6 +118,7 @@ export function TaskList({
               projects={projects}
               sortMode={sortMode}
               onUpdate={onUpdate}
+              onStar={onStar}
               onDelete={onDelete}
               onComplete={onComplete}
               onUncomplete={onUncomplete}

@@ -9,6 +9,7 @@ export {
   useCreateTask,
   useUpdateTask,
   useDeleteTask,
+  useStarTask,
   useCompleteTask,
   useUncompleteTask,
   useMarkTaskTouched,
