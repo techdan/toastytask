@@ -8,6 +8,37 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useNotesQuery, useSaveNotes, type NoteRowData } from "@/lib/queries";
 
+const MS_PER_MINUTE = 60 * 1000;
+const MS_PER_HOUR = 60 * MS_PER_MINUTE;
+const MS_PER_DAY = 24 * MS_PER_HOUR;
+
+const formatNoteRelativeTime = (date: Date) => {
+  const timestamp = date.getTime();
+  if (Number.isNaN(timestamp)) {
+    return "Just now";
+  }
+
+  // Clamp future timestamps (optimistic writes, clock skew) to "now"
+  const diff = Math.max(0, Date.now() - timestamp);
+  const days = Math.floor(diff / MS_PER_DAY);
+
+  if (days === 0) {
+    const hours = Math.floor(diff / MS_PER_HOUR);
+    if (hours === 0) {
+      const minutes = Math.floor(diff / MS_PER_MINUTE);
+      if (minutes === 0) return "Just now";
+      return `${minutes}m ago`;
+    }
+    return `${hours}h ago`;
+  } else if (days === 1) {
+    return "Yesterday";
+  } else if (days < 7) {
+    return `${days}d ago`;
+  }
+
+  return date.toLocaleDateString();
+};
+
 interface TaskNotesProps {
   taskId: number;
   isExpanded: boolean;
@@ -41,29 +72,6 @@ export function TaskNotes({ taskId, isExpanded, onToggle, notesCount = 0, notesL
       }, null)
     : null;
 
-  // Format the last modified date for display
-  const formatLastModified = (date: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-    if (days === 0) {
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      if (hours === 0) {
-        const minutes = Math.floor(diff / (1000 * 60));
-        if (minutes === 0) return 'Just now';
-        return `${minutes}m ago`;
-      }
-      return `${hours}h ago`;
-    } else if (days === 1) {
-      return 'Yesterday';
-    } else if (days < 7) {
-      return `${days}d ago`;
-    } else {
-      return date.toLocaleDateString();
-    }
-  };
-
   return (
     <div
       className="relative shrink-0 flex items-center"
@@ -80,7 +88,7 @@ export function TaskNotes({ taskId, isExpanded, onToggle, notesCount = 0, notesL
         )}
         title={hasContent
           ? ((cachedLastModified || lastModifiedDate)
-              ? `Notes (${formatLastModified(cachedLastModified || (lastModifiedDate as Date))})`
+              ? `Notes (${formatNoteRelativeTime(cachedLastModified || (lastModifiedDate as Date))})`
               : "Notes")
           : "Add notes"}
       >
@@ -96,7 +104,7 @@ export function TaskNotes({ taskId, isExpanded, onToggle, notesCount = 0, notesL
       {/* Hover tooltip with last modified date */}
       {isHovered && hasContent && lastModifiedDate && (
         <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md border z-50">
-          {formatLastModified(lastModifiedDate)}
+          {formatNoteRelativeTime(lastModifiedDate)}
         </div>
       )}
     </div>
@@ -154,28 +162,6 @@ export function TaskNotesPanel({
   const handleClick = () => {
     if (!isEditing) {
       setIsEditing(true);
-    }
-  };
-
-  const formatLastModified = (date: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-    if (days === 0) {
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      if (hours === 0) {
-        const minutes = Math.floor(diff / (1000 * 60));
-        if (minutes === 0) return 'Just now';
-        return `${minutes}m ago`;
-      }
-      return `${hours}h ago`;
-    } else if (days === 1) {
-      return 'Yesterday';
-    } else if (days < 7) {
-      return `${days}d ago`;
-    } else {
-      return date.toLocaleDateString();
     }
   };
 
@@ -271,7 +257,7 @@ export function TaskNotesPanel({
                     {/* Last modified date on hover - right edge */}
                     {hoveredLineIndex === index && (
                       <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground bg-muted/80 px-2 py-0.5 rounded">
-                        {formatLastModified(updatedDate)}
+                        {formatNoteRelativeTime(updatedDate)}
                       </div>
                     )}
                   </div>

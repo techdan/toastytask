@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useUser, useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import {
@@ -21,9 +21,14 @@ export function UserAccountDropdown() {
   const { signOut } = useClerk();
   const router = useRouter();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [hasMounted, setHasMounted] = useState(false);
   const { data: settings = null } = useSettingsQuery();
 
-  if (!isLoaded) {
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  if (!hasMounted || !isLoaded) {
     return (
       <Button variant="ghost" size="icon" disabled>
         <User className="h-5 w-5" />

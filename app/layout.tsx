@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Fraunces } from "next/font/google";
 import { Toaster } from "sonner";
 import { ClerkProvider } from "@clerk/nextjs";
+import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Analytics } from "@vercel/analytics/next";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { LogoThemeVars } from "@/components/theme/logo-theme-vars";
@@ -80,6 +82,8 @@ export default function RootLayout({
                 <LogoThemeVars />
                 {children}
                 <Toaster position="bottom-right" richColors />
+                <SpeedInsights />
+                <Analytics />
               </ThemeProvider>
           </QueryProvider>
         </body>

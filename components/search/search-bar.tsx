@@ -25,6 +25,11 @@ export function SearchBar({
   const [searchQuery, setSearchQuery] = useState(initialValue);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Keep local state in sync when parent-controlled value changes (e.g., route updates)
+  useEffect(() => {
+    setSearchQuery(initialValue);
+  }, [initialValue]);
+
   // Debounced search callback
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const debouncedSearch = useCallback(

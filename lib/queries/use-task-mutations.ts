@@ -12,6 +12,7 @@ import { HEAT_CONFIG } from "@/lib/scoring/heat-config";
 import { PRIMARY_TASKS_QUERY_KEY } from "./task-query-keys";
 import type { Task, NewTask } from "@/types";
 import type { HeatV3Breakdown } from "@/lib/scoring/heat-v3";
+import { mergeTaskWithCachedNotes } from "./task-cache-helpers";
 
 interface TaskResponse {
   task: Task;
@@ -191,9 +192,9 @@ export function useCreateTask() {
             return oldTasks;
           }
 
-          // Replace the optimistic task with the real one
+          // Replace the optimistic task with the real one (preserving cached notes if server omitted them)
           return oldTasks.map((task) =>
-            task.id === context.optimisticId ? createdTask : task
+            task.id === context.optimisticId ? mergeTaskWithCachedNotes(task, createdTask) : task
           );
         });
       }
@@ -283,7 +284,9 @@ export function useUpdateTask() {
         const exists = oldTasks.some((task) => task.id === updatedTask.id);
 
         return exists
-          ? oldTasks.map((task) => (task.id === updatedTask.id ? updatedTask : task))
+          ? oldTasks.map((task) =>
+              task.id === updatedTask.id ? mergeTaskWithCachedNotes(task, updatedTask) : task
+            )
           : [updatedTask, ...oldTasks];
       });
     },
@@ -589,7 +592,7 @@ export function useMarkTaskTouched() {
         }
 
         return oldTasks.map((task) =>
-          task.id === touchedTask.id ? touchedTask : task
+          task.id === touchedTask.id ? mergeTaskWithCachedNotes(task, touchedTask) : task
         );
       });
     },
@@ -708,7 +711,7 @@ export function useTouchTask() {
       queryClient.setQueryData<Task[]>(PRIMARY_TASKS_QUERY_KEY, (oldTasks) => {
         if (!oldTasks || !Array.isArray(oldTasks)) return oldTasks;
         return oldTasks.map((task) =>
-          task.id === response.task.id ? response.task : task
+          task.id === response.task.id ? mergeTaskWithCachedNotes(task, response.task) : task
         );
       });
 
@@ -830,7 +833,7 @@ export function useCoolTask() {
       queryClient.setQueryData<Task[]>(PRIMARY_TASKS_QUERY_KEY, (oldTasks) => {
         if (!oldTasks || !Array.isArray(oldTasks)) return oldTasks;
         return oldTasks.map((task) =>
-          task.id === response.task.id ? response.task : task
+          task.id === response.task.id ? mergeTaskWithCachedNotes(task, response.task) : task
         );
       });
 

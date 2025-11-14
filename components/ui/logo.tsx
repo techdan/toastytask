@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
+import { inlineLogoSources } from "@/lib/logo-inline";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_LOGO_SRC = "/logo/toasty_task_filled_css-v4.svg";
@@ -32,6 +33,12 @@ type LogoStyleVars = CSSProperties & {
 
 const svgCache = new Map<string, string>();
 
+Object.entries(inlineLogoSources).forEach(([key, markup]) => {
+  if (!svgCache.has(key)) {
+    svgCache.set(key, markup);
+  }
+});
+
 const FALLBACK_ARIA_LABEL = "Toasty Task logo";
 
 /**
@@ -49,11 +56,21 @@ export function Logo({
   colors,
   ariaLabel = FALLBACK_ARIA_LABEL,
 }: LogoProps) {
-  const [svgMarkup, setSvgMarkup] = useState<string | null>(() => svgCache.get(src) ?? null);
+  const inlineSvg = inlineLogoSources[src as keyof typeof inlineLogoSources] ?? null;
+
+  const [svgMarkup, setSvgMarkup] = useState<string | null>(() => inlineSvg ?? svgCache.get(src) ?? null);
   const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+
+    if (inlineSvg) {
+      setLoadError(false);
+      setSvgMarkup(inlineSvg);
+      return () => {
+        cancelled = true;
+      };
+    }
 
     async function loadSvg() {
       if (svgCache.has(src)) {
@@ -85,7 +102,7 @@ export function Logo({
     return () => {
       cancelled = true;
     };
-  }, [src]);
+  }, [inlineSvg, src]);
 
   const svgStyleAttr = "--bg: var(--logo-bg); --toast: var(--logo-toast); --check: var(--logo-check); --line: var(--logo-line);";
 

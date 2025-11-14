@@ -53,10 +53,15 @@ function getContext(text: string, matchIndex: number, matchLength: number, conte
  * @param projectsMap - Optional map of project IDs to project names for enriching results
  * @returns Array of search results sorted by relevance
  */
+export interface SearchOptions {
+  includeCompleted?: boolean;
+}
+
 export function searchTasks(
   tasks: Task[],
   searchQuery: string,
-  projectsMap?: Map<number, string>
+  projectsMap?: Map<number, string>,
+  options: SearchOptions = {}
 ): SearchResult[] {
   if (!searchQuery.trim()) {
     return [];
@@ -64,21 +69,15 @@ export function searchTasks(
 
   const results: SearchResult[] = [];
   const trimmedQuery = searchQuery.trim();
+  const includeCompleted = options.includeCompleted ?? false;
 
   // Create case-insensitive regex pattern for matching
   const pattern = new RegExp(escapeRegex(trimmedQuery), "gi");
 
-  console.log('[Search] Searching for:', trimmedQuery, 'in', tasks.length, 'tasks');
-
   for (const task of tasks) {
-    // Skip completed tasks in search results
-    if (task.completedAt) {
+    // Skip completed tasks in search dropdown unless explicitly included
+    if (!includeCompleted && task.completedAt) {
       continue;
-    }
-
-    // Debug: Log if task has notes
-    if (task.notes && task.notes.length > 0) {
-      console.log('[Search] Task', task.id, 'has', task.notes.length, 'notes');
     }
 
     const projectName = task.projectId && projectsMap
@@ -102,11 +101,9 @@ export function searchTasks(
     if (task.notes && task.notes.length > 0) {
       for (const note of task.notes) {
         const noteText = note.currentText;
-        console.log('[Search] Checking note', note.id, 'text:', noteText.substring(0, 50));
         const match = pattern.exec(noteText);
 
         if (match) {
-          console.log('[Search] Found match in note', note.id);
           const context = getContext(noteText, match.index, match[0].length);
 
           results.push({
@@ -130,8 +127,6 @@ export function searchTasks(
     // Reset regex for next task
     pattern.lastIndex = 0;
   }
-
-  console.log('[Search] Found', results.length, 'results');
 
   // Sort results: task title matches first, then note matches
   // Within each group, sort alphabetically by task title

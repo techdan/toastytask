@@ -78,6 +78,21 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --logo-toast: #f24c05;
+  --logo-check: #f24c05;
+  --logo-line: #f24c05;
+  --logo-title-toasty: #f24c05;
+  --logo-title-task: #f24c05;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --logo-toast: #c4c9cc;
+    --logo-check: #c4c9cc;
+    --logo-line: #c4c9cc;
+    --logo-title-toasty: #c4c9cc;
+    --logo-title-task: #c4c9cc;
+  }
 }
 
 .dark {
@@ -112,6 +127,11 @@
   --sidebar-accent-foreground: oklch(0.95 0 0);
   --sidebar-border: oklch(1 0 0 / 12%);
   --sidebar-ring: oklch(0.556 0 0);
+  --logo-toast: #c4c9cc;
+  --logo-check: #c4c9cc;
+  --logo-line: #c4c9cc;
+  --logo-title-toasty: #c4c9cc;
+  --logo-title-task: #c4c9cc;
 }
 
 @layer base {

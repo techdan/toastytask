@@ -4,7 +4,7 @@ export const logoColorConfig = {
     toast: "#f24c05",
     check: "#f24c05",
     titleToasty: "#f24c05",
-    titleTask: "#c4c9cc",
+    titleTask: "#f24c05",
   },
   dark: {
     favicon: "#c4c9cc",

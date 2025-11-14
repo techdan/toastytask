@@ -29,6 +29,7 @@ import {
   useTouchAllTasks,
 } from "@/lib/queries";
 import { PRIMARY_TASKS_QUERY_KEY } from "@/lib/queries/task-query-keys";
+import { mergeTaskWithCachedNotes } from "@/lib/queries/task-cache-helpers";
 import { calculateHeat } from "@/lib/scoring/heat-v3";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
 import { searchTasks, filterResultsByProject } from "@/lib/search/search-utils";
@@ -164,6 +165,7 @@ function TasksPageContent() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [searchInputValue, setSearchInputValue] = useState(searchQuery);
+  const [committedSearchQuery, setCommittedSearchQuery] = useState(searchQuery);
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
   const queryClient = useQueryClient();
 
@@ -184,10 +186,22 @@ function TasksPageContent() {
     }
   }, []);
 
-  // Sync searchInputValue with URL searchQuery when it changes
+  // Sync search input + committed query with URL when it changes.
+  // Keep prior committed query if router temporarily drops ?q while still in search mode.
   useEffect(() => {
-    setSearchInputValue(searchQuery);
-  }, [searchQuery]);
+    const trimmedQuery = searchQuery.trim();
+
+    if (trimmedQuery.length > 0) {
+      setSearchInputValue(searchQuery);
+      setCommittedSearchQuery(searchQuery);
+      return;
+    }
+
+    if (!isSearchMode) {
+      setSearchInputValue("");
+      setCommittedSearchQuery("");
+    }
+  }, [searchQuery, isSearchMode]);
 
   // Sync selectedProjectId with URL params when they change
   useEffect(() => {
@@ -215,6 +229,14 @@ function TasksPageContent() {
     }
     return allTasks.filter(task => task.projectId === selectedProjectId);
   }, [allTasks, selectedProjectId]);
+
+  const taskById = useMemo(() => {
+    const map = new Map<number, Task>();
+    allFetchedTasks.forEach((task) => {
+      map.set(task.id, task);
+    });
+    return map;
+  }, [allFetchedTasks]);
 
   const { data: projects = [] } = useProjectsQuery({
     includeArchived: true,
@@ -299,8 +321,16 @@ function TasksPageContent() {
     // Check for intent mismatches and queue corrective mutations
     const corrections = new Map<number, boolean>();
     latestCompletionIntent.current.forEach((intent, taskId) => {
+      const task = taskById.get(taskId);
+      const isRecurringTask = Boolean(task?.repeatType && task.repeatType !== "none");
       const serverCompleted = completedIdSet.has(taskId);
       const intentCompleted = intent.shouldBeCompleted;
+
+      if (isRecurringTask && intentCompleted) {
+        // Recurring tasks remain active even after a completion tap, so don't re-trigger mutations
+        latestCompletionIntent.current.delete(taskId);
+        return;
+      }
 
       if (serverCompleted !== intentCompleted) {
         // Queue correction: true = should complete, false = should uncomplete
@@ -344,7 +374,7 @@ function TasksPageContent() {
       });
       return next.size === previous.size ? previous : next;
     });
-  }, [allFetchedTasks]);
+  }, [allFetchedTasks, taskById]);
 
   // Mutation hooks with optimistic updates
   const createTaskMutation = useCreateTask();
@@ -365,32 +395,20 @@ function TasksPageContent() {
   const sortMode = settings?.sortMode || "importance";
 
   // Calculate fresh scoring data and split completed tasks (recent only) from actives
-  const { activeTasks, completedTasks } = useMemo(() => {
+  const { activeTasks, completedTasks, enrichedTaskMap } = useMemo(() => {
     const now = new Date();
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - COMPLETED_TASKS_VISIBLE_DAYS);
 
     const actives: TaskWithFreshValues[] = [];
     const completeds: TaskWithFreshValues[] = [];
+    const enrichedTasks = new Map<number, TaskWithFreshValues>();
 
     allFetchedTasks.forEach((task) => {
       const isCompleted = !!task.completedAt;
       const isOptimisticActive = optimisticActiveIds.has(task.id);
       const shouldLinger = !isOptimisticActive && isCompleted && lingeringCompletedIds.has(task.id);
       const isPending = pendingCompletionMutations.current.has(task.id);
-
-      // Always keep pending tasks visible to prevent flickering during rapid mutations
-      if (isCompleted && !isOptimisticActive && !shouldLinger && !isPending && !showCompleted) {
-        return;
-      }
-
-      if (isCompleted && !isOptimisticActive && !shouldLinger && showCompleted) {
-        const completedDate = coerceCompletedDate(task.completedAt);
-
-        if (!completedDate || completedDate < cutoffDate) {
-          return;
-        }
-      }
 
       const freshImportance = calculateImportanceV1(task, now);
       const freshHeat = calculateHeat(task, now, freshImportance);
@@ -404,8 +422,15 @@ function TasksPageContent() {
         ...(shouldLinger && !isCompleted ? { completedAt: new Date() } : {}),
       };
 
+      enrichedTasks.set(task.id, enrichedTask);
+
       if (isCompleted && !isOptimisticActive && !shouldLinger && !isPending) {
         if (showCompleted) {
+          const completedDate = coerceCompletedDate(task.completedAt);
+
+          if (!completedDate || completedDate < cutoffDate) {
+            return;
+          }
           completeds.push(enrichedTask);
         }
         return;
@@ -414,7 +439,7 @@ function TasksPageContent() {
       actives.push(enrichedTask);
     });
 
-    return { activeTasks: actives, completedTasks: completeds };
+    return { activeTasks: actives, completedTasks: completeds, enrichedTaskMap: enrichedTasks };
   }, [allFetchedTasks, showCompleted, lingeringCompletedIds, optimisticActiveIds]);
 
   const sortedActiveIds = useMemo(
@@ -509,8 +534,15 @@ function TasksPageContent() {
   const handleCompleteTask = async (id: number) => {
     const timestamp = Date.now();
 
-    // Record the intended state
-    latestCompletionIntent.current.set(id, { shouldBeCompleted: true, timestamp });
+    const targetTask = taskById.get(id);
+    const isRecurringTask = Boolean(targetTask?.repeatType && targetTask.repeatType !== "none");
+
+    // Record the intended state (recurring tasks stay active after completion)
+    if (!isRecurringTask) {
+      latestCompletionIntent.current.set(id, { shouldBeCompleted: true, timestamp });
+    } else {
+      latestCompletionIntent.current.delete(id);
+    }
 
     pendingCompletionMutations.current.add(id);
     flushSync(() => {
@@ -532,7 +564,7 @@ function TasksPageContent() {
             return oldTasks;
           }
           return oldTasks.map((t) =>
-            t.id === task.id ? task : t
+            t.id === task.id ? mergeTaskWithCachedNotes(t, task) : t
           );
         });
       },
@@ -573,7 +605,7 @@ function TasksPageContent() {
             return oldTasks;
           }
           return oldTasks.map((t) =>
-            t.id === task.id ? task : t
+            t.id === task.id ? mergeTaskWithCachedNotes(t, task) : t
           );
         });
       },
@@ -730,9 +762,15 @@ function TasksPageContent() {
   }, [isSearchMode, router]);
 
   const handleSearchEnter = useCallback((query: string) => {
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) {
+      return;
+    }
+
     // Close dropdown and navigate to search results page
     setIsSearchDropdownOpen(false);
-    router.push(`/tasks?q=${encodeURIComponent(query)}&mode=search`);
+    setCommittedSearchQuery(normalizedQuery);
+    router.push(`/tasks?q=${encodeURIComponent(normalizedQuery)}&mode=search`);
   }, [router]);
 
   const handleSelectSearchResult = useCallback((result: SearchResult) => {
@@ -755,13 +793,17 @@ function TasksPageContent() {
     return map;
   }, [projects]);
 
-  const searchResults = useMemo(() => {
-    if (!searchInputValue.trim()) {
+  const dropdownInputQuery = searchInputValue.trim();
+  const canonicalSearchQuery = committedSearchQuery.trim();
+  const dropdownQuery = dropdownInputQuery || (isSearchMode ? canonicalSearchQuery : "");
+
+  const dropdownSearchResults = useMemo(() => {
+    if (!dropdownQuery) {
       return [];
     }
 
     // Search in all tasks (for dropdown, don't filter by project)
-    const results = searchTasks(allTasks, searchInputValue, projectsMap);
+    const results = searchTasks(allTasks, dropdownQuery, projectsMap);
 
     // If in search mode, apply project filter
     if (isSearchMode) {
@@ -769,25 +811,47 @@ function TasksPageContent() {
     }
 
     return results;
-  }, [searchInputValue, allTasks, projectsMap, isSearchMode, selectedProjectId]);
+  }, [dropdownQuery, allTasks, projectsMap, isSearchMode, selectedProjectId]);
+
+  const pageSearchResults = useMemo(() => {
+    if (!isSearchMode || !canonicalSearchQuery) {
+      return [];
+    }
+
+    const results = searchTasks(allTasks, canonicalSearchQuery, projectsMap, {
+      includeCompleted: true,
+    });
+
+    return filterResultsByProject(results, selectedProjectId);
+  }, [isSearchMode, canonicalSearchQuery, allTasks, projectsMap, selectedProjectId]);
 
   // In search mode, filter tasks based on search results
   const finalDisplayedTasks = useMemo(() => {
-    if (isSearchMode && searchQuery.trim()) {
+    if (isSearchMode && canonicalSearchQuery) {
       // If in search mode but no results, return empty array
-      if (searchResults.length === 0) {
+      if (pageSearchResults.length === 0) {
         return [];
       }
 
-      // Get unique task IDs from search results
-      const taskIds = new Set(searchResults.map(r => r.taskId));
+      const orderedTaskIds: number[] = [];
+      const seenIds = new Set<number>();
+      pageSearchResults.forEach((result) => {
+        if (!seenIds.has(result.taskId)) {
+          seenIds.add(result.taskId);
+          orderedTaskIds.push(result.taskId);
+        }
+      });
 
-      // Filter displayed tasks to only show matching ones
-      return displayedTasks.filter(task => taskIds.has(task.id));
+      const displayedTaskMap = new Map(displayedTasks.map((task) => [task.id, task]));
+      const orderedTasks = orderedTaskIds
+        .map((taskId) => displayedTaskMap.get(taskId) || enrichedTaskMap.get(taskId))
+        .filter((task): task is TaskWithFreshValues => Boolean(task));
+
+      return orderedTasks;
     }
 
     return displayedTasks;
-  }, [isSearchMode, searchQuery, searchResults, displayedTasks]);
+  }, [isSearchMode, canonicalSearchQuery, pageSearchResults, displayedTasks, enrichedTaskMap]);
 
   // Calculate task counts per project from ALL tasks (exclude completed)
   const taskCounts = useMemo(() => {
@@ -859,7 +923,7 @@ function TasksPageContent() {
                   initialValue={searchInputValue}
                 />
                 <SearchDropdown
-                  results={searchResults}
+                  results={dropdownSearchResults}
                   isOpen={isSearchDropdownOpen}
                   onClose={() => setIsSearchDropdownOpen(false)}
                   onSelectResult={handleSelectSearchResult}
@@ -887,9 +951,9 @@ function TasksPageContent() {
             </div>
           ) : (
             <>
-              {isSearchMode && searchQuery.trim() && (
+              {isSearchMode && canonicalSearchQuery && (
                 <div className="mb-4 text-sm text-muted-foreground">
-                  {finalDisplayedTasks.length} {finalDisplayedTasks.length === 1 ? 'result' : 'results'} for &ldquo;{searchQuery}&rdquo;
+                  {finalDisplayedTasks.length} {finalDisplayedTasks.length === 1 ? 'result' : 'results'} for &ldquo;{committedSearchQuery || searchQuery}&rdquo;
                 </div>
               )}
               <TaskList
