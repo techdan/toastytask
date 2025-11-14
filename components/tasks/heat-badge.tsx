@@ -23,6 +23,7 @@ import {
 import { HEAT_CONFIG } from "@/lib/scoring/heat-config";
 import type { Task, SortMode } from "@/types";
 import { cn } from "@/lib/utils";
+import { PRIMARY_TASKS_QUERY_KEY } from "@/lib/queries/task-query-keys";
 
 interface HeatBadgeProps {
   task: Task;
@@ -88,7 +89,7 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
         invalidatedTasksRef.current.add(task.id);
         // Invalidate asynchronously to trigger refetch
         setTimeout(() => {
-          queryClient.invalidateQueries({ queryKey: ["tasks"] });
+          queryClient.invalidateQueries({ queryKey: PRIMARY_TASKS_QUERY_KEY, exact: true });
         }, 100);
       }
     } else {

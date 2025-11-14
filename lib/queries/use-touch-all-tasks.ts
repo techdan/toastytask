@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Task } from "@/types";
+import { PRIMARY_TASKS_QUERY_KEY } from "./task-query-keys";
 
 interface TouchAllMessages {
   successMessage?: string;
@@ -39,11 +40,9 @@ export function useTouchAllTasks() {
 
       setIsTouchingAll(true);
 
-      const previousTasks = queryClient.getQueriesData<Task[]>({
-        queryKey: ["tasks"],
-      });
+      const previousTasks = queryClient.getQueryData<Task[]>(PRIMARY_TASKS_QUERY_KEY);
 
-      queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
+      queryClient.setQueryData<Task[]>(PRIMARY_TASKS_QUERY_KEY, (oldTasks) => {
         if (!oldTasks || !Array.isArray(oldTasks) || oldTasks.length === 0) {
           return oldTasks;
         }
@@ -82,11 +81,11 @@ export function useTouchAllTasks() {
           messages?.successMessage || data.message || "All tasks marked as touched"
         );
 
-        queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        queryClient.invalidateQueries({ queryKey: PRIMARY_TASKS_QUERY_KEY, exact: true });
       } catch (error) {
-        previousTasks.forEach(([queryKey, data]) => {
-          queryClient.setQueryData(queryKey, data);
-        });
+        if (previousTasks) {
+          queryClient.setQueryData(PRIMARY_TASKS_QUERY_KEY, previousTasks);
+        }
 
         toast.error(messages?.errorMessage || "Failed to touch all tasks");
         throw error;

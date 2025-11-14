@@ -53,21 +53,11 @@ export async function POST(
       );
     }
 
-    console.log("━━━━━ [SERVER COOL] START ━━━━━");
-    console.log("[SERVER COOL] Task ID:", taskId);
-    console.log("[SERVER COOL] visibleTaskIds:", visibleTaskIds);
-
     // Get existing task
     const existingTask = await taskRepository.findById(taskId, userId);
     if (!existingTask) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
-    console.log("[SERVER COOL] Existing task snapshot:", {
-      id: existingTask.id,
-      heatAdjustment: existingTask.heatAdjustment ?? 0,
-      lastHeatTouchedAt: existingTask.lastHeatTouchedAt,
-      lastTouchedAt: existingTask.lastTouchedAt,
-    });
 
     // Calculate old heat for delta
     const storedAdjustment = existingTask.heatAdjustment || 0;
@@ -102,11 +92,6 @@ export async function POST(
         const freshHeat = calculateHeat({ ...neighbor, importanceV1: freshImportance }, now);
         return { id: neighbor.id, heat: freshHeat };
       });
-      console.log("[SERVER COOL] Neighbor IDs:", neighborIds);
-      console.log("[SERVER COOL] Context tasks snapshot:", contextTasks.map((task) => ({
-        id: task.id,
-        heat: Number(task.heat.toFixed(2)),
-      })));
     }
 
     // Calculate context-aware drop (move down 3 positions)
@@ -117,14 +102,11 @@ export async function POST(
             { heat: contextCurrentHeat, id: existingTask.id },
             contextTasks
           );
-    console.log("[SERVER COOL] dropHeatDelta:", dropHeatDelta);
 
     const targetHeat = Math.min(
       Math.max(contextCurrentHeat + dropHeatDelta, HEAT_CONFIG.MIN_FINAL_SCORE),
       HEAT_CONFIG.MAX_FINAL_SCORE
     );
-    console.log("[SERVER COOL] contextCurrentHeat:", Number(contextCurrentHeat.toFixed(2)));
-    console.log("[SERVER COOL] targetHeat:", Number(targetHeat.toFixed(2)));
 
     const {
       newAdjustment,
@@ -157,15 +139,6 @@ export async function POST(
 
     // Calculate deltas
     const heatDelta = newHeat - baselineHeat;
-    console.log("[SERVER COOL] Adjustment results:", {
-      newAdjustment,
-      adjustmentDelta,
-      baselineHeat: Number(baselineHeat.toFixed(2)),
-      newHeat: Number(newHeat.toFixed(2)),
-      heatDelta: Number(heatDelta.toFixed(2)),
-    });
-    console.log("━━━━━ [SERVER COOL] END ━━━━━");
-
     return NextResponse.json({
       task: updatedTask,
       heatDelta,

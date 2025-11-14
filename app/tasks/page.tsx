@@ -28,6 +28,7 @@ import {
   useUpdateSettings,
   useTouchAllTasks,
 } from "@/lib/queries";
+import { PRIMARY_TASKS_QUERY_KEY } from "@/lib/queries/task-query-keys";
 import { calculateHeat } from "@/lib/scoring/heat-v3";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
 import { searchTasks, filterResultsByProject } from "@/lib/search/search-utils";
@@ -171,8 +172,6 @@ function TasksPageContent() {
   const invalidationTimeout = useRef<NodeJS.Timeout | undefined>(undefined);
   // Track the latest intended completion state to ignore out-of-order responses
   const latestCompletionIntent = useRef(new Map<number, { shouldBeCompleted: boolean; timestamp: number }>());
-  // Track the latest intended heat adjustment to survive HMR cache restoration
-  const latestHeatIntent = useRef(new Map<number, { adjustment: number; timestamp: number }>());
   // Track corrections that need to be applied
   const [correctionsNeeded, setCorrectionsNeeded] = useState(new Map<number, boolean>());
 
@@ -206,19 +205,8 @@ function TasksPageContent() {
     data: allTasks = [],
     isLoading: isLoadingTasks,
   } = useTasksQuery({
-    projectId: undefined, // No filter - get all tasks
     includeCompleted: true, // Fetch completed tasks too for accurate counts
   });
-
-  // Debug: Log which query key is being used
-  useEffect(() => {
-    const queryKey = JSON.stringify(["tasks", { projectId: undefined, includeCompleted: true }]);
-    const normalizedKey = JSON.stringify(["tasks", { includeCompleted: true }]);
-    console.log('[PAGE] useTasksQuery params:', { projectId: undefined, includeCompleted: true });
-    console.log('[PAGE] Expected query key (with undefined):', queryKey);
-    console.log('[PAGE] Normalized query key (undefined removed):', normalizedKey);
-    console.log('[PAGE] Note: React Query removes undefined from query keys');
-  }, []);
 
   // Filter tasks client-side based on selected project for instant updates
   const allFetchedTasks = useMemo(() => {
@@ -286,10 +274,9 @@ function TasksPageContent() {
 
     invalidationTimeout.current = setTimeout(() => {
       if (pendingCompletionMutations.current.size === 0) {
-        // Only invalidate the main "all tasks" query to avoid duplicate fetches
-        // Background prefetch queries will be stale but that's fine - they're prefetches
+        // Only invalidate the primary tasks query to avoid duplicate fetches
         queryClient.invalidateQueries({
-          queryKey: ["tasks", { projectId: undefined, includeCompleted: true }],
+          queryKey: PRIMARY_TASKS_QUERY_KEY,
           exact: true
         });
       }
@@ -359,37 +346,6 @@ function TasksPageContent() {
     });
   }, [allFetchedTasks]);
 
-  // Background pre-fetching for better perceived performance
-  useEffect(() => {
-    // After initial load, pre-fetch tasks for each project in the background
-    // This makes switching between projects instant
-    if (projects.length > 0 && !isLoadingTasks) {
-      projects.forEach((project) => {
-        // Only pre-fetch if not already in cache
-        queryClient.prefetchQuery({
-          queryKey: ["tasks", { projectId: project.id, includeCompleted: true }],
-          queryFn: async () => {
-            const response = await fetch(`/api/tasks?projectId=${project.id}&includeCompleted=true`);
-            if (!response.ok) return [];
-            const data = await response.json();
-            return data.tasks;
-          },
-        });
-      });
-
-      // Also pre-fetch tasks with no project
-      queryClient.prefetchQuery({
-        queryKey: ["tasks", { projectId: null, includeCompleted: true }],
-        queryFn: async () => {
-          const response = await fetch(`/api/tasks?projectId=null&includeCompleted=true`);
-          if (!response.ok) return [];
-          const data = await response.json();
-          return data.tasks;
-        },
-      });
-    }
-  }, [projects, isLoadingTasks, queryClient]);
-
   // Mutation hooks with optimistic updates
   const createTaskMutation = useCreateTask();
   const updateTaskMutation = useUpdateTask();
@@ -436,32 +392,8 @@ function TasksPageContent() {
         }
       }
 
-      // INTENT OVERRIDE: Apply pending heat intent if newer than cached value (survives HMR!)
-      const intent = latestHeatIntent.current.get(task.id);
-      const cachedTimestamp = task.lastHeatTouchedAt ? new Date(task.lastHeatTouchedAt).getTime() : 0;
-      const shouldApplyIntent = intent && intent.timestamp > cachedTimestamp;
-
-      // Use intent adjustment if it's newer, otherwise use cached value
-      const effectiveTask = shouldApplyIntent
-        ? { ...task, heatAdjustment: intent.adjustment }
-        : task;
-
-      if (shouldApplyIntent && task.id === 81) {
-        console.log('[RENDER] Applying intent override! Intent:', intent.adjustment, 'Cached:', task.heatAdjustment);
-      }
-
-      const freshImportance = calculateImportanceV1(effectiveTask, now);
-      const freshHeat = calculateHeat(effectiveTask, now, freshImportance);
-
-      // Debug logging for specific tasks we're tracking (Task 81)
-      if (task.id === 81) {
-        console.log('━━━━━ [RENDER] Task', task.id, '━━━━━');
-        console.log('[RENDER] Cached heatAdjustment:', task.heatAdjustment ?? 'null');
-        console.log('[RENDER] Effective heatAdjustment:', effectiveTask.heatAdjustment ?? 'null');
-        console.log('[RENDER] Calculated heat:', freshHeat.toFixed(1));
-        console.log('[RENDER] Intent exists:', !!intent);
-        console.log('[RENDER] Should apply intent:', shouldApplyIntent);
-      }
+      const freshImportance = calculateImportanceV1(task, now);
+      const freshHeat = calculateHeat(task, now, freshImportance);
 
       const enrichedTask: TaskWithFreshValues = {
         ...task,
@@ -595,7 +527,7 @@ function TasksPageContent() {
         }
 
         // This is the latest intent - update cache with server response
-        queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
+        queryClient.setQueryData<Task[]>(PRIMARY_TASKS_QUERY_KEY, (oldTasks) => {
           if (!oldTasks || !Array.isArray(oldTasks)) {
             return oldTasks;
           }
@@ -636,7 +568,7 @@ function TasksPageContent() {
         }
 
         // This is the latest intent - update cache with server response
-        queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
+        queryClient.setQueryData<Task[]>(PRIMARY_TASKS_QUERY_KEY, (oldTasks) => {
           if (!oldTasks || !Array.isArray(oldTasks)) {
             return oldTasks;
           }
@@ -973,7 +905,6 @@ function TasksPageContent() {
                 onDelete={handleDeleteTask}
                 onComplete={handleCompleteTask}
                 onUncomplete={handleUncompleteTask}
-                latestHeatIntent={latestHeatIntent}
               />
             </>
           )}

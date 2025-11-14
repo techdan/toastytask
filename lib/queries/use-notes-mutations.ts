@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { NoteRowData } from "./use-notes-query";
 import { diffNoteLines, trimTrailingBlanks, defaultNormalize } from "@/lib/notes/diff-note-lines";
+import { PRIMARY_TASKS_QUERY_KEY } from "./task-query-keys";
 
 interface SaveNotesData {
   taskId: number;
@@ -111,7 +112,8 @@ export function useSaveNotes() {
 
       // Invalidate and refetch tasks cache to update notesCount and notesLastModified
       queryClient.invalidateQueries({
-        queryKey: ["tasks"],
+        queryKey: PRIMARY_TASKS_QUERY_KEY,
+        exact: true,
         refetchType: 'active' // Force active queries to refetch immediately
       });
     },
