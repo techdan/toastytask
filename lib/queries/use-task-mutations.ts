@@ -177,6 +177,7 @@ export function useCreateTask() {
       const previousTasks = queryClient.getQueryData<Task[]>(PRIMARY_TASKS_QUERY_KEY);
 
       // Create optimistic task with temporary negative ID
+      const now = new Date();
       const optimisticTask: Task = {
         id: -Date.now(), // Temporary negative ID (will be replaced by server)
         title: newTask.title,
@@ -185,11 +186,12 @@ export function useCreateTask() {
         priority: newTask.priority ?? "medium",
         star: false, // Deprecated V2 - kept for schema compatibility
         starLevel: newTask.starLevel ?? 0, // V3: 0=none, 1=blue, 2=yellow, 3=orange
+        starIntentVersion: 0,
         dueAt: newTask.dueAt ?? null,
         bucket: newTask.bucket ?? "todo",
         repeatType: newTask.repeatType ?? "none",
         heat: newTask.heat ?? 0.5,
-        heatCalculatedAt: new Date(),
+        heatCalculatedAt: now,
         heatAdjustment: 0, // V3: Direct heat adjustment
         heatTouchCount: 0, // Deprecated V2 - kept for schema compatibility
         otherTouchCount: 0, // Deprecated V2 - kept for schema compatibility
@@ -202,8 +204,8 @@ export function useCreateTask() {
         completedAt: null,
         archivedAt: null,
         deletedAt: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: now,
+        updatedAt: now,
         notes: [],
         notesCount: 0,
         notesLastModified: null,
