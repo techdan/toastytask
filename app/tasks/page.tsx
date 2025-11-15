@@ -45,7 +45,7 @@ import { calculateHeat } from "@/lib/scoring/heat-v3";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
 import { searchTasks, filterResultsByProject } from "@/lib/search/search-utils";
 import { navigateToTask, navigateToNote } from "@/lib/search/navigation-utils";
-import type { Task, NewTask, Project, SortMode, TaskWithFreshValues } from "@/types";
+import type { Task, NewTask, Project, SortMode, TaskWithFreshValues, TaskDensity } from "@/types";
 import type { SearchResult } from "@/lib/search/search-utils";
 
 // Number of days to show completed tasks when visibility is enabled
@@ -186,6 +186,13 @@ function TasksPageContent() {
       return saved === null ? false : saved === "true";
     }
     return false;
+  });
+  const [taskDensity, setTaskDensity] = useState<TaskDensity>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("toodle:taskDensity");
+      return saved === "compact" ? "compact" : "comfortable";
+    }
+    return "comfortable";
   });
   // Keep recently completed tasks visible (styled as completed) until a full refresh occurs.
   const [lingeringCompletedIds, setLingeringCompletedIds] = useState<Set<number>>(() => new Set());
@@ -802,6 +809,13 @@ function TasksPageContent() {
     }
   };
 
+  const handleDensityChange = useCallback((next: TaskDensity) => {
+    setTaskDensity(next);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("toodle:taskDensity", next);
+    }
+  }, []);
+
   // Project CRUD handlers
   const handleCreateProject = async (name: string, colorHex: string) => {
     createProjectMutation.mutate({ name, colorHex, archived: false });
@@ -1247,6 +1261,8 @@ function TasksPageContent() {
                   onSortModeChange={handleSortModeChange}
                   onRefreshOrder={handleRefreshOrder}
                   isRefreshingOrder={isRefreshingOrder}
+                  density={taskDensity}
+                  onDensityChange={handleDensityChange}
                   onUpdate={handleUpdateTask}
                   onStar={handleStarTask}
                   onDelete={handleDeleteTask}

@@ -11,7 +11,7 @@ import { DueDateDisplay } from "./due-date-display";
 import { TaskNotes, TaskNotesPanel } from "./task-notes";
 import { HeatBadge } from "./heat-badge";
 import { getGlowLevel } from "@/lib/scoring/heat-v3";
-import type { Task, Priority, SortMode, Project, TaskWithFreshValues } from "@/types";
+import type { Task, Priority, SortMode, Project, TaskWithFreshValues, TaskDensity } from "@/types";
 import { cn } from "@/lib/utils";
 
 const priorityStyles: Record<Priority, string> = {
@@ -25,6 +25,7 @@ interface TaskRowProps {
   task: TaskWithFreshValues;
   projects: Project[];
   sortMode: SortMode;
+  density: TaskDensity;
   onUpdate: (id: number, updates: Partial<Task>) => void;
   onStar: (id: number) => void;
   onDelete: (id: number) => void;
@@ -36,13 +37,15 @@ interface TaskRowProps {
   highlightMode?: "heat" | "cool" | null;
 }
 
-export function TaskRow({ task, projects, sortMode, onUpdate, onStar, onDelete, onComplete, onUncomplete, onHeat, onCool, onTouch, highlightMode }: TaskRowProps) {
+export function TaskRow({ task, projects, sortMode, density, onUpdate, onStar, onDelete, onComplete, onUncomplete, onHeat, onCool, onTouch, highlightMode }: TaskRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(task.title);
   const [notesExpanded, setNotesExpanded] = useState(false);
 
   const isCompleted = !!task.completedAt;
   const isNew = task.lastTouchedAt === null && task.lastHeatTouchedAt === null;
+  const isCompact = density === "compact";
+  const cellPaddingClass = isCompact ? "py-1" : "py-1.5";
   const rowHighlightClass =
     highlightMode === "heat"
       ? "task-row-highlight-heat"
@@ -160,8 +163,10 @@ export function TaskRow({ task, projects, sortMode, onUpdate, onStar, onDelete, 
         onClick={handleRowClick}
       >
         <td className={cn(
-          "px-2 py-1.5 align-middle border border-r-0",
-          notesExpanded ? "rounded-tl border-b-0" : "first:rounded-l"
+          "px-2 align-middle border border-r-0",
+          cellPaddingClass,
+          notesExpanded && "border-b-0",
+          !isCompact && (notesExpanded ? "rounded-tl" : "first:rounded-l")
         )}>
           <div className="flex items-center gap-2">
             <Checkbox
@@ -229,10 +234,13 @@ export function TaskRow({ task, projects, sortMode, onUpdate, onStar, onDelete, 
             )}
           </div>
         </td>
-        <td className={cn(
-          "px-2 py-1.5 align-middle border-y border-r-0",
-          notesExpanded && "border-b-0"
-        )}>
+        <td
+          className={cn(
+            "px-2 align-middle border-y border-r-0",
+            cellPaddingClass,
+            notesExpanded && "border-b-0"
+          )}
+        >
           <div className="min-w-0">
             {isEditing ? (
               <Input
@@ -259,10 +267,13 @@ export function TaskRow({ task, projects, sortMode, onUpdate, onStar, onDelete, 
             )}
           </div>
         </td>
-        <td className={cn(
-          "px-2 py-1.5 align-middle border-y border-r-0",
-          notesExpanded && "border-b-0"
-        )}>
+        <td
+          className={cn(
+            "px-2 align-middle border-y border-r-0",
+            cellPaddingClass,
+            notesExpanded && "border-b-0"
+          )}
+        >
           <div className={cn("min-w-[5.75rem]", isCompleted && "line-through") }>
             <DueDateDisplay
               dueAt={task.dueAt}
@@ -272,10 +283,13 @@ export function TaskRow({ task, projects, sortMode, onUpdate, onStar, onDelete, 
             />
           </div>
         </td>
-        <td className={cn(
-          "px-2 py-1.5 align-middle border-y border-r-0",
-          notesExpanded && "border-b-0"
-        )}>
+        <td
+          className={cn(
+            "px-2 align-middle border-y border-r-0",
+            cellPaddingClass,
+            notesExpanded && "border-b-0"
+          )}
+        >
           <div className={cn("min-w-[5.25rem]", isCompleted && "line-through") }>
             <PrioritySelect
               value={task.priority}
@@ -285,10 +299,13 @@ export function TaskRow({ task, projects, sortMode, onUpdate, onStar, onDelete, 
             />
           </div>
         </td>
-        <td className={cn(
-          "px-2 py-1.5 align-middle border-y border-r-0",
-          notesExpanded && "border-b-0"
-        )}>
+        <td
+          className={cn(
+            "px-2 align-middle border-y border-r-0",
+            cellPaddingClass,
+            notesExpanded && "border-b-0"
+          )}
+        >
           <div className={cn("min-w-[5.5rem]", isCompleted && "line-through") }>
             <TaskProjectSelect
               projects={projects}
@@ -298,10 +315,13 @@ export function TaskRow({ task, projects, sortMode, onUpdate, onStar, onDelete, 
             />
           </div>
         </td>
-        <td className={cn(
-          "px-2 py-1.5 align-middle border-y border-r-0",
-          notesExpanded && "border-b-0"
-        )}>
+        <td
+          className={cn(
+            "px-2 align-middle border-y border-r-0",
+            cellPaddingClass,
+            notesExpanded && "border-b-0"
+          )}
+        >
           <div className={cn("min-w-[6rem]", isCompleted && "line-through") }>
             <RecurrenceSelect
               value={task.repeatType}
@@ -310,10 +330,14 @@ export function TaskRow({ task, projects, sortMode, onUpdate, onStar, onDelete, 
             />
           </div>
         </td>
-        <td className={cn(
-          "px-2 py-1.5 align-middle border-y border-r text-right",
-          notesExpanded ? "rounded-tr border-b-0" : "last:rounded-r"
-        )}>
+        <td
+          className={cn(
+            "px-2 align-middle border-y border-r text-right",
+            cellPaddingClass,
+            notesExpanded && "border-b-0",
+            !isCompact && (notesExpanded ? "rounded-tr" : "last:rounded-r")
+          )}
+        >
           <button
             className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
             onClick={() => onDelete(task.id)}
@@ -327,7 +351,14 @@ export function TaskRow({ task, projects, sortMode, onUpdate, onStar, onDelete, 
       {/* Notes Panel - Expanded row with colspan */}
       {notesExpanded && (
         <tr className="bg-card">
-          <td colSpan={7} className="px-2 py-2 border-x border-b rounded-b">
+          <td
+            colSpan={7}
+            className={cn(
+              "px-2 border-x border-b",
+              isCompact ? "py-1.5" : "py-2",
+              !isCompact && "rounded-b"
+            )}
+          >
             <TaskNotesPanel taskId={task.id} initialNotes={task.notes} isCompleted={isCompleted} />
           </td>
         </tr>

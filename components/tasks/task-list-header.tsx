@@ -6,10 +6,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import type { SortMode } from "@/types";
+import type { SortMode, TaskDensity } from "@/types";
 
 interface TaskListHeaderProps {
   showCompleted: boolean;
@@ -18,6 +22,8 @@ interface TaskListHeaderProps {
   onSortModeChange: (mode: SortMode) => void;
   onRefreshOrder: () => Promise<void> | void;
   isRefreshingOrder: boolean;
+  density: TaskDensity;
+  onDensityChange: (density: TaskDensity) => void;
 }
 
 export function TaskListHeader({
@@ -27,11 +33,22 @@ export function TaskListHeader({
   onSortModeChange,
   onRefreshOrder,
   isRefreshingOrder,
+  density,
+  onDensityChange,
 }: TaskListHeaderProps) {
+  const headerPadding = density === "compact" ? "py-1.5" : "py-2";
+  const utilityButtonHeight = density === "compact" ? "h-5" : "h-6";
+
   return (
     <thead>
       <tr className="bg-muted/30">
-        <th scope="col" className="w-[150px] px-2 py-2 text-xs font-medium text-muted-foreground text-left first:rounded-l border border-r-0">
+        <th
+          scope="col"
+          className={cn(
+            "w-[150px] px-2 text-xs font-medium text-muted-foreground text-left first:rounded-l border border-r-0",
+            headerPadding
+          )}
+        >
           <div className="flex items-center justify-between pr-1">
             <span className="sr-only">Task utilities</span>
             <DropdownMenu>
@@ -67,27 +84,66 @@ export function TaskListHeader({
             </DropdownMenu>
           </div>
         </th>
-        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0">
+        <th
+          scope="col"
+          className={cn(
+            "px-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0",
+            headerPadding
+          )}
+        >
           Task
         </th>
-        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[5.75rem]">
+        <th
+          scope="col"
+          className={cn(
+            "px-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[5.75rem]",
+            headerPadding
+          )}
+        >
           Due Date
         </th>
-        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[5.25rem]">
+        <th
+          scope="col"
+          className={cn(
+            "px-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[5.25rem]",
+            headerPadding
+          )}
+        >
           Priority
         </th>
-        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[5.5rem]">
+        <th
+          scope="col"
+          className={cn(
+            "px-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[5.5rem]",
+            headerPadding
+          )}
+        >
           Project
         </th>
-        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[6rem]">
+        <th
+          scope="col"
+          className={cn(
+            "px-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[6rem]",
+            headerPadding
+          )}
+        >
           Recurrence
         </th>
-        <th scope="col" className="px-2 py-2 text-xs font-medium text-muted-foreground text-left last:rounded-r border-y border-r">
+        <th
+          scope="col"
+          className={cn(
+            "px-2 text-xs font-medium text-muted-foreground text-left last:rounded-r border-y border-r",
+            headerPadding
+          )}
+        >
           <div className="flex items-center justify-end gap-1">
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6 cursor-pointer"
+              className={cn(
+                "w-6 cursor-pointer",
+                utilityButtonHeight
+              )}
               onClick={onRefreshOrder}
               title="Refresh order"
               disabled={isRefreshingOrder}
@@ -99,22 +155,47 @@ export function TaskListHeader({
                 )}
               />
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn(
-                "h-6 px-2 text-xs cursor-pointer",
-                showCompleted ? "bg-accent" : ""
-              )}
-              onClick={onToggleCompleted}
-              title={showCompleted ? "Hide completed tasks" : "Show completed tasks"}
-            >
-              {showCompleted ? (
-                <Eye className="h-3.5 w-3.5" />
-              ) : (
-                <EyeOff className="h-3.5 w-3.5" />
-              )}
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "px-2 text-xs cursor-pointer gap-1 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none",
+                    utilityButtonHeight,
+                    showCompleted ? "bg-accent/60" : ""
+                  )}
+                  title="Task list options"
+                >
+                  {showCompleted ? (
+                    <Eye className="h-3.5 w-3.5" />
+                  ) : (
+                    <EyeOff className="h-3.5 w-3.5" />
+                  )}
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={onToggleCompleted}>
+                  {showCompleted ? "Hide completed tasks" : "Show completed tasks"}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs uppercase text-muted-foreground tracking-wide">
+                  Density
+                </DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={density}
+                  onValueChange={(value) => onDensityChange(value as TaskDensity)}
+                >
+                  <DropdownMenuRadioItem value="comfortable">
+                    Comfortable
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="compact">
+                    Compact
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </th>
       </tr>

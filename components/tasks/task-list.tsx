@@ -3,7 +3,8 @@
 import { useCallback } from "react";
 import { TaskRow } from "./task-row";
 import { TaskListHeader } from "./task-list-header";
-import type { Task, SortMode, Project, TaskWithFreshValues } from "@/types";
+import { cn } from "@/lib/utils";
+import type { Task, SortMode, Project, TaskWithFreshValues, TaskDensity } from "@/types";
 
 type FreshMetricKey = Extract<keyof TaskWithFreshValues, "_freshHeat" | "_freshImportance">;
 
@@ -16,6 +17,8 @@ interface TaskListProps {
   onSortModeChange: (mode: SortMode) => void;
   onRefreshOrder: () => Promise<void> | void;
   isRefreshingOrder: boolean;
+  density: TaskDensity;
+  onDensityChange: (density: TaskDensity) => void;
   onUpdate: (id: number, updates: Partial<Task>) => void;
   onStar: (id: number) => void;
   onDelete: (id: number) => void;
@@ -39,6 +42,8 @@ export function TaskList({
   onSortModeChange,
   onRefreshOrder,
   isRefreshingOrder,
+  density,
+  onDensityChange,
   onUpdate,
   onStar,
   onDelete,
@@ -107,8 +112,13 @@ export function TaskList({
   }
 
   return (
-    <div>
-      <table className="w-full border-separate border-spacing-0">
+    <div className={cn(density === "compact" && "rounded-lg border border-border/70 bg-card/30 shadow-sm")}>
+      <table
+        className={cn(
+          "w-full border-spacing-0",
+          density === "comfortable" ? "border-separate" : "border-collapse"
+        )}
+      >
         {/* Column definitions: task (checkbox, importance, star, notes, title), due date, priority, project, recurrence, actions */}
         <colgroup>
           <col className="w-[160px]" />
@@ -126,27 +136,35 @@ export function TaskList({
           onSortModeChange={onSortModeChange}
           onRefreshOrder={onRefreshOrder}
           isRefreshingOrder={isRefreshingOrder}
+          density={density}
+          onDensityChange={onDensityChange}
         />
         {tasks.map((task) => {
           const highlightMode = highlightedTask?.id === task.id ? highlightedTask.mode : null;
           return (
-          <tbody key={task.id} className="before:content-[''] before:block before:h-2">
-            <TaskRow
-              task={task}
-              projects={projects}
-              sortMode={sortMode}
-              onUpdate={onUpdate}
-              onStar={onStar}
-              onDelete={onDelete}
-              onComplete={onComplete}
-              onUncomplete={onUncomplete}
-              onHeat={handleHeat}
-              onCool={handleCool}
-              onTouch={handleTouch}
-              highlightMode={highlightMode}
-            />
-          </tbody>
-        );
+            <tbody
+              key={task.id}
+              className={cn(
+                density === "comfortable" && "before:content-[''] before:block before:h-2"
+              )}
+            >
+              <TaskRow
+                task={task}
+                projects={projects}
+                sortMode={sortMode}
+                density={density}
+                onUpdate={onUpdate}
+                onStar={onStar}
+                onDelete={onDelete}
+                onComplete={onComplete}
+                onUncomplete={onUncomplete}
+                onHeat={handleHeat}
+                onCool={handleCool}
+                onTouch={handleTouch}
+                highlightMode={highlightMode}
+              />
+            </tbody>
+          );
         })}
       </table>
     </div>

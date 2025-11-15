@@ -40,6 +40,13 @@ export const SortMode = {
 
 export type SortMode = (typeof SortMode)[keyof typeof SortMode];
 
+export const TaskDensity = {
+  COMFORTABLE: "comfortable",
+  COMPACT: "compact",
+} as const;
+
+export type TaskDensity = (typeof TaskDensity)[keyof typeof TaskDensity];
+
 // Re-export types from schema for convenience
 export type { Task as BaseTask, NewTask, Project, NewProject, Settings, NewSettings } from "@/lib/db/schema";
 
