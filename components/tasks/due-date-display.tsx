@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import { Calendar as CalendarIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -118,22 +119,43 @@ export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted }: D
           </span>
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
+      <PopoverContent className="w-[15rem] p-0" align="start">
         <Calendar
           mode="single"
           selected={dueDate ?? undefined}
           defaultMonth={dueDate ?? new Date()}
           onSelect={handleSelect}
           initialFocus
+          className="calendar-compact"
+          style={
+            {
+              "--rdp-day-height": "1.35rem",
+              "--rdp-day-width": "1.5rem",
+              "--rdp-day_button-height": "1.2rem",
+              "--rdp-day_button-width": "1.2rem",
+              "--rdp-weekday-padding": "0.1rem 0",
+              "--rdp-months-gap": "0.5rem",
+              "--rdp-nav_button-height": "1.3rem",
+              "--rdp-nav_button-width": "1.3rem",
+              "--rdp-day-button-margin": "0.15rem",
+            } as CSSProperties
+          }
         />
-        <div className="flex items-center justify-between border-t p-2">
-          <Button variant="ghost" size="sm" onClick={handleClear} disabled={!dueDate}>
+        <div className="calendar-compact-actions flex items-center justify-between border-t px-2 py-1 gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 flex-1 px-2 text-[0.65rem]"
+            onClick={handleClear}
+            disabled={!dueDate}
+          >
             <X className="mr-2 h-3 w-3" />
             Clear date
           </Button>
           <Button
             variant="secondary"
             size="sm"
+            className="h-6 flex-1 px-2 text-[0.65rem]"
             onClick={() => handleSelect(new Date())}
           >
             Today

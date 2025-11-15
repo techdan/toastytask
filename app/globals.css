@@ -264,8 +264,9 @@
 }
 
 .rdp-today:not(.rdp-selected) .rdp-day_button {
-  border-color: var(--primary);
+  border-color: transparent;
   color: var(--primary);
+  font-weight: 700;
 }
 
 .rdp-disabled .rdp-day_button {
@@ -273,6 +274,71 @@
   cursor: not-allowed;
 }
 
+.calendar-compact {
+  font-size: 0.8rem;
+  width: 100%;
+}
+
+.calendar-compact .rdp-months {
+  gap: 0.6rem;
+  width: 100%;
+  max-width: none;
+}
+
+.calendar-compact .rdp-month {
+  width: 100%;
+}
+
+.calendar-compact .rdp-month_grid {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.calendar-compact .rdp-day {
+  text-align: center;
+  padding: 0.1rem 0.15rem;
+}
+
+.calendar-compact .rdp-weekday {
+  font-size: 0.58rem;
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
+  text-align: center;
+}
+
+.calendar-compact .rdp-button_previous,
+.calendar-compact .rdp-button_next {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.calendar-compact .rdp-button_previous svg,
+.calendar-compact .rdp-button_next svg {
+  width: 0.6rem;
+  height: 0.6rem;
+}
+
+.calendar-compact .rdp-day_button {
+  width: 1.35rem;
+  height: 1.35rem;
+  font-size: 0.7rem;
+  margin: 0 auto;
+}
+
+.calendar-compact .rdp-caption_label {
+  margin-left: 0.45rem;
+  font-size: 0.9rem;
+}
+
+.calendar-compact .rdp-today:not(.rdp-selected) .rdp-day_button {
+  border: 1px solid var(--primary);
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.calendar-compact-actions button {
+  min-width: 0;
+}
 .date-input {
   width: 5.75rem;
   max-width: 100%;

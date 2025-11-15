@@ -7,7 +7,7 @@ import "react-day-picker/dist/style.css";
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
 
-export function Calendar({ showOutsideDays = true, ...props }: CalendarProps) {
+export function Calendar({ showOutsideDays = true, style, ...props }: CalendarProps) {
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
@@ -16,6 +16,7 @@ export function Calendar({ showOutsideDays = true, ...props }: CalendarProps) {
         "--rdp-accent-background-color": "hsl(var(--primary))",
         "--rdp-day-selected-color": "hsl(var(--primary-foreground))",
         "--rdp-background-color": "transparent",
+        ...style,
       } as React.CSSProperties}
       {...props}
     />

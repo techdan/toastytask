@@ -269,7 +269,7 @@ Both endpoints accept optional context from the client to avoid refetching the e
   - Splits text on newline characters.
   - Creates/updates individual note rows and versions only when text changes.
   - Blank/whitespace-only text deletes all note rows.
-- **Response:** `{ "notes": NoteRow[] }` (post-update snapshot).
+- **Response:** `{ "notes": NoteRow[], "notesCount": number, "notesLastModified": string | null }` (post-update snapshot).
 
 #### `PATCH /api/notes/{noteId}`
 - **Purpose:** Update a single note line's text.

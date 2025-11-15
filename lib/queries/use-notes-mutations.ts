@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import type { NoteRowData } from "./use-notes-query";
 import { diffNoteLines, trimTrailingBlanks, defaultNormalize } from "@/lib/notes/diff-note-lines";
 import { PRIMARY_TASKS_QUERY_KEY } from "./task-query-keys";
+import type { Task } from "@/types";
 
 interface SaveNotesData {
   taskId: number;
@@ -11,10 +12,12 @@ interface SaveNotesData {
 
 interface NotesResponse {
   notes: NoteRowData[];
+  notesCount: number;
+  notesLastModified: string | null;
 }
 
 // Save notes
-async function saveNotes({ taskId, text }: SaveNotesData): Promise<NoteRowData[]> {
+async function saveNotes({ taskId, text }: SaveNotesData): Promise<NotesResponse> {
   const response = await fetch(`/api/tasks/${taskId}/notes`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -26,7 +29,7 @@ async function saveNotes({ taskId, text }: SaveNotesData): Promise<NoteRowData[]
   }
 
   const data: NotesResponse = await response.json();
-  return data.notes;
+  return data;
 }
 
 // Hook: Save notes with optimistic updates
@@ -108,13 +111,29 @@ export function useSaveNotes() {
     },
     onSuccess: (data, variables) => {
       // Set the actual server response data
-      queryClient.setQueryData(["notes", variables.taskId], data);
+      queryClient.setQueryData(["notes", variables.taskId], data.notes);
 
-      // Invalidate and refetch tasks cache to update notesCount and notesLastModified
-      queryClient.invalidateQueries({
-        queryKey: PRIMARY_TASKS_QUERY_KEY,
-        exact: true,
-        refetchType: 'active' // Force active queries to refetch immediately
+      // Update cached tasks so counts/metadata stay in sync without a refetch
+      queryClient.setQueryData<Task[] | undefined>(PRIMARY_TASKS_QUERY_KEY, (oldTasks) => {
+        if (!oldTasks || !Array.isArray(oldTasks)) {
+          return oldTasks;
+        }
+
+        let didUpdate = false;
+        const next = oldTasks.map((task) => {
+          if (task.id !== variables.taskId) {
+            return task;
+          }
+          didUpdate = true;
+          return {
+            ...task,
+            notes: data.notes,
+            notesCount: data.notesCount,
+            notesLastModified: data.notesLastModified ? new Date(data.notesLastModified) : null,
+          };
+        });
+
+        return didUpdate ? next : oldTasks;
       });
     },
     onError: (error, variables, context) => {

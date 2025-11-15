@@ -40,13 +40,14 @@ Notes on the top row:
   - Fetch: `task.dueAt` (Date in response)
   - Update: `PATCH /api/tasks/:id` with `{ dueAt: string | number | null }` (send ISO 8601 string or `null` to clear). Server coerces to Date and recalculates heat.
 
-- Notes (multi‑line text)
+- Notes (multi-line text)
   - Fetch: `task.notes` array (attached by server in GET /api/tasks)
     - Shape: `{ id, currentText, updatedAt }[]` plus `notesCount`, `notesLastModified`
-  - Update (full‑text only): `POST /api/tasks/{taskId}/notes`
+  - Update (full-text only): `POST /api/tasks/{taskId}/notes`
     - Body: `{ "text": "Line 1\nLine 2\nLine 3" }`
-    - Server behavior: Splits into lines, diffs against existing rows, updates only changed lines (versioned), deletes removed lines, inserts new lines, and normalizes ordinals to 0..n‑1. Trailing blank lines are trimmed. Unchanged lines keep timestamps to avoid noisy updates.
+    - Server behavior: Splits into lines, diffs against existing rows, updates only changed lines (versioned), deletes removed lines, inserts new lines, and normalizes ordinals to 0..n-1. Trailing blank lines are trimmed. Unchanged lines keep timestamps to avoid noisy updates.
     - Side effects: Touches the parent task, recomputes importance and heat, and updates `lastTouchedAt`.
+    - Response: `{ "notes": NoteRow[], "notesCount": number, "notesLastModified": string | null }`
   - Display behavior: Plain text is rendered; any `http://` or `https://` URLs are auto‑linked and open in a new browser tab/window (`target="_blank"`, `rel="noopener noreferrer"`). Tapping a link does not enter edit mode.
 
 Example full‑text save:

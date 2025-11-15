@@ -1,12 +1,31 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { noteRepository, taskRepository } from "@/lib/db/repositories";
+import type { NoteRowWithVersion } from "@/lib/db/repositories";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
 import { calculateHeat } from "@/lib/scoring/heat-v3";
 import { diffNoteLines, trimTrailingBlanks, defaultNormalize } from "@/lib/notes/diff-note-lines";
 
 // Force Node.js runtime for better-sqlite3 compatibility
 export const runtime = 'nodejs';
+
+function buildNotesResponse(notes: NoteRowWithVersion[]) {
+  const notesCount = notes.length;
+  let notesLastModified: Date | null = null;
+
+  for (const note of notes) {
+    const noteUpdatedAt = new Date(note.updatedAt);
+    if (!notesLastModified || noteUpdatedAt.getTime() > notesLastModified.getTime()) {
+      notesLastModified = noteUpdatedAt;
+    }
+  }
+
+  return {
+    notes,
+    notesCount,
+    notesLastModified,
+  };
+}
 
 // GET /api/tasks/[id]/notes - Get all notes for a task
 export async function GET(
@@ -84,7 +103,7 @@ export async function POST(
         await taskRepository.updateHeat(taskId, freshHeat, userId);
       }
 
-      return NextResponse.json({ notes: [] });
+      return NextResponse.json(buildNotesResponse([]));
     }
 
     // Split and normalize lines: trim trailing blanks; equality ignores whitespace
@@ -188,7 +207,7 @@ export async function POST(
     // V3: Note edits no longer tracked for engagement (removed otherTouchCount)
     // Heat V3 relies on manual heat/cool adjustments only
 
-    return NextResponse.json({ notes: finalNotes });
+    return NextResponse.json(buildNotesResponse(finalNotes));
   } catch (error) {
     console.error("Failed to update notes:", error);
     return NextResponse.json({ error: "Failed to update notes" }, { status: 500 });
