@@ -12,6 +12,15 @@ import { UserAccountDropdown } from "@/components/auth/user-account-dropdown";
 import { SearchBar } from "@/components/search/search-bar";
 import { SearchDropdown } from "@/components/search/search-dropdown";
 import { Logo } from "@/components/ui/logo";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   useTasksQuery,
   useProjectsQuery,
@@ -29,6 +38,7 @@ import {
   useUpdateSettings,
   useTouchAllTasks,
 } from "@/lib/queries";
+import { useTouchTask, useCoolTask, useMarkTaskTouched } from "@/lib/queries/use-task-mutations";
 import { PRIMARY_TASKS_QUERY_KEY } from "@/lib/queries/task-query-keys";
 import { applyStarLevelToTask, mergeTaskWithCachedNotes } from "@/lib/queries/task-cache-helpers";
 import { calculateHeat } from "@/lib/scoring/heat-v3";
@@ -47,6 +57,17 @@ type PendingStarIntent = {
   intentTimestamp: number;
   snapshotBeforeOptimism?: Task[] | undefined;
 };
+
+type PendingHeatAction = {
+  type: "heat" | "cool";
+  taskId: number;
+  visibleTaskIds: number[];
+};
+
+type HighlightedTask = {
+  id: number;
+  mode: "heat" | "cool";
+} | null;
 
 const toMilliseconds = (value: Date | string | number | null | undefined) => {
   if (!value) {
@@ -404,8 +425,18 @@ function TasksPageContent() {
   const reorderProjectsMutation = useReorderProjects();
   const updateSettingsMutation = useUpdateSettings();
   const { touchAllTasks } = useTouchAllTasks();
+  const touchTaskMutation = useTouchTask();
+  const coolTaskMutation = useCoolTask();
+  const markTaskTouchedMutation = useMarkTaskTouched();
+  const markOrderAsStale = useCallback(() => {
+    setIsOrderFresh(false);
+  }, []);
   const [taskOrder, setTaskOrder] = useState<number[]>([]);
   const [isRefreshingOrder, setIsRefreshingOrder] = useState(false);
+  const [isOrderFresh, setIsOrderFresh] = useState(true);
+  const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
+  const [pendingHeatAction, setPendingHeatAction] = useState<PendingHeatAction | null>(null);
+  const [highlightedTask, setHighlightedTask] = useState<HighlightedTask>(null);
   const contextRef = useRef<{ projectId: number | null | "all"; sortMode: SortMode } | null>(null);
   const prevActiveCountRef = useRef(0); // Detect first non-empty load per context for deterministic seeding
   const sortMode = settings?.sortMode || "importance";
@@ -481,6 +512,7 @@ function TasksPageContent() {
       }
       contextRef.current = { projectId: selectedProjectId, sortMode };
       setTaskOrder(sortedActiveIds);
+      setIsOrderFresh(true);
       prevActiveCountRef.current = activeTasks.length;
       return;
     }
@@ -593,6 +625,7 @@ function TasksPageContent() {
     if (!currentTask && !pendingIntent) {
       return;
     }
+    markOrderAsStale();
     const currentLevel =
       pendingIntent?.targetLevel ??
       (currentTask?.starLevel ?? 0);
@@ -623,10 +656,13 @@ function TasksPageContent() {
     }, STAR_DEBOUNCE_MS);
 
     pendingStarTimers.current.set(taskId, timeoutId);
-  }, [applyOptimisticStarLevel, enrichedTaskMap, flushStarIntent, queryClient]);
+  }, [applyOptimisticStarLevel, enrichedTaskMap, flushStarIntent, markOrderAsStale, queryClient]);
 
   const handleUpdateTask = async (id: number, updates: Partial<Task>) => {
     updateTaskMutation.mutate({ id, updates });
+    if ("dueAt" in updates || "priority" in updates) {
+      markOrderAsStale();
+    }
   };
 
   const handleDeleteTask = async (id: number) => {
@@ -635,6 +671,7 @@ function TasksPageContent() {
 
   const handleCompleteTask = async (id: number) => {
     const timestamp = Date.now();
+    markOrderAsStale();
 
     const targetTask = taskById.get(id);
     const isRecurringTask = Boolean(targetTask?.repeatType && targetTask.repeatType !== "none");
@@ -683,6 +720,7 @@ function TasksPageContent() {
 
   const handleUncompleteTask = async (id: number) => {
     const timestamp = Date.now();
+    markOrderAsStale();
 
     // Record the intended state
     latestCompletionIntent.current.set(id, { shouldBeCompleted: false, timestamp });
@@ -814,9 +852,9 @@ function TasksPageContent() {
     window.history.pushState(null, "", newUrl);
   }, []);
 
-  const handleRefreshOrder = async () => {
+  const refreshTaskOrder = useCallback(async () => {
     if (isRefreshingOrder) {
-      return;
+      return false;
     }
 
     // Clear lingering completed tasks on refresh order
@@ -844,20 +882,150 @@ function TasksPageContent() {
       };
     });
 
-    setTaskOrder(sortTasksByMode(simulatedActiveTasks, sortMode).map((task) => task.id));
+    const newOrder = sortTasksByMode(simulatedActiveTasks, sortMode).map((task) => task.id);
+    setTaskOrder(newOrder);
 
     try {
       await touchAllTasks({
         successMessage: "Tasks resorted and marked as touched",
         errorMessage: "Failed to refresh task order",
       });
+      setIsOrderFresh(true);
+      return true;
     } catch (error) {
       console.error("Failed to refresh task order:", error);
       setTaskOrder(previousOrder);
+      return false;
     } finally {
       setIsRefreshingOrder(false);
     }
-  };
+  }, [activeTasks, isRefreshingOrder, sortMode, taskOrder, touchAllTasks]);
+
+  const handleRefreshOrder = useCallback(async () => {
+    await refreshTaskOrder();
+  }, [refreshTaskOrder]);
+
+  const reorderTaskListWithTargetHeat = useCallback(
+    (taskId: number, targetHeat: number) => {
+      const now = new Date();
+      const simulatedTasks = activeTasks.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              _freshHeat: targetHeat,
+              lastHeatTouchedAt: now,
+              lastTouchedAt: now,
+            }
+          : task
+      );
+      const orderedIds = sortTasksByMode(simulatedTasks, sortMode).map((task) => task.id);
+      flushSync(() => {
+        setTaskOrder(orderedIds);
+      });
+    },
+    [activeTasks, sortMode]
+  );
+
+  const runHeatMutation = useCallback(
+    async (taskId: number, visibleTaskIds: number[]) => {
+      try {
+        const response = await touchTaskMutation.mutateAsync({ taskId, visibleTaskIds });
+        setHighlightedTask({ id: taskId, mode: "heat" });
+        if (typeof response?.targetHeat === "number") {
+          reorderTaskListWithTargetHeat(taskId, response.targetHeat);
+        } else {
+          flushSync(() => {
+            setTaskOrder(sortedActiveIds);
+          });
+        }
+      } catch (error) {
+        console.error("Failed to apply heat mutation:", error);
+      }
+    },
+    [reorderTaskListWithTargetHeat, setHighlightedTask, sortedActiveIds, touchTaskMutation]
+  );
+
+  const runCoolMutation = useCallback(
+    async (taskId: number, visibleTaskIds: number[]) => {
+      try {
+        const response = await coolTaskMutation.mutateAsync({ taskId, visibleTaskIds });
+        setHighlightedTask({ id: taskId, mode: "cool" });
+        if (typeof response?.targetHeat === "number") {
+          reorderTaskListWithTargetHeat(taskId, response.targetHeat);
+        } else {
+          flushSync(() => {
+            setTaskOrder(sortedActiveIds);
+          });
+        }
+      } catch (error) {
+        console.error("Failed to apply cool mutation:", error);
+      }
+    },
+    [coolTaskMutation, reorderTaskListWithTargetHeat, setHighlightedTask, sortedActiveIds]
+  );
+
+  const executePendingHeatAction = useCallback(
+    async (action: PendingHeatAction) => {
+      if (action.type === "heat") {
+        await runHeatMutation(action.taskId, action.visibleTaskIds);
+      } else {
+        await runCoolMutation(action.taskId, action.visibleTaskIds);
+      }
+    },
+    [runCoolMutation, runHeatMutation]
+  );
+
+  const handleHeatRequest = useCallback(
+    (taskId: number, visibleTaskIds: number[]) => {
+      if (!isOrderFresh) {
+        setPendingHeatAction({ type: "heat", taskId, visibleTaskIds });
+        setIsRefreshModalOpen(true);
+        return;
+      }
+      void runHeatMutation(taskId, visibleTaskIds);
+    },
+    [isOrderFresh, runHeatMutation]
+  );
+
+  const handleCoolRequest = useCallback(
+    (taskId: number, visibleTaskIds: number[]) => {
+      if (!isOrderFresh) {
+        setPendingHeatAction({ type: "cool", taskId, visibleTaskIds });
+        setIsRefreshModalOpen(true);
+        return;
+      }
+      void runCoolMutation(taskId, visibleTaskIds);
+    },
+    [isOrderFresh, runCoolMutation]
+  );
+
+  const handleTouchTask = useCallback(
+    (taskId: number) => {
+      setHighlightedTask(null);
+      markTaskTouchedMutation.mutate(taskId);
+    },
+    [markTaskTouchedMutation, setHighlightedTask]
+  );
+
+  const handleCancelRefreshPrompt = useCallback(() => {
+    setIsRefreshModalOpen(false);
+    setPendingHeatAction(null);
+  }, []);
+
+  const handleConfirmRefreshPrompt = useCallback(async () => {
+    if (!pendingHeatAction) {
+      setIsRefreshModalOpen(false);
+      return;
+    }
+    const actionToRun = pendingHeatAction;
+    const refreshed = await refreshTaskOrder();
+    if (!refreshed) {
+      return;
+    }
+    setIsRefreshModalOpen(false);
+    setPendingHeatAction(null);
+    await executePendingHeatAction(actionToRun);
+  }, [executePendingHeatAction, pendingHeatAction, refreshTaskOrder]);
 
   // Search handlers
   const handleSearch = useCallback((query: string) => {
@@ -982,113 +1150,150 @@ function TasksPageContent() {
   const isLoading = isLoadingTasks;
 
   return (
-    <div className="flex h-screen">
-      {/* Projects Sidebar */}
-      {isMounted && (
-        <ProjectsSidebar
-          projects={projects}
-          selectedProjectId={selectedProjectId}
-          onSelectProject={handleSelectProject}
-          onCreateProject={handleCreateProject}
-          onUpdateProject={handleUpdateProject}
-          onDeleteProject={handleDeleteProject}
-          onReorderProjects={handleReorderProjects}
-          taskCounts={taskCounts}
-          isCollapsed={isSidebarCollapsed}
-          onToggleCollapsed={() => {
-            setIsSidebarCollapsed((prev) => {
-              const newValue = !prev;
-              // Persist to localStorage
-              if (typeof window !== "undefined") {
-                localStorage.setItem("toodle:sidebarCollapsed", String(newValue));
-              }
-              return newValue;
-            });
-          }}
-        />
-      )}
+    <>
+      <div className="flex h-screen">
+        {/* Projects Sidebar */}
+        {isMounted && (
+          <ProjectsSidebar
+            projects={projects}
+            selectedProjectId={selectedProjectId}
+            onSelectProject={handleSelectProject}
+            onCreateProject={handleCreateProject}
+            onUpdateProject={handleUpdateProject}
+            onDeleteProject={handleDeleteProject}
+            onReorderProjects={handleReorderProjects}
+            taskCounts={taskCounts}
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapsed={() => {
+              setIsSidebarCollapsed((prev) => {
+                const newValue = !prev;
+                // Persist to localStorage
+                if (typeof window !== "undefined") {
+                  localStorage.setItem("toodle:sidebarCollapsed", String(newValue));
+                }
+                return newValue;
+              });
+            }}
+          />
+        )}
 
-      {/* Main Content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full min-w-0 px-4 py-8 lg:px-[40px]">
-          <div className="mb-8 flex items-start justify-between">
-            <div>
-              <h1 className="mb-2 flex items-center gap-3 text-3xl font-bold">
-                <button
-                  onClick={() => handleSelectProject("all")}
-                  className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
-                  aria-label="Go to all tasks"
-                >
-                  <Logo width={40} height={40} className="h-10 w-10" />
-                  <span className="font-fraunces text-4xl font-bold tracking-tight logo-text">
-                    <span className="logo-word-toasty">Toasty</span>
-                    <span className="logo-word-task">Task</span>
-                  </span>
-                </button>
-              </h1>
+        {/* Main Content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="mx-auto w-full min-w-0 px-4 py-8 lg:px-[40px]">
+            <div className="mb-8 flex items-start justify-between">
+              <div>
+                <h1 className="mb-2 flex items-center gap-3 text-3xl font-bold">
+                  <button
+                    onClick={() => handleSelectProject("all")}
+                    className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
+                    aria-label="Go to all tasks"
+                  >
+                    <Logo width={40} height={40} className="h-10 w-10" />
+                    <span className="font-fraunces text-4xl font-bold tracking-tight logo-text">
+                      <span className="logo-word-toasty">Toasty</span>
+                      <span className="logo-word-task">Task</span>
+                    </span>
+                  </button>
+                </h1>
+              </div>
+              <div className="flex items-center gap-3">
+                {/* Search Bar */}
+                <div className="relative w-80">
+                  <SearchBar
+                    onSearch={handleSearch}
+                    onEnter={handleSearchEnter}
+                    initialValue={searchInputValue}
+                  />
+                  <SearchDropdown
+                    results={dropdownSearchResults}
+                    isOpen={isSearchDropdownOpen}
+                    onClose={() => setIsSearchDropdownOpen(false)}
+                    onSelectResult={handleSelectSearchResult}
+                  />
+                </div>
+                <ThemeToggle />
+                <UserAccountDropdown />
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              {/* Search Bar */}
-              <div className="relative w-80">
-                <SearchBar
-                  onSearch={handleSearch}
-                  onEnter={handleSearchEnter}
-                  initialValue={searchInputValue}
-                />
-                <SearchDropdown
-                  results={dropdownSearchResults}
-                  isOpen={isSearchDropdownOpen}
-                  onClose={() => setIsSearchDropdownOpen(false)}
-                  onSelectResult={handleSelectSearchResult}
+
+            {/* Quick Add - Hidden in search mode */}
+            {!isSearchMode && (
+              <div className="mb-6">
+                <QuickAdd
+                  onAdd={handleAddTask}
+                  currentProjectId={selectedProjectId === "all" ? null : selectedProjectId}
                 />
               </div>
-              <ThemeToggle />
-              <UserAccountDropdown />
-            </div>
+            )}
+
+            {/* Task List */}
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <p className="text-muted-foreground">Loading tasks...</p>
+              </div>
+            ) : (
+              <>
+                {isSearchMode && canonicalSearchQuery && (
+                  <div className="mb-4 text-sm text-muted-foreground">
+                    {finalDisplayedTasks.length} {finalDisplayedTasks.length === 1 ? 'result' : 'results'} for &ldquo;{committedSearchQuery || searchQuery}&rdquo;
+                  </div>
+                )}
+                <TaskList
+                  tasks={finalDisplayedTasks}
+                  projects={projects}
+                  showCompleted={showCompleted}
+                  onToggleCompleted={handleToggleCompleted}
+                  sortMode={sortMode}
+                  onSortModeChange={handleSortModeChange}
+                  onRefreshOrder={handleRefreshOrder}
+                  isRefreshingOrder={isRefreshingOrder}
+                  onUpdate={handleUpdateTask}
+                  onStar={handleStarTask}
+                  onDelete={handleDeleteTask}
+                  onComplete={handleCompleteTask}
+                  onUncomplete={handleUncompleteTask}
+                  onHeat={handleHeatRequest}
+                  onCool={handleCoolRequest}
+                  onTouch={handleTouchTask}
+                  highlightedTask={highlightedTask}
+                />
+              </>
+            )}
           </div>
-
-          {/* Quick Add - Hidden in search mode */}
-          {!isSearchMode && (
-            <div className="mb-6">
-              <QuickAdd
-                onAdd={handleAddTask}
-                currentProjectId={selectedProjectId === "all" ? null : selectedProjectId}
-              />
-            </div>
-          )}
-
-          {/* Task List */}
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <p className="text-muted-foreground">Loading tasks...</p>
-            </div>
-          ) : (
-            <>
-              {isSearchMode && canonicalSearchQuery && (
-                <div className="mb-4 text-sm text-muted-foreground">
-                  {finalDisplayedTasks.length} {finalDisplayedTasks.length === 1 ? 'result' : 'results'} for &ldquo;{committedSearchQuery || searchQuery}&rdquo;
-                </div>
-              )}
-              <TaskList
-                tasks={finalDisplayedTasks}
-                projects={projects}
-                showCompleted={showCompleted}
-                onToggleCompleted={handleToggleCompleted}
-                sortMode={sortMode}
-                onSortModeChange={handleSortModeChange}
-                onRefreshOrder={handleRefreshOrder}
-                isRefreshingOrder={isRefreshingOrder}
-                onUpdate={handleUpdateTask}
-                onStar={handleStarTask}
-                onDelete={handleDeleteTask}
-                onComplete={handleCompleteTask}
-                onUncomplete={handleUncompleteTask}
-              />
-            </>
-          )}
         </div>
       </div>
-    </div>
+
+      <Dialog
+        open={isRefreshModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleCancelRefreshPrompt();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Refresh task order</DialogTitle>
+            <DialogDescription>
+              Task positions have shifted due to other edits. Refresh the list so heat and cool adjustments
+              use the latest context.
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {pendingHeatAction?.type === "cool" ? "Cool" : "Heat"} will continue automatically once the refresh
+            completes successfully.
+          </p>
+          <DialogFooter className="mt-6 flex flex-row justify-end gap-3 sm:flex-row">
+            <Button variant="ghost" onClick={handleCancelRefreshPrompt} disabled={isRefreshingOrder}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmRefreshPrompt} disabled={isRefreshingOrder}>
+              {isRefreshingOrder ? "Refreshing..." : "Refresh order"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

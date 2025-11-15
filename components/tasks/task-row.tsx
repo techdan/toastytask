@@ -33,15 +33,22 @@ interface TaskRowProps {
   onHeat: (taskId: number) => void;
   onCool: (taskId: number) => void;
   onTouch: (taskId: number) => void;
+  highlightMode?: "heat" | "cool" | null;
 }
 
-export function TaskRow({ task, projects, sortMode, onUpdate, onStar, onDelete, onComplete, onUncomplete, onHeat, onCool, onTouch }: TaskRowProps) {
+export function TaskRow({ task, projects, sortMode, onUpdate, onStar, onDelete, onComplete, onUncomplete, onHeat, onCool, onTouch, highlightMode }: TaskRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(task.title);
   const [notesExpanded, setNotesExpanded] = useState(false);
 
   const isCompleted = !!task.completedAt;
   const isNew = task.lastTouchedAt === null && task.lastHeatTouchedAt === null;
+  const rowHighlightClass =
+    highlightMode === "heat"
+      ? "task-row-highlight-heat"
+      : highlightMode === "cool"
+        ? "task-row-highlight-cool"
+        : undefined;
 
   const handleTitleClick = () => {
     if (!isCompleted) {
@@ -147,6 +154,7 @@ export function TaskRow({ task, projects, sortMode, onUpdate, onStar, onDelete, 
         data-task-id={task.id}
         className={cn(
           "group bg-card transition-colors hover:bg-accent/30",
+          rowHighlightClass,
           isCompleted && "text-muted-foreground italic"
         )}
         onClick={handleRowClick}

@@ -3,7 +3,6 @@
 import { useCallback } from "react";
 import { TaskRow } from "./task-row";
 import { TaskListHeader } from "./task-list-header";
-import { useTouchTask, useCoolTask, useMarkTaskTouched } from "@/lib/queries/use-task-mutations";
 import type { Task, SortMode, Project, TaskWithFreshValues } from "@/types";
 
 type FreshMetricKey = Extract<keyof TaskWithFreshValues, "_freshHeat" | "_freshImportance">;
@@ -22,6 +21,13 @@ interface TaskListProps {
   onDelete: (id: number) => void;
   onComplete: (id: number) => void;
   onUncomplete: (id: number) => void;
+  onHeat: (taskId: number, visibleTaskIds: number[]) => void;
+  onCool: (taskId: number, visibleTaskIds: number[]) => void;
+  onTouch: (taskId: number) => void;
+  highlightedTask?: {
+    id: number;
+    mode: "heat" | "cool";
+  } | null;
 }
 
 export function TaskList({
@@ -37,11 +43,12 @@ export function TaskList({
   onStar,
   onDelete,
   onComplete,
-  onUncomplete
+  onUncomplete,
+  onHeat,
+  onCool,
+  onTouch,
+  highlightedTask,
 }: TaskListProps) {
-  const touchTaskMutation = useTouchTask();
-  const coolTaskMutation = useCoolTask();
-  const markTaskTouchedMutation = useMarkTaskTouched();
 
   // Helper function to get nearby task IDs for optimistic updates
   // Performance optimization: only process ~20 nearby tasks instead of all tasks (10x improvement)
@@ -67,20 +74,29 @@ export function TaskList({
   }, [sortMode, tasks]);
 
   // Heat handler: increases heat adjustment to move task up
-  const handleHeat = useCallback((taskId: number) => {
-    const nearbyTaskIds = getNearbyTaskIds(taskId);
-    touchTaskMutation.mutate({ taskId, visibleTaskIds: nearbyTaskIds });
-  }, [getNearbyTaskIds, touchTaskMutation]);
+  const handleHeat = useCallback(
+    (taskId: number) => {
+      const nearbyTaskIds = getNearbyTaskIds(taskId);
+      onHeat(taskId, nearbyTaskIds);
+    },
+    [getNearbyTaskIds, onHeat]
+  );
 
   // Cool handler: decreases heat adjustment to move task down
-  const handleCool = useCallback((taskId: number) => {
-    const nearbyTaskIds = getNearbyTaskIds(taskId);
-    coolTaskMutation.mutate({ taskId, visibleTaskIds: nearbyTaskIds });
-  }, [getNearbyTaskIds, coolTaskMutation]);
+  const handleCool = useCallback(
+    (taskId: number) => {
+      const nearbyTaskIds = getNearbyTaskIds(taskId);
+      onCool(taskId, nearbyTaskIds);
+    },
+    [getNearbyTaskIds, onCool]
+  );
 
-  const handleTouch = useCallback((taskId: number) => {
-    markTaskTouchedMutation.mutate(taskId);
-  }, [markTaskTouchedMutation]);
+  const handleTouch = useCallback(
+    (taskId: number) => {
+      onTouch(taskId);
+    },
+    [onTouch]
+  );
 
   if (tasks.length === 0) {
     return (
@@ -111,7 +127,9 @@ export function TaskList({
           onRefreshOrder={onRefreshOrder}
           isRefreshingOrder={isRefreshingOrder}
         />
-        {tasks.map((task) => (
+        {tasks.map((task) => {
+          const highlightMode = highlightedTask?.id === task.id ? highlightedTask.mode : null;
+          return (
           <tbody key={task.id} className="before:content-[''] before:block before:h-2">
             <TaskRow
               task={task}
@@ -125,9 +143,11 @@ export function TaskList({
               onHeat={handleHeat}
               onCool={handleCool}
               onTouch={handleTouch}
+              highlightMode={highlightMode}
             />
           </tbody>
-        ))}
+        );
+        })}
       </table>
     </div>
   );

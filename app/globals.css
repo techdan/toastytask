@@ -158,6 +158,121 @@
   color: #fb923c; /* orange-400 */
 }
 
+.rdp-root {
+  color: inherit;
+  font-family: inherit;
+}
+
+.rdp-months {
+  gap: 1.25rem;
+}
+
+.rdp-weekday {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+  padding-left: 0.35rem;
+  padding-right: 0.35rem;
+}
+
+.rdp-button_previous,
+.rdp-button_next {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  width: 1.75rem;
+  height: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.rdp-button_previous:hover,
+.rdp-button_next:hover {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.rdp-button_previous,
+.rdp-button_next,
+.rdp-caption_label {
+  color: var(--foreground);
+}
+
+.dark .rdp-button_previous,
+.dark .rdp-button_next,
+.dark .rdp-caption_label {
+  color: oklch(0.95 0 0);
+}
+
+.rdp-caption_label {
+  margin-left: 0.65rem;
+}
+
+.rdp-button_previous svg,
+.rdp-button_next svg {
+  width: 0.75rem;
+  height: 0.75rem;
+  stroke: currentColor;
+}
+
+.dark .rdp-button_previous,
+.dark .rdp-button_next {
+  color: oklch(0.95 0 0);
+}
+
+.dark .rdp-button_previous svg,
+.dark .rdp-button_next svg {
+  stroke: oklch(0.95 0 0);
+}
+.rdp-day_button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  background-color: transparent;
+  color: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.rdp-day_button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.rdp-day:not(.rdp-selected):not(.rdp-disabled) .rdp-day_button:hover {
+  border-color: var(--border);
+  background-color: color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+
+.rdp-day:not(.rdp-selected):not(.rdp-disabled) .rdp-day_button:active {
+  background-color: color-mix(in oklab, var(--foreground) 18%, transparent);
+}
+
+.rdp-selected .rdp-day_button {
+  border-color: transparent;
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 600;
+}
+
+.rdp-today:not(.rdp-selected) .rdp-day_button {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.rdp-disabled .rdp-day_button {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .date-input {
   width: 5.75rem;
   max-width: 100%;
@@ -269,6 +384,35 @@
     rgba(96, 165, 250, 0.2) 60%,
     rgba(96, 165, 250, 0.1) 80%,
     transparent 100%);
+}
+
+/* Task row highlight when heat/cool reorders */
+.task-row-highlight-heat {
+  background-color: rgba(255, 161, 22, 0.14) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 161, 22, 0.35),
+    inset 0 4px 12px rgba(255, 161, 22, 0.15);
+}
+
+.dark .task-row-highlight-heat {
+  background-color: rgba(255, 161, 22, 0.22) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 161, 22, 0.45),
+    inset 0 6px 18px rgba(255, 161, 22, 0.28);
+}
+
+.task-row-highlight-cool {
+  background-color: rgba(56, 189, 248, 0.14) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(56, 189, 248, 0.35),
+    inset 0 4px 12px rgba(56, 189, 248, 0.15);
+}
+
+.dark .task-row-highlight-cool {
+  background-color: rgba(56, 189, 248, 0.22) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(56, 189, 248, 0.45),
+    inset 0 6px 18px rgba(56, 189, 248, 0.28);
 }
 
 /* Logo styling with dynamic color scheme support */
