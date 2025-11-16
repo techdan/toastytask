@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import { TaskRow } from "./task-row";
 import { TaskListHeader } from "./task-list-header";
 import { cn } from "@/lib/utils";
-import type { Task, SortMode, Project, TaskWithFreshValues, TaskDensity } from "@/types";
+import type { Task, SortMode, Project, TaskWithFreshValues, TaskDensity, SortDirection } from "@/types";
 
 type FreshMetricKey = Extract<keyof TaskWithFreshValues, "_freshHeat" | "_freshImportance">;
 
@@ -14,7 +14,9 @@ interface TaskListProps {
   showCompleted: boolean;
   onToggleCompleted: () => void;
   sortMode: SortMode;
+  sortDirection: SortDirection;
   onSortModeChange: (mode: SortMode) => void;
+  onToggleSortDirection: () => void;
   onRefreshOrder: () => Promise<void> | void;
   isRefreshingOrder: boolean;
   density: TaskDensity;
@@ -39,7 +41,9 @@ export function TaskList({
   showCompleted,
   onToggleCompleted,
   sortMode,
+  sortDirection,
   onSortModeChange,
+  onToggleSortDirection,
   onRefreshOrder,
   isRefreshingOrder,
   density,
@@ -133,7 +137,9 @@ export function TaskList({
           showCompleted={showCompleted}
           onToggleCompleted={onToggleCompleted}
           sortMode={sortMode}
+          sortDirection={sortDirection}
           onSortModeChange={onSortModeChange}
+          onToggleSortDirection={onToggleSortDirection}
           onRefreshOrder={onRefreshOrder}
           isRefreshingOrder={isRefreshingOrder}
           density={density}

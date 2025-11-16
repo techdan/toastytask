@@ -45,12 +45,30 @@ import { calculateHeat } from "@/lib/scoring/heat-v3";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
 import { searchTasks, filterResultsByProject } from "@/lib/search/search-utils";
 import { navigateToTask, navigateToNote } from "@/lib/search/navigation-utils";
-import type { Task, NewTask, Project, SortMode, TaskWithFreshValues, TaskDensity } from "@/types";
+import type { Task, NewTask, Project, SortMode, TaskWithFreshValues, TaskDensity, SortDirection } from "@/types";
 import type { SearchResult } from "@/lib/search/search-utils";
 
 // Number of days to show completed tasks when visibility is enabled
 const COMPLETED_TASKS_VISIBLE_DAYS = 7;
 const STAR_DEBOUNCE_MS = 150;
+const VIEW_SORT_STORAGE_KEY = "toodle:viewSortMode";
+const VIEW_SORT_DIRECTION_STORAGE_KEY = "toodle:viewSortDirection";
+
+const readStoredCustomSortMode = (): SortMode | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const stored = window.localStorage.getItem(VIEW_SORT_STORAGE_KEY);
+  return stored === "createdAt" || stored === "updatedAt" ? (stored as SortMode) : null;
+};
+
+const readStoredSortDirection = (): SortDirection | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const stored = window.localStorage.getItem(VIEW_SORT_DIRECTION_STORAGE_KEY);
+  return stored === "asc" || stored === "desc" ? (stored as SortDirection) : null;
+};
 
 type PendingStarIntent = {
   targetLevel: number;
@@ -97,30 +115,58 @@ const compareTasks = (
     return bCompletedTime - aCompletedTime; // Descending order (newest first)
   }
 
-  const aIsUntouched = !a.lastHeatTouchedAt && !a.lastTouchedAt;
-  const bIsUntouched = !b.lastHeatTouchedAt && !b.lastTouchedAt;
+  const compareCreatedDesc = () => {
+    const aCreated = toMilliseconds(a.createdAt);
+    const bCreated = toMilliseconds(b.createdAt);
+    return bCreated - aCreated;
+  };
 
-  if (aIsUntouched && !bIsUntouched) return -1;
-  if (!aIsUntouched && bIsUntouched) return 1;
+  if (sortMode === "createdAt") {
+    const createdDiff = compareCreatedDesc();
+    if (createdDiff !== 0) {
+      return createdDiff;
+    }
+  } else if (sortMode === "updatedAt") {
+    const getUpdatedTime = (task: TaskWithFreshValues) => {
+      if (task.updatedAt) {
+        return toMilliseconds(task.updatedAt);
+      }
+      if (task.lastTouchedAt) {
+        return toMilliseconds(task.lastTouchedAt);
+      }
+      if (task.lastHeatTouchedAt) {
+        return toMilliseconds(task.lastHeatTouchedAt);
+      }
+      return toMilliseconds(task.createdAt);
+    };
+    const updatedDiff = getUpdatedTime(b) - getUpdatedTime(a);
+    if (updatedDiff !== 0) {
+      return updatedDiff;
+    }
+  } else {
+    const aIsUntouched = !a.lastHeatTouchedAt && !a.lastTouchedAt;
+    const bIsUntouched = !b.lastHeatTouchedAt && !b.lastTouchedAt;
 
-  if (aIsUntouched && bIsUntouched) {
+    if (aIsUntouched && !bIsUntouched) return -1;
+    if (!aIsUntouched && bIsUntouched) return 1;
+
+    if (aIsUntouched && bIsUntouched) {
+      const sortValue = sortMode === "heat" ? (a._freshHeat || 0) : a._freshImportance;
+      const sortValueB = sortMode === "heat" ? (b._freshHeat || 0) : b._freshImportance;
+
+      if (sortValueB !== sortValue) {
+        return sortValueB - sortValue;
+      }
+
+      return compareCreatedDesc();
+    }
+
     const sortValue = sortMode === "heat" ? (a._freshHeat || 0) : a._freshImportance;
     const sortValueB = sortMode === "heat" ? (b._freshHeat || 0) : b._freshImportance;
 
     if (sortValueB !== sortValue) {
       return sortValueB - sortValue;
     }
-
-    const aCreated = toMilliseconds(a.createdAt);
-    const bCreated = toMilliseconds(b.createdAt);
-    return bCreated - aCreated;
-  }
-
-  const sortValue = sortMode === "heat" ? (a._freshHeat || 0) : a._freshImportance;
-  const sortValueB = sortMode === "heat" ? (b._freshHeat || 0) : b._freshImportance;
-
-  if (sortValueB !== sortValue) {
-    return sortValueB - sortValue;
   }
 
   if (a.dueAt && b.dueAt) {
@@ -131,13 +177,14 @@ const compareTasks = (
   if (a.dueAt) return -1;
   if (b.dueAt) return 1;
 
-  const aCreated = toMilliseconds(a.createdAt);
-  const bCreated = toMilliseconds(b.createdAt);
-  return bCreated - aCreated;
+  return compareCreatedDesc();
 };
 
-const sortTasksByMode = (tasks: TaskWithFreshValues[], sortMode: SortMode) =>
-  [...tasks].sort((a, b) => compareTasks(a, b, sortMode));
+const sortTasksByMode = (tasks: TaskWithFreshValues[], sortMode: SortMode, sortDirection: SortDirection) =>
+  [...tasks].sort((a, b) => {
+    const baseComparison = compareTasks(a, b, sortMode);
+    return sortDirection === "asc" ? -baseComparison : baseComparison;
+  });
 
 const normalizeToDate = (
   value: Task["createdAt"] | string | number | null | undefined
@@ -186,6 +233,14 @@ function TasksPageContent() {
       return saved === null ? false : saved === "true";
     }
     return false;
+  });
+  const [sortMode, setSortMode] = useState<SortMode>(() => {
+    const stored = readStoredCustomSortMode();
+    return stored ?? "importance";
+  });
+  const [sortDirection, setSortDirection] = useState<SortDirection>(() => {
+    const stored = readStoredSortDirection();
+    return stored ?? "desc";
   });
   const [taskDensity, setTaskDensity] = useState<TaskDensity>(() => {
     if (typeof window !== "undefined") {
@@ -282,6 +337,29 @@ function TasksPageContent() {
   });
 
   const { data: settings } = useSettingsQuery();
+
+  useEffect(() => {
+    if (!settings?.sortMode) {
+      return;
+    }
+    const stored = readStoredCustomSortMode();
+    const modeToUse = stored ?? settings.sortMode;
+    setSortMode((previousMode) => {
+      if (previousMode === modeToUse) {
+        return previousMode;
+      }
+      setSortDirection((prevDirection) => {
+        if (prevDirection === "desc") {
+          return prevDirection;
+        }
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(VIEW_SORT_DIRECTION_STORAGE_KEY, "desc");
+        }
+        return "desc";
+      });
+      return modeToUse;
+    });
+  }, [settings?.sortMode]);
 
   const addLingeringCompleted = useCallback((taskId: number) => {
     setLingeringCompletedIds((previous) => {
@@ -444,9 +522,8 @@ function TasksPageContent() {
   const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
   const [pendingHeatAction, setPendingHeatAction] = useState<PendingHeatAction | null>(null);
   const [highlightedTask, setHighlightedTask] = useState<HighlightedTask>(null);
-  const contextRef = useRef<{ projectId: number | null | "all"; sortMode: SortMode } | null>(null);
+  const contextRef = useRef<{ projectId: number | null | "all"; sortMode: SortMode; sortDirection: SortDirection } | null>(null);
   const prevActiveCountRef = useRef(0); // Detect first non-empty load per context for deterministic seeding
-  const sortMode = settings?.sortMode || "importance";
 
   // Calculate fresh scoring data and split completed tasks (recent only) from actives
   const { activeTasks, completedTasks, enrichedTaskMap } = useMemo(() => {
@@ -497,8 +574,8 @@ function TasksPageContent() {
   }, [allFetchedTasks, showCompleted, lingeringCompletedIds, optimisticActiveIds]);
 
   const sortedActiveIds = useMemo(
-    () => sortTasksByMode(activeTasks, sortMode).map((task) => task.id),
-    [activeTasks, sortMode]
+    () => sortTasksByMode(activeTasks, sortMode, sortDirection).map((task) => task.id),
+    [activeTasks, sortMode, sortDirection]
   );
 
   useEffect(() => {
@@ -506,7 +583,8 @@ function TasksPageContent() {
     const contextChanged =
       !lastContext ||
       lastContext.projectId !== selectedProjectId ||
-      lastContext.sortMode !== sortMode;
+      lastContext.sortMode !== sortMode ||
+      lastContext.sortDirection !== sortDirection;
     const wasPreviouslyEmpty = prevActiveCountRef.current === 0;
     const nowHasTasks = activeTasks.length > 0;
     const shouldSeedFromSorted = contextChanged || (nowHasTasks && wasPreviouslyEmpty);
@@ -517,7 +595,7 @@ function TasksPageContent() {
         setLingeringCompletedIds(new Set());
         setOptimisticActiveIds(new Set());
       }
-      contextRef.current = { projectId: selectedProjectId, sortMode };
+      contextRef.current = { projectId: selectedProjectId, sortMode, sortDirection };
       setTaskOrder(sortedActiveIds);
       setIsOrderFresh(true);
       prevActiveCountRef.current = activeTasks.length;
@@ -540,11 +618,11 @@ function TasksPageContent() {
 
       return [...newTaskIds, ...filteredOrder];
     });
-  }, [activeTasks, selectedProjectId, sortMode, sortedActiveIds]);
+  }, [activeTasks, selectedProjectId, sortMode, sortDirection, sortedActiveIds]);
 
   const orderedActiveTasks = useMemo(() => {
     if (taskOrder.length === 0) {
-      return sortTasksByMode(activeTasks, sortMode);
+      return sortTasksByMode(activeTasks, sortMode, sortDirection);
     }
 
     const taskMap = new Map(activeTasks.map((task) => [task.id, task]));
@@ -562,11 +640,11 @@ function TasksPageContent() {
     const missing = activeTasks.filter((task) => !seen.has(task.id));
 
     return [...ordered, ...missing];
-  }, [activeTasks, sortMode, taskOrder]);
+  }, [activeTasks, sortMode, sortDirection, taskOrder]);
 
   const completedDisplay = useMemo(
-    () => (showCompleted ? sortTasksByMode(completedTasks, sortMode) : []),
-    [completedTasks, showCompleted, sortMode]
+    () => (showCompleted ? sortTasksByMode(completedTasks, sortMode, sortDirection) : []),
+    [completedTasks, showCompleted, sortMode, sortDirection]
   );
 
   const displayedTasks = useMemo(
@@ -816,6 +894,16 @@ function TasksPageContent() {
     }
   }, []);
 
+  const handleToggleSortDirection = useCallback(() => {
+    setSortDirection((previousDirection) => {
+      const nextDirection = previousDirection === "desc" ? "asc" : "desc";
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(VIEW_SORT_DIRECTION_STORAGE_KEY, nextDirection);
+      }
+      return nextDirection;
+    });
+  }, []);
+
   // Project CRUD handlers
   const handleCreateProject = async (name: string, colorHex: string) => {
     createProjectMutation.mutate({ name, colorHex, archived: false });
@@ -839,9 +927,33 @@ function TasksPageContent() {
   };
 
   // Settings handlers
-  const handleSortModeChange = (sortMode: SortMode) => {
-    updateSettingsMutation.mutate({ sortMode });
-  };
+  const handleSortModeChange = useCallback((nextSortMode: SortMode) => {
+    setSortMode((previousMode) => {
+      if (previousMode === nextSortMode) {
+        return previousMode;
+      }
+      setSortDirection((prevDirection) => {
+        if (prevDirection === "desc") {
+          return prevDirection;
+        }
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(VIEW_SORT_DIRECTION_STORAGE_KEY, "desc");
+        }
+        return "desc";
+      });
+      return nextSortMode;
+    });
+    if (typeof window !== "undefined") {
+      if (nextSortMode === "createdAt" || nextSortMode === "updatedAt") {
+        window.localStorage.setItem(VIEW_SORT_STORAGE_KEY, nextSortMode);
+      } else {
+        window.localStorage.removeItem(VIEW_SORT_STORAGE_KEY);
+      }
+    }
+    if (nextSortMode === "heat" || nextSortMode === "importance") {
+      updateSettingsMutation.mutate({ sortMode: nextSortMode });
+    }
+  }, [updateSettingsMutation]);
 
   // Handle project selection with URL update
   const handleSelectProject = useCallback((projectId: number | null | "all") => {
@@ -896,7 +1008,7 @@ function TasksPageContent() {
       };
     });
 
-    const newOrder = sortTasksByMode(simulatedActiveTasks, sortMode).map((task) => task.id);
+    const newOrder = sortTasksByMode(simulatedActiveTasks, sortMode, sortDirection).map((task) => task.id);
     setTaskOrder(newOrder);
 
     try {
@@ -913,7 +1025,7 @@ function TasksPageContent() {
     } finally {
       setIsRefreshingOrder(false);
     }
-  }, [activeTasks, isRefreshingOrder, sortMode, taskOrder, touchAllTasks]);
+  }, [activeTasks, isRefreshingOrder, sortMode, sortDirection, taskOrder, touchAllTasks]);
 
   const handleRefreshOrder = useCallback(async () => {
     await refreshTaskOrder();
@@ -932,12 +1044,12 @@ function TasksPageContent() {
             }
           : task
       );
-      const orderedIds = sortTasksByMode(simulatedTasks, sortMode).map((task) => task.id);
+      const orderedIds = sortTasksByMode(simulatedTasks, sortMode, sortDirection).map((task) => task.id);
       flushSync(() => {
         setTaskOrder(orderedIds);
       });
     },
-    [activeTasks, sortMode]
+    [activeTasks, sortMode, sortDirection]
   );
 
   const runHeatMutation = useCallback(
@@ -1258,7 +1370,9 @@ function TasksPageContent() {
                   showCompleted={showCompleted}
                   onToggleCompleted={handleToggleCompleted}
                   sortMode={sortMode}
+                  sortDirection={sortDirection}
                   onSortModeChange={handleSortModeChange}
+                  onToggleSortDirection={handleToggleSortDirection}
                   onRefreshOrder={handleRefreshOrder}
                   isRefreshingOrder={isRefreshingOrder}
                   density={taskDensity}

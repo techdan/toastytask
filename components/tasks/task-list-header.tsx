@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, EyeOff, ChevronDown, RefreshCcw } from "lucide-react";
+import { Eye, EyeOff, ChevronDown, ArrowDown, ArrowUp, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -13,13 +13,24 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import type { SortMode, TaskDensity } from "@/types";
+import type { SortMode, SortDirection, TaskDensity } from "@/types";
+
+const sortOptionLabels: Record<SortMode, string> = {
+  heat: "Heat",
+  importance: "Importance",
+  createdAt: "Date Created",
+  updatedAt: "Date Modified",
+};
+
+const sortOptions: SortMode[] = ["importance", "heat", "createdAt", "updatedAt"];
 
 interface TaskListHeaderProps {
   showCompleted: boolean;
   onToggleCompleted: () => void;
   sortMode: SortMode;
+  sortDirection: SortDirection;
   onSortModeChange: (mode: SortMode) => void;
+  onToggleSortDirection: () => void;
   onRefreshOrder: () => Promise<void> | void;
   isRefreshingOrder: boolean;
   density: TaskDensity;
@@ -30,7 +41,9 @@ export function TaskListHeader({
   showCompleted,
   onToggleCompleted,
   sortMode,
+  sortDirection,
   onSortModeChange,
+  onToggleSortDirection,
   onRefreshOrder,
   isRefreshingOrder,
   density,
@@ -38,6 +51,8 @@ export function TaskListHeader({
 }: TaskListHeaderProps) {
   const headerPadding = density === "compact" ? "py-1.5" : "py-2";
   const utilityButtonHeight = density === "compact" ? "h-5" : "h-6";
+  const sortTriggerHeight = density === "compact" ? "h-5" : "h-6";
+  const sortDirectionLabel = sortDirection === "desc" ? "Descending" : "Ascending";
 
   return (
     <thead>
@@ -45,43 +60,57 @@ export function TaskListHeader({
         <th
           scope="col"
           className={cn(
-            "w-[150px] px-2 text-xs font-medium text-muted-foreground text-left first:rounded-l border border-r-0",
+            "w-[130px] pl-2 pr-0 text-xs font-medium text-muted-foreground text-left first:rounded-l border border-r-0",
             headerPadding
           )}
         >
-          <div className="flex items-center justify-between pr-1">
+          <div className="flex items-center justify-between">
             <span className="sr-only">Task utilities</span>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            <div className="flex w-full items-center gap-0.5">
+              <span className="text-xs font-medium text-muted-foreground">Sort:</span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={cn("!px-0 text-xs gap-1 justify-start min-w-0 rounded-none hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0", sortTriggerHeight)}
+                    title="Sort mode"
+                  >
+                    <span>{sortOptionLabels[sortMode]}</span>
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {sortOptions.map((option) => (
+                    <DropdownMenuItem
+                      key={option}
+                      onClick={() => onSortModeChange(option)}
+                      className={cn(sortMode === option && "bg-accent")}
+                    >
+                      {sortOptionLabels[option]}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <div className="ml-auto pl-1">
                 <Button
                   variant="ghost"
-                  size="sm"
-                  className="h-5 px-1.5 text-xs gap-1"
-                  title="Sort mode"
+                  size="icon"
+                  className={cn(
+                    "w-5 text-muted-foreground hover:text-foreground focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none",
+                    sortTriggerHeight
+                  )}
+                  onClick={onToggleSortDirection}
+                  title={`Toggle sort direction (${sortDirectionLabel})`}
                 >
-                  <span className="capitalize">{sortMode}</span>
-                  <ChevronDown className="h-3 w-3" />
+                  {sortDirection === "desc" ? (
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  )}
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem
-                  onClick={() => onSortModeChange("importance")}
-                  className={cn(
-                    sortMode === "importance" && "bg-accent"
-                  )}
-                >
-                  Importance
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => onSortModeChange("heat")}
-                  className={cn(
-                    sortMode === "heat" && "bg-accent"
-                  )}
-                >
-                  Heat
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </div>
+            </div>
           </div>
         </th>
         <th

@@ -46,6 +46,7 @@ export function TaskRow({ task, projects, sortMode, density, onUpdate, onStar, o
   const isNew = task.lastTouchedAt === null && task.lastHeatTouchedAt === null;
   const isCompact = density === "compact";
   const cellPaddingClass = isCompact ? "py-1" : "py-1.5";
+  const controlGroupGapClass = sortMode === "heat" ? "gap-1.5" : "gap-2";
   const rowHighlightClass =
     highlightMode === "heat"
       ? "task-row-highlight-heat"
@@ -163,12 +164,12 @@ export function TaskRow({ task, projects, sortMode, density, onUpdate, onStar, o
         onClick={handleRowClick}
       >
         <td className={cn(
-          "px-2 align-middle border border-r-0",
+          "pl-2 pr-0 align-middle border border-r-0",
           cellPaddingClass,
           notesExpanded && "border-b-0",
           !isCompact && (notesExpanded ? "rounded-tl" : "first:rounded-l")
         )}>
-          <div className="flex items-center gap-2">
+          <div className={cn("flex items-center", controlGroupGapClass)}>
             <Checkbox
               checked={isCompleted}
               onCheckedChange={handleCheckboxChange}
@@ -199,10 +200,10 @@ export function TaskRow({ task, projects, sortMode, density, onUpdate, onStar, o
               />
             </div>
             {sortMode === "heat" && (
-              <>
+              <div className="flex items-center gap-0.5">
                 <button
                   className={cn(
-                    "shrink-0 transition-colors heat-button",
+                    "flex h-6 w-6 shrink-0 items-center justify-center transition-colors heat-button",
                     isCompleted
                       ? "opacity-50 cursor-not-allowed"
                       : "text-orange-400/60 hover:text-orange-400 cursor-pointer"
@@ -217,7 +218,7 @@ export function TaskRow({ task, projects, sortMode, density, onUpdate, onStar, o
                 </button>
                 <button
                   className={cn(
-                    "shrink-0 transition-colors cool-button",
+                    "flex h-6 w-6 shrink-0 items-center justify-center transition-colors cool-button",
                     isCompleted
                       ? "opacity-50 cursor-not-allowed"
                       : "text-blue-400/60 hover:text-blue-400 cursor-pointer"
@@ -230,7 +231,7 @@ export function TaskRow({ task, projects, sortMode, density, onUpdate, onStar, o
                 >
                   <Snowflake className="h-4 w-4" />
                 </button>
-              </>
+              </div>
             )}
           </div>
         </td>

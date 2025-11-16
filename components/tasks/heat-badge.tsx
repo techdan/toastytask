@@ -31,6 +31,22 @@ interface HeatBadgeProps {
   isCompleted?: boolean;
 }
 
+const formatDateTime = (value: Date | string | number | null | undefined) => {
+  if (!value) return "Unknown";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown";
+  }
+  return date.toLocaleDateString(undefined, {
+    month: "numeric",
+    day: "numeric",
+    year: "2-digit",
+  });
+};
+
+const getModifiedTimestamp = (task: Task) =>
+  task.updatedAt ?? task.lastTouchedAt ?? task.lastHeatTouchedAt ?? task.createdAt;
+
 /**
  * Dual-mode badge component that displays either Importance or Heat
  *
@@ -102,6 +118,8 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
     // Importance Mode: Detailed breakdown tooltip
     // Pure calculation architecture: use calculated importance, not stored value
     const starLabels = ['None', 'Blue (+1)', 'Yellow (+2)', 'Orange (+3)'];
+    const createdDisplay = formatDateTime(task.createdAt);
+    const modifiedDisplay = formatDateTime(getModifiedTimestamp(task));
 
     return (
       <TooltipProvider delayDuration={300} disableHoverableContent={false}>
@@ -120,8 +138,9 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
           </TooltipTrigger>
           <TooltipContent className="max-w-sm">
             <div className="space-y-2 py-1">
-              <div className="border-b pb-2">
-                <div className="font-semibold">Importance Breakdown ({importance}/14)</div>
+              <div className="text-[11px] text-muted-foreground leading-tight">
+                <div>Date created: {createdDisplay}</div>
+                <div>Date modified: {modifiedDisplay}</div>
               </div>
               <div className="space-y-1.5 text-xs">
                 <div className="flex justify-between items-center gap-4">
@@ -138,6 +157,11 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
                     <span className="font-mono tabular-nums">{importanceFactors.starBonus} pts</span>
                   </div>
                 )}
+              </div>
+              <div className="border-t pt-2">
+                <div className="font-semibold text-xs">
+                  Importance Breakdown ({importance}/14)
+                </div>
               </div>
             </div>
           </TooltipContent>
@@ -201,6 +225,8 @@ function HeatBreakdownTooltip({
   const showDebug = ((searchParams.get("DEBUG") || "").toLowerCase() === "true");
   const heatDisplay = Math.round(breakdown.totalHeat); // V4: Display as points (0-145)
   const starLabels = ['None', 'Blue (+1)', 'Yellow (+2)', 'Orange (+3)'];
+  const createdDisplay = formatDateTime(task.createdAt);
+  const modifiedDisplay = formatDateTime(getModifiedTimestamp(task));
 
   // Format dates for display
   const formatTimeAgo = (date: Date | number | string | null | undefined) => {
@@ -218,16 +244,10 @@ function HeatBreakdownTooltip({
 
   return (
     <div className="space-y-3 py-1">
-      {/* Header with Task ID */}
-      <div className="border-b pb-2">
-        <div className="font-semibold">
-          Heat: {heatDisplay} ({stageLabel})
-        </div>
-        {showDebug && (
-          <div className="text-[10px] text-muted-foreground/60 font-mono">
-            Task ID: {task.id}
-          </div>
-        )}
+      {/* Dates */}
+      <div className="text-[11px] text-muted-foreground leading-tight">
+        <div>Date created: {createdDisplay}</div>
+        <div>Date modified: {modifiedDisplay}</div>
       </div>
 
       {/* Components */}
@@ -355,7 +375,17 @@ function HeatBreakdownTooltip({
         </div>
       </div>
 
-      {/* Total removed per design: no summary row */}
+      {/* Header with Task ID moved to bottom */}
+      <div className="border-t pt-2 space-y-1">
+        <div className="font-semibold">
+          Heat: {heatDisplay} ({stageLabel})
+        </div>
+        {showDebug && (
+          <div className="text-[10px] text-muted-foreground/60 font-mono">
+            Task ID: {task.id}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -36,9 +36,18 @@ export type GroupingMode = (typeof GroupingMode)[keyof typeof GroupingMode];
 export const SortMode = {
   IMPORTANCE: "importance",
   HEAT: "heat",
+  CREATED_AT: "createdAt",
+  UPDATED_AT: "updatedAt",
 } as const;
 
 export type SortMode = (typeof SortMode)[keyof typeof SortMode];
+
+export const SortDirection = {
+  ASC: "asc",
+  DESC: "desc",
+} as const;
+
+export type SortDirection = (typeof SortDirection)[keyof typeof SortDirection];
 
 export const TaskDensity = {
   COMFORTABLE: "comfortable",
