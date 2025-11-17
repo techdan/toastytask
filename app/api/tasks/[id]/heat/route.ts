@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { taskRepository } from "@/lib/db/repositories";
@@ -7,6 +8,20 @@ import { HEAT_CONFIG } from "@/lib/scoring/heat-config";
 
 // Force Node.js runtime for better-sqlite3 compatibility
 export const runtime = 'nodejs';
+
+type HeatDebugPhase = "request" | "context" | "result" | "error";
+
+const roundHeat = (value: number) => Math.round(value * 1000) / 1000;
+
+const logHeatDebug = (
+  requestId: string,
+  phase: HeatDebugPhase,
+  details: Record<string, unknown>
+) => {
+  const payload = { requestId, ...details };
+  const method = phase === "error" ? console.error : console.log;
+  method(`[heat-api-debug] ${phase}`, payload);
+};
 
 /**
  * POST /api/tasks/[id]/heat - Apply heat
@@ -28,14 +43,19 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const debugRequestId = randomUUID();
+  let lastKnownUserId: string | null = null;
+  let lastKnownTaskId: number | null = null;
   try {
     const { userId } = await auth();
+    lastKnownUserId = userId;
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { id } = await params;
     const taskId = parseInt(id, 10);
+    lastKnownTaskId = taskId;
 
     // Parse request body
     const body = await request.json().catch(() => ({}));
@@ -48,6 +68,14 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    logHeatDebug(debugRequestId, "request", {
+      userId,
+      taskId,
+      visibleTaskIdCount: visibleTaskIds.length,
+      visibleTaskIds,
+      incrementOverride: increment ?? null,
+    });
 
     // Get existing task
     const existingTask = await taskRepository.findById(taskId, userId);
@@ -90,6 +118,24 @@ export async function POST(
         return { id: neighbor.id, heat: freshHeat };
       });
     }
+
+    const contextHeatValues = contextTasks.map((task) => task.heat);
+    const contextHeatMin = contextHeatValues.length ? Math.min(...contextHeatValues) : null;
+    const contextHeatMax = contextHeatValues.length ? Math.max(...contextHeatValues) : null;
+    logHeatDebug(debugRequestId, "context", {
+      userId,
+      taskId,
+      contextCurrentHeat: roundHeat(contextCurrentHeat),
+      neighborIdCount: neighborIds.length,
+      contextTaskCount: contextTasks.length,
+      neighborHeatMin: contextHeatMin !== null ? roundHeat(contextHeatMin) : null,
+      neighborHeatMax: contextHeatMax !== null ? roundHeat(contextHeatMax) : null,
+      contextTaskHeats: contextTasks.map((task, index) => ({
+        id: task.id,
+        heat: roundHeat(task.heat),
+        ordinal: index,
+      })),
+    });
 
     // Calculate context-aware boost (move up 1 position)
     const boostHeatDelta =
@@ -136,6 +182,21 @@ export async function POST(
 
     // Calculate deltas
     const heatDelta = newHeat - baselineHeat;
+
+    logHeatDebug(debugRequestId, "result", {
+      userId,
+      taskId,
+      mutationTimestamp,
+      storedAdjustment,
+      decayedAdjustment,
+      newAdjustment,
+      baselineHeat: roundHeat(baselineHeat),
+      newHeat: roundHeat(newHeat),
+      boostHeatDelta: roundHeat(boostHeatDelta),
+      targetHeat: roundHeat(targetHeat),
+      heatDelta: roundHeat(heatDelta),
+      adjustmentDelta: roundHeat(adjustmentDelta),
+    });
     return NextResponse.json({
       task: updatedTask,
       heatDelta,
@@ -147,6 +208,11 @@ export async function POST(
       mutationTimestamp,
     });
   } catch (error) {
+    logHeatDebug(debugRequestId, "error", {
+      userId: lastKnownUserId,
+      taskId: lastKnownTaskId,
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
     console.error("Failed to apply heat:", error);
     return NextResponse.json({ error: "Failed to apply heat" }, { status: 500 });
   }
