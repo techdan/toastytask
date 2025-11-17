@@ -1153,7 +1153,8 @@ function TasksPageContent() {
         const response = await touchTaskMutation.mutateAsync({ taskId, visibleTaskIds });
         setHighlightedTask({ id: taskId, mode: "heat" });
         if (typeof response?.targetHeat === "number") {
-          const requestId = response?.requestId ?? null;
+          const requestId =
+            typeof response?.requestId === "string" ? response.requestId : undefined;
           console.debug("[heat-debug] runHeatMutation:targetHeat", {
             taskId,
             requestId,
@@ -1178,7 +1179,7 @@ function TasksPageContent() {
         console.error("Failed to apply heat mutation:", error);
       }
     },
-    [reorderTaskListWithTargetHeat, setHighlightedTask, sortedActiveIds, touchTaskMutation]
+    [reorderTaskListWithTargetHeat, setHighlightedTask, sortedActiveIds, touchTaskMutation, isOrderFresh]
   );
 
   const runCoolMutation = useCallback(
@@ -1193,7 +1194,8 @@ function TasksPageContent() {
         const response = await coolTaskMutation.mutateAsync({ taskId, visibleTaskIds });
         setHighlightedTask({ id: taskId, mode: "cool" });
         if (typeof response?.targetHeat === "number") {
-          const requestId = response?.requestId ?? null;
+          const requestId =
+            typeof response?.requestId === "string" ? response.requestId : undefined;
           console.debug("[heat-debug] runCoolMutation:targetHeat", {
             taskId,
             requestId,
@@ -1218,7 +1220,7 @@ function TasksPageContent() {
         console.error("Failed to apply cool mutation:", error);
       }
     },
-    [coolTaskMutation, reorderTaskListWithTargetHeat, setHighlightedTask, sortedActiveIds]
+    [coolTaskMutation, reorderTaskListWithTargetHeat, setHighlightedTask, sortedActiveIds, isOrderFresh]
   );
 
   const executePendingHeatAction = useCallback(
