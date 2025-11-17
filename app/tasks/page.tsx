@@ -1108,7 +1108,7 @@ function TasksPageContent() {
   }, [taskOrder]);
 
   const reorderTaskListWithTargetHeat = useCallback(
-    (taskId: number, targetHeat: number) => {
+    (taskId: number, targetHeat: number, metadata?: { requestId?: string }) => {
       const now = new Date();
       const simulatedTasks = activeTasks.map((task) =>
         task.id === taskId
@@ -1124,8 +1124,11 @@ function TasksPageContent() {
       console.debug("[heat-debug] reorderTaskListWithTargetHeat", {
         taskId,
         targetHeat,
+        requestId: metadata?.requestId ?? null,
         orderedIdsPreview: orderedIds.slice(0, 10),
+        orderedIdsPreviewText: orderedIds.slice(0, 10).join(","),
         previousOrderPreview: taskOrderRef.current.slice(0, 10),
+        previousOrderPreviewText: taskOrderRef.current.slice(0, 10).join(","),
         contextPreview: simulatedTasks.slice(0, 5).map((task) => ({
           id: task.id,
           heat: task._freshHeat,
@@ -1150,13 +1153,15 @@ function TasksPageContent() {
         const response = await touchTaskMutation.mutateAsync({ taskId, visibleTaskIds });
         setHighlightedTask({ id: taskId, mode: "heat" });
         if (typeof response?.targetHeat === "number") {
+          const requestId = response?.requestId ?? null;
           console.debug("[heat-debug] runHeatMutation:targetHeat", {
             taskId,
+            requestId,
             targetHeat: response.targetHeat,
             heatDelta: response.heatDelta,
             adjustmentDelta: response.adjustmentDelta,
           });
-          reorderTaskListWithTargetHeat(taskId, response.targetHeat);
+          reorderTaskListWithTargetHeat(taskId, response.targetHeat, { requestId });
         } else {
           console.warn("[heat-debug] runHeatMutation:noTargetHeat", {
             taskId,
@@ -1188,13 +1193,15 @@ function TasksPageContent() {
         const response = await coolTaskMutation.mutateAsync({ taskId, visibleTaskIds });
         setHighlightedTask({ id: taskId, mode: "cool" });
         if (typeof response?.targetHeat === "number") {
+          const requestId = response?.requestId ?? null;
           console.debug("[heat-debug] runCoolMutation:targetHeat", {
             taskId,
+            requestId,
             targetHeat: response.targetHeat,
             heatDelta: response.heatDelta,
             adjustmentDelta: response.adjustmentDelta,
           });
-          reorderTaskListWithTargetHeat(taskId, response.targetHeat);
+          reorderTaskListWithTargetHeat(taskId, response.targetHeat, { requestId });
         } else {
           console.warn("[heat-debug] runCoolMutation:noTargetHeat", {
             taskId,

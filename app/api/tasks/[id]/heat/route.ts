@@ -69,19 +69,25 @@ export async function POST(
       );
     }
 
-    logHeatDebug(debugRequestId, "request", {
-      userId,
-      taskId,
-      visibleTaskIdCount: visibleTaskIds.length,
-      visibleTaskIds,
-      incrementOverride: increment ?? null,
-    });
-
     // Get existing task
     const existingTask = await taskRepository.findById(taskId, userId);
     if (!existingTask) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
+
+    const visibleTaskIdsOrdered = visibleTaskIds as number[];
+    const visibleTaskIdsDeduped = Array.from(new Set(visibleTaskIdsOrdered));
+    const targetVisibleIndex = visibleTaskIdsOrdered.indexOf(existingTask.id);
+
+    logHeatDebug(debugRequestId, "request", {
+      userId,
+      taskId,
+      visibleTaskIdCount: visibleTaskIdsOrdered.length,
+      visibleTaskIds: visibleTaskIdsOrdered,
+      visibleTaskIdsText: visibleTaskIdsOrdered.join(","),
+      targetVisibleIndex,
+      incrementOverride: increment ?? null,
+    });
 
     // Calculate old heat for delta
     const storedAdjustment = existingTask.heatAdjustment || 0;
@@ -105,7 +111,7 @@ export async function POST(
     );
 
     // Build context from nearby task IDs (performance optimization: ~20 tasks instead of all)
-    const neighborIds = Array.from(new Set(visibleTaskIds)).filter((id) => id !== existingTask.id);
+    const neighborIds = visibleTaskIdsDeduped.filter((id) => id !== existingTask.id);
 
     let contextTasks: Array<{id: number; heat: number}> = [];
     if (neighborIds.length > 0) {
@@ -119,17 +125,46 @@ export async function POST(
       });
     }
 
+    const neighborHeatMap = new Map(contextTasks.map((task) => [task.id, task.heat]));
     const contextHeatValues = contextTasks.map((task) => task.heat);
     const contextHeatMin = contextHeatValues.length ? Math.min(...contextHeatValues) : null;
     const contextHeatMax = contextHeatValues.length ? Math.max(...contextHeatValues) : null;
+
+    const orderedVisibleContext = visibleTaskIdsOrdered.map((id, index) => ({
+      id,
+      index,
+      role: id === existingTask.id ? "target" : "neighbor",
+      relativeIndex: targetVisibleIndex === -1 ? null : index - targetVisibleIndex,
+      heat: id === existingTask.id ? roundHeat(contextCurrentHeat) : (neighborHeatMap.has(id) ? roundHeat(neighborHeatMap.get(id)!) : null),
+    }));
+    const previewStart =
+      targetVisibleIndex === -1 ? 0 : Math.max(0, targetVisibleIndex - 4);
+    const previewEnd =
+      targetVisibleIndex === -1
+        ? Math.min(orderedVisibleContext.length, 8)
+        : Math.min(orderedVisibleContext.length, targetVisibleIndex + 5);
+    const orderedVisiblePreview = orderedVisibleContext.slice(previewStart, previewEnd);
+    const missingNeighborIds = visibleTaskIdsOrdered.filter(
+      (id) => id !== existingTask.id && !neighborHeatMap.has(id)
+    );
+
     logHeatDebug(debugRequestId, "context", {
       userId,
       taskId,
+      requestId: debugRequestId,
       contextCurrentHeat: roundHeat(contextCurrentHeat),
       neighborIdCount: neighborIds.length,
       contextTaskCount: contextTasks.length,
       neighborHeatMin: contextHeatMin !== null ? roundHeat(contextHeatMin) : null,
       neighborHeatMax: contextHeatMax !== null ? roundHeat(contextHeatMax) : null,
+      targetVisibleIndex,
+      orderedVisibleContextCount: orderedVisibleContext.length,
+      orderedVisiblePreview,
+      orderedVisiblePreviewText: orderedVisiblePreview
+        .map((entry) => `${entry.role === "target" ? "[" : ""}${entry.id}:${entry.heat ?? "?"}${entry.role === "target" ? "]" : ""}`)
+        .join(","),
+      missingNeighborIds,
+      missingNeighborIdsText: missingNeighborIds.length ? missingNeighborIds.join(",") : null,
       contextTaskHeats: contextTasks.map((task, index) => ({
         id: task.id,
         heat: roundHeat(task.heat),
@@ -186,6 +221,7 @@ export async function POST(
     logHeatDebug(debugRequestId, "result", {
       userId,
       taskId,
+      requestId: debugRequestId,
       mutationTimestamp,
       storedAdjustment,
       decayedAdjustment,
@@ -198,6 +234,7 @@ export async function POST(
       adjustmentDelta: roundHeat(adjustmentDelta),
     });
     return NextResponse.json({
+      requestId: debugRequestId,
       task: updatedTask,
       heatDelta,
       adjustmentDelta,
@@ -211,6 +248,7 @@ export async function POST(
     logHeatDebug(debugRequestId, "error", {
       userId: lastKnownUserId,
       taskId: lastKnownTaskId,
+      requestId: debugRequestId,
       message: error instanceof Error ? error.message : "Unknown error",
     });
     console.error("Failed to apply heat:", error);

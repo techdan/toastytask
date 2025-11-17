@@ -62,6 +62,8 @@ export function TaskList({
 }: TaskListProps) {
 
   // Helper function to get nearby task IDs based on the actual on-screen order
+  const stringifyIds = (ids: number[]) => ids.join(",") || "(empty)";
+
   const getNearbyTaskIds = useCallback((taskId: number, mutationType: "heat" | "cool"): number[] => {
     const activeTasks = tasks.filter((t) => !t.completedAt);
     if (activeTasks.length === 0) {
@@ -75,11 +77,13 @@ export function TaskList({
     const targetIndex = activeTasks.findIndex((t) => t.id === taskId);
     if (targetIndex === -1) {
       const fallbackIds = activeTasks.map((task) => task.id);
+      const fallbackIds = activeTasks.map((task) => task.id);
       console.warn("[heat-context] target-missing", {
         mutationType,
         taskId,
         activeTaskCount: activeTasks.length,
         fallbackIds,
+        fallbackIdsText: stringifyIds(fallbackIds),
       });
       return fallbackIds;
     }
@@ -108,15 +112,24 @@ export function TaskList({
       windowEndExclusive: end,
       windowSize: nearbyTaskIds.length,
       previewBefore,
+      previewBeforeText: stringifyIds(previewBefore),
       previewAfter,
+      previewAfterText: stringifyIds(previewAfter),
       contextIds: nearbyTaskIds,
+      contextIdsText: stringifyIds(nearbyTaskIds),
       activeSample:
         activeTaskIds.length > 80
           ? {
               head: activeTaskIds.slice(0, 40),
+              headText: stringifyIds(activeTaskIds.slice(0, 40)),
               tail: activeTaskIds.slice(-40),
+              tailText: stringifyIds(activeTaskIds.slice(-40)),
             }
           : activeTaskIds,
+      activeSampleText:
+        activeTaskIds.length > 80
+          ? undefined
+          : stringifyIds(activeTaskIds),
     });
 
     return nearbyTaskIds;

@@ -32,6 +32,7 @@ interface TouchTaskResponse {
   boost: number;
   targetHeat: number;
   mutationTimestamp?: number;
+  requestId?: string;
 }
 
 interface CoolTaskResponse {
@@ -43,6 +44,7 @@ interface CoolTaskResponse {
   baselineHeat: number;
   targetHeat: number;
   mutationTimestamp?: number;
+  requestId?: string;
 }
 
 interface StarTaskResponse {
