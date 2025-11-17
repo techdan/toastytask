@@ -25,6 +25,25 @@ _2025-11-16 update:_ Added client-side instrumentation (`[heat-debug]` logs in `
 
 _2025-11-17 update:_ Pulled a snapshot of production data into a staging database and pointed the dev environment at it. All heat/cool operations behaved correctly in dev (context-aware deltas of ±1 relative to neighbors, correct resorting), while production still exhibited the incorrect ±5 jumps and mis-ordering. This confirms the bug is not data-driven; something about the production environment (build, runtime config, downstream services, or caching) is behaving differently even on the same dataset.
 
+_2025-11-17 telemetry update:_ Added richer client + server instrumentation to capture the full context every time a heat/cool mutation fires.
+
+**Client telemetry**
+- `components/tasks/task-list.tsx` logs `[heat-context] window` entries that now include comma-delimited snapshots (`contextIdsText`, `previewBeforeText`, `previewAfterText`, head/tail samples) so the exact payload can be copied out of DevTools without screenshotting.
+- `app/tasks/page.tsx` propagates the API `requestId` through `[heat-debug] runHeatMutation` / `runCoolMutation` and `reorderTaskListWithTargetHeat`. Each log now includes the server-provided ID plus ordered previews before/after reordering, making it possible to correlate the UI state with Vercel logs.
+
+**Server telemetry**
+- `app/api/tasks/[id]/heat/route.ts` and `/cool` emit `[heat-api-debug]` / `[cool-api-debug]` logs for each request. Every log line contains:
+  - `request`: raw `visibleTaskIds`, their comma-delimited string, and the index of the clicked ID within that array.
+  - `context`: the deduped neighbor set with recalculated heats, a preview of the ordered window centered on the clicked row, and any IDs that were in the payload but missing from the DB lookup.
+  - `result`: the computed boost/drop, baseline heat, adjustment deltas, and timestamps.
+  - `error`: requestId + user/task identifiers if the mutation throws.
+- The JSON response now includes `requestId`, so the browser logs and server telemetry share a stable key.
+
+**How to use the telemetry**
+1. Trigger heat/cool in production and capture the `[heat-context]` + `[heat-debug]` logs that show the `requestId`.
+2. In Vercel logs, search for the same `requestId` to see the request/context/result triplet. The new `orderedVisiblePreview` payload mirrors what the UI saw, so you can confirm whether the server is acting on the correct neighbors.
+3. Compare the server's `targetHeat` with client-side `reorderTaskListWithTargetHeat` logs. If both match but the row still moves incorrectly, focus on cache invalidation or stale data overwriting the optimistic order. If the server chose different neighbors (e.g., missing IDs appear in `missingNeighborIds`), inspect Supabase replication lag or API caching.
+
 ### Current hypotheses / next steps
 
 1. **Environment-specific code path:** Production (Vercel) may be serving an older lambda bundle or edge cache that never received the latest heat/cool API changes. Verify the deployed build ID, redeploy if necessary, and consider purging Vercel serverless cache.

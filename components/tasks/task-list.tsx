@@ -77,7 +77,6 @@ export function TaskList({
     const targetIndex = activeTasks.findIndex((t) => t.id === taskId);
     if (targetIndex === -1) {
       const fallbackIds = activeTasks.map((task) => task.id);
-      const fallbackIds = activeTasks.map((task) => task.id);
       console.warn("[heat-context] target-missing", {
         mutationType,
         taskId,
