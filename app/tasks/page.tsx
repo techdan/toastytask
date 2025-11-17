@@ -530,6 +530,7 @@ function TasksPageContent() {
   const [highlightedTask, setHighlightedTask] = useState<HighlightedTask>(null);
   const contextRef = useRef<{ projectId: number | null | "all"; sortMode: SortMode; sortDirection: SortDirection } | null>(null);
   const prevActiveCountRef = useRef(0); // Detect first non-empty load per context for deterministic seeding
+  const lastActiveIdsRef = useRef<number[]>([]);
 
   // Calculate fresh scoring data and split completed tasks (recent only) from actives
   const { activeTasks, completedTasks, enrichedTaskMap } = useMemo(() => {
@@ -585,6 +586,7 @@ function TasksPageContent() {
   );
 
   useEffect(() => {
+    const currentActiveIds = activeTasks.map((task) => task.id);
     const lastContext = contextRef.current;
     const contextChanged =
       !lastContext ||
@@ -605,10 +607,24 @@ function TasksPageContent() {
       setTaskOrder(sortedActiveIds);
       setIsOrderFresh(true);
       prevActiveCountRef.current = activeTasks.length;
+      lastActiveIdsRef.current = currentActiveIds;
       return;
     }
 
     prevActiveCountRef.current = activeTasks.length;
+
+    const previousActiveIds = lastActiveIdsRef.current;
+    const prevIdSet = new Set(previousActiveIds);
+    const currentIdSet = new Set(currentActiveIds);
+    const membershipChanged =
+      currentActiveIds.length !== previousActiveIds.length ||
+      currentActiveIds.some((id) => !prevIdSet.has(id)) ||
+      previousActiveIds.some((id) => !currentIdSet.has(id));
+
+    if (!membershipChanged) {
+      lastActiveIdsRef.current = currentActiveIds;
+      return;
+    }
 
     setTaskOrder((previousOrder) => {
       const activeIdSet = new Set(activeTasks.map((task) => task.id));
@@ -624,6 +640,7 @@ function TasksPageContent() {
 
       return [...newTaskIds, ...filteredOrder];
     });
+    lastActiveIdsRef.current = currentActiveIds;
   }, [activeTasks, selectedProjectId, sortMode, sortDirection, sortedActiveIds]);
 
   const orderedActiveTasks = useMemo(() => {
