@@ -6,7 +6,7 @@ import { TaskListHeader } from "./task-list-header";
 import { cn } from "@/lib/utils";
 import type { Task, SortMode, Project, TaskWithFreshValues, TaskDensity, SortDirection } from "@/types";
 
-type FreshMetricKey = Extract<keyof TaskWithFreshValues, "_freshHeat" | "_freshImportance">;
+const CONTEXT_WINDOW = 20;
 
 interface TaskListProps {
   tasks: TaskWithFreshValues[];
@@ -61,28 +61,22 @@ export function TaskList({
   recurringCompletionSignals,
 }: TaskListProps) {
 
-  // Helper function to get nearby task IDs for optimistic updates
-  // Performance optimization: only process ~20 nearby tasks instead of all tasks (10x improvement)
+  // Helper function to get nearby task IDs based on the actual on-screen order
   const getNearbyTaskIds = useCallback((taskId: number): number[] => {
-    const metricKey: FreshMetricKey = sortMode === "heat" ? "_freshHeat" : "_freshImportance";
-    const incompleteTasks = tasks.filter((t) => !t.completedAt);
-    const targetTask = incompleteTasks.find((t) => t.id === taskId);
-
-    if (!targetTask) {
-      return incompleteTasks.map((t) => t.id);
+    const activeTasks = tasks.filter((t) => !t.completedAt);
+    if (activeTasks.length === 0) {
+      return [];
     }
 
-    const targetValue = targetTask[metricKey] ?? 0;
+    const targetIndex = activeTasks.findIndex((t) => t.id === taskId);
+    if (targetIndex === -1) {
+      return activeTasks.map((task) => task.id);
+    }
 
-    return incompleteTasks
-      .map((task) => ({
-        id: task.id,
-        distance: Math.abs((task[metricKey] ?? 0) - targetValue),
-      }))
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, 21)
-      .map((task) => task.id);
-  }, [sortMode, tasks]);
+    const start = Math.max(0, targetIndex - CONTEXT_WINDOW);
+    const end = Math.min(activeTasks.length, targetIndex + CONTEXT_WINDOW + 1);
+    return activeTasks.slice(start, end).map((task) => task.id);
+  }, [tasks]);
 
   // Heat handler: increases heat adjustment to move task up
   const handleHeat = useCallback(
