@@ -66,7 +66,7 @@ export function TaskListHeader({
         >
           <div className="flex items-center justify-between">
             <span className="sr-only">Task utilities</span>
-            <div className="flex w-full items-center gap-0.5">
+            <div className="flex items-center gap-0.5">
               <span className="text-xs font-medium text-muted-foreground">Sort:</span>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -92,24 +92,22 @@ export function TaskListHeader({
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <div className="ml-auto pl-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn(
-                    "w-5 text-muted-foreground hover:text-foreground focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none",
-                    sortTriggerHeight
-                  )}
-                  onClick={onToggleSortDirection}
-                  title={`Toggle sort direction (${sortDirectionLabel})`}
-                >
-                  {sortDirection === "desc" ? (
-                    <ArrowDown className="h-3.5 w-3.5" />
-                  ) : (
-                    <ArrowUp className="h-3.5 w-3.5" />
-                  )}
-                </Button>
-              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "w-5 text-muted-foreground hover:text-foreground focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none",
+                  sortTriggerHeight
+                )}
+                onClick={onToggleSortDirection}
+                title={`Toggle sort direction (${sortDirectionLabel})`}
+              >
+                {sortDirection === "desc" ? (
+                  <ArrowDown className="h-3.5 w-3.5" />
+                ) : (
+                  <ArrowUp className="h-3.5 w-3.5" />
+                )}
+              </Button>
             </div>
           </div>
         </th>
