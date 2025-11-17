@@ -481,6 +481,59 @@
     inset 0 6px 18px rgba(56, 189, 248, 0.28);
 }
 
+.due-date-highlight {
+  position: relative;
+  display: inline-flex;
+  line-height: 1.2;
+  z-index: 0;
+}
+
+.due-date-highlight::after {
+  content: "";
+  position: absolute;
+  inset: -0.15rem -0.4rem;
+  border-radius: 0.5rem;
+  background-color: rgba(251, 146, 60, 0.16);
+  box-shadow:
+    inset 0 0 0 1px rgba(251, 146, 60, 0.35),
+    inset 0 0 14px rgba(251, 146, 60, 0.2);
+  z-index: -1;
+  pointer-events: none;
+}
+
+.dark .due-date-highlight::after {
+  background-color: rgba(251, 146, 60, 0.22);
+  box-shadow:
+    inset 0 0 0 1px rgba(251, 146, 60, 0.45),
+    inset 0 0 18px rgba(251, 146, 60, 0.32);
+}
+
+/* Recurring completion cue */
+.recurring-complete-row {
+  animation: recurring-complete-fade 0.9s ease;
+}
+
+@keyframes recurring-complete-fade {
+  0% {
+    opacity: 1;
+  }
+  20% {
+    opacity: 0.35;
+  }
+  55% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.recurring-complete-row .recurring-strike-target {
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: currentColor;
+}
+
 /* Logo styling with dynamic color scheme support */
 .logo-icon {
   display: inline-flex;

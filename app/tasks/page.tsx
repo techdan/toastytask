@@ -84,7 +84,7 @@ type PendingHeatAction = {
 
 type HighlightedTask = {
   id: number;
-  mode: "heat" | "cool";
+  mode: "heat" | "cool" | "due";
 } | null;
 
 const toMilliseconds = (value: Date | string | number | null | undefined) => {
@@ -253,6 +253,10 @@ function TasksPageContent() {
   const [lingeringCompletedIds, setLingeringCompletedIds] = useState<Set<number>>(() => new Set());
   // Track tasks that should appear active again before the server confirms uncompletion.
   const [optimisticActiveIds, setOptimisticActiveIds] = useState<Set<number>>(() => new Set());
+  // Broadcast a short strike-through + fade cue when recurring tasks advance on completion.
+  const [recurringCompletionSignals, setRecurringCompletionSignals] = useState<Map<number, number>>(
+    () => new Map()
+  );
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [searchInputValue, setSearchInputValue] = useState(searchQuery);
@@ -269,6 +273,7 @@ function TasksPageContent() {
   const [correctionsNeeded, setCorrectionsNeeded] = useState(new Map<number, boolean>());
   const pendingStarIntents = useRef(new Map<number, PendingStarIntent>());
   const pendingStarTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+  const recurringCompletionTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   const inflightStarRequests = useRef(new Map<number, boolean>());
 
   // Initialize collapsed state from localStorage after mount to avoid hydration issues
@@ -754,12 +759,42 @@ function TasksPageContent() {
     deleteTaskMutation.mutate(id);
   };
 
+  const triggerRecurringCompletionCue = useCallback((taskId: number) => {
+    setRecurringCompletionSignals((previous) => {
+      const next = new Map(previous);
+      next.set(taskId, Date.now());
+      return next;
+    });
+
+    const timers = recurringCompletionTimers.current;
+    const existingTimer = timers.get(taskId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    const timeoutId = setTimeout(() => {
+      setRecurringCompletionSignals((previous) => {
+        const next = new Map(previous);
+        next.delete(taskId);
+        return next;
+      });
+      timers.delete(taskId);
+    }, 2000);
+
+    timers.set(taskId, timeoutId);
+  }, []);
+
   const handleCompleteTask = async (id: number) => {
     const timestamp = Date.now();
     markOrderAsStale();
 
     const targetTask = taskById.get(id);
     const isRecurringTask = Boolean(targetTask?.repeatType && targetTask.repeatType !== "none");
+
+    if (isRecurringTask) {
+      triggerRecurringCompletionCue(id);
+      setHighlightedTask({ id, mode: "due" });
+    }
 
     // Record the intended state (recurring tasks stay active after completion)
     if (!isRecurringTask) {
@@ -866,11 +901,14 @@ function TasksPageContent() {
   useEffect(() => {
     const timers = pendingStarTimers.current;
     const intents = pendingStarIntents.current;
+    const recurringTimers = recurringCompletionTimers.current;
 
     return () => {
       timers.forEach((timeoutId) => clearTimeout(timeoutId));
       timers.clear();
       intents.clear();
+      recurringTimers.forEach((timeoutId) => clearTimeout(timeoutId));
+      recurringTimers.clear();
     };
   }, []);
 
@@ -1386,6 +1424,7 @@ function TasksPageContent() {
                   onCool={handleCoolRequest}
                   onTouch={handleTouchTask}
                   highlightedTask={highlightedTask}
+                  recurringCompletionSignals={recurringCompletionSignals}
                 />
               </>
             )}

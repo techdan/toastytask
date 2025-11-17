@@ -13,6 +13,11 @@ import { PRIMARY_TASKS_QUERY_KEY } from "./task-query-keys";
 import type { Task, NewTask } from "@/types";
 import type { HeatV3Breakdown } from "@/lib/scoring/heat-v3";
 import { applyStarLevelToTask, mergeTaskWithCachedNotes } from "./task-cache-helpers";
+import {
+  extractMutationTimestamp,
+  registerHeatAction,
+  shouldProcessHeatActionResponse,
+} from "./heat-action-tracker";
 
 interface TaskResponse {
   task: Task;
@@ -26,6 +31,7 @@ interface TouchTaskResponse {
   baselineHeat: number;
   boost: number;
   targetHeat: number;
+  mutationTimestamp?: number;
 }
 
 interface CoolTaskResponse {
@@ -36,6 +42,7 @@ interface CoolTaskResponse {
   drop: number;
   baselineHeat: number;
   targetHeat: number;
+  mutationTimestamp?: number;
 }
 
 interface StarTaskResponse {
@@ -757,12 +764,12 @@ export function useMarkTaskTouched() {
 // Hook: Heat task - Context-aware positioning (moves up 1 position)
 export function useTouchTask() {
   const queryClient = useQueryClient();
-  const latestMutationRef = useRef(new Map<number, number>());
 
   return useMutation({
     mutationFn: ({ taskId, visibleTaskIds }: { taskId: number; visibleTaskIds?: number[] }) =>
       heatTask(taskId, visibleTaskIds),
     onMutate: async ({ taskId, visibleTaskIds }) => {
+      const actionId = registerHeatAction(taskId);
       // Cancel outgoing refetches to avoid race conditions
       await queryClient.cancelQueries({ queryKey: PRIMARY_TASKS_QUERY_KEY, exact: true });
 
@@ -770,13 +777,13 @@ export function useTouchTask() {
       const previousTasks = queryClient.getQueryData<Task[]>(PRIMARY_TASKS_QUERY_KEY);
 
       if (!visibleTaskIds || visibleTaskIds.length === 0 || !previousTasks) {
-        return { previousTasks };
+        return { previousTasks, actionId, taskId };
       }
 
       const currentTask = previousTasks.find((task) => task.id === taskId);
 
       if (!currentTask) {
-        return { previousTasks };
+        return { previousTasks, actionId, taskId };
       }
 
       const now = new Date();
@@ -816,9 +823,6 @@ export function useTouchTask() {
         currentImportance
       );
 
-      const mutationTimestamp = now.getTime();
-      latestMutationRef.current.set(taskId, mutationTimestamp);
-
       const applyOptimisticUpdate = (oldTasks: Task[] | undefined) => {
         if (!oldTasks || !Array.isArray(oldTasks)) return oldTasks;
         return oldTasks.map((task) =>
@@ -835,31 +839,30 @@ export function useTouchTask() {
 
       queryClient.setQueryData<Task[]>(PRIMARY_TASKS_QUERY_KEY, applyOptimisticUpdate);
 
-      return { previousTasks, mutationTimestamp, taskId };
+      return { previousTasks, taskId, actionId };
     },
     onError: (error, variables, context) => {
       // Rollback on error
       if (context?.previousTasks) {
         queryClient.setQueryData(PRIMARY_TASKS_QUERY_KEY, context.previousTasks);
       }
-      if (variables?.taskId !== undefined && context?.mutationTimestamp !== undefined) {
-        const latestTimestamp = latestMutationRef.current.get(variables.taskId);
-        if (latestTimestamp === context.mutationTimestamp) {
-          latestMutationRef.current.delete(variables.taskId);
-        }
-      }
       toast.error("Failed to heat task", {
         description: error instanceof Error ? error.message : "Unknown error",
       });
     },
     onSuccess: (response, variables, context) => {
-      if (variables?.taskId !== undefined && context?.mutationTimestamp !== undefined) {
-        const latestTimestamp = latestMutationRef.current.get(variables.taskId);
-        if (latestTimestamp !== undefined && latestTimestamp !== context.mutationTimestamp) {
-          // A newer mutation exists; ignore stale response
+      if (variables?.taskId !== undefined) {
+        const serverMutationTimestamp =
+          response?.mutationTimestamp ??
+          extractMutationTimestamp(response?.task?.lastHeatTouchedAt);
+        const shouldApply = shouldProcessHeatActionResponse(
+          variables.taskId,
+          context?.actionId,
+          serverMutationTimestamp
+        );
+        if (!shouldApply) {
           return;
         }
-        latestMutationRef.current.delete(variables.taskId);
       }
 
       // Replace optimistic update with authoritative server response
@@ -880,12 +883,12 @@ export function useTouchTask() {
 // Hook: Cool task - Context-aware positioning (moves down 3 positions)
 export function useCoolTask() {
   const queryClient = useQueryClient();
-  const latestMutationRef = useRef(new Map<number, number>());
 
   return useMutation({
     mutationFn: ({ taskId, visibleTaskIds }: { taskId: number; visibleTaskIds?: number[] }) =>
       coolTask(taskId, visibleTaskIds),
     onMutate: async ({ taskId, visibleTaskIds }) => {
+      const actionId = registerHeatAction(taskId);
       // Cancel outgoing refetches to avoid race conditions
       await queryClient.cancelQueries({ queryKey: PRIMARY_TASKS_QUERY_KEY, exact: true });
 
@@ -893,13 +896,13 @@ export function useCoolTask() {
       const previousTasks = queryClient.getQueryData<Task[]>(PRIMARY_TASKS_QUERY_KEY);
 
       if (!visibleTaskIds || visibleTaskIds.length === 0 || !previousTasks) {
-        return { previousTasks };
+        return { previousTasks, taskId, actionId };
       }
 
       const currentTask = previousTasks.find((task) => task.id === taskId);
 
       if (!currentTask) {
-        return { previousTasks };
+        return { previousTasks, taskId, actionId };
       }
 
       const now = new Date();
@@ -939,9 +942,6 @@ export function useCoolTask() {
         currentImportance
       );
 
-      const mutationTimestamp = now.getTime();
-      latestMutationRef.current.set(taskId, mutationTimestamp);
-
       const applyOptimisticUpdate = (oldTasks: Task[] | undefined) => {
         if (!oldTasks || !Array.isArray(oldTasks)) return oldTasks;
         return oldTasks.map((task) =>
@@ -958,30 +958,30 @@ export function useCoolTask() {
 
       queryClient.setQueryData<Task[]>(PRIMARY_TASKS_QUERY_KEY, applyOptimisticUpdate);
 
-      return { previousTasks, mutationTimestamp, taskId };
+      return { previousTasks, taskId, actionId };
     },
     onError: (error, variables, context) => {
       // Rollback on error
       if (context?.previousTasks) {
         queryClient.setQueryData(PRIMARY_TASKS_QUERY_KEY, context.previousTasks);
       }
-      if (variables?.taskId !== undefined && context?.mutationTimestamp !== undefined) {
-        const latestTimestamp = latestMutationRef.current.get(variables.taskId);
-        if (latestTimestamp === context.mutationTimestamp) {
-          latestMutationRef.current.delete(variables.taskId);
-        }
-      }
       toast.error("Failed to cool task", {
         description: error instanceof Error ? error.message : "Unknown error",
       });
     },
     onSuccess: (response, variables, context) => {
-      if (variables?.taskId !== undefined && context?.mutationTimestamp !== undefined) {
-        const latestTimestamp = latestMutationRef.current.get(variables.taskId);
-        if (latestTimestamp !== undefined && latestTimestamp !== context.mutationTimestamp) {
+      if (variables?.taskId !== undefined) {
+        const serverMutationTimestamp =
+          response?.mutationTimestamp ??
+          extractMutationTimestamp(response?.task?.lastHeatTouchedAt);
+        const shouldApply = shouldProcessHeatActionResponse(
+          variables.taskId,
+          context?.actionId,
+          serverMutationTimestamp
+        );
+        if (!shouldApply) {
           return;
         }
-        latestMutationRef.current.delete(variables.taskId);
       }
 
       // Replace optimistic update with authoritative server response

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Star, Trash2, Flame, Snowflake } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -34,13 +34,30 @@ interface TaskRowProps {
   onHeat: (taskId: number) => void;
   onCool: (taskId: number) => void;
   onTouch: (taskId: number) => void;
-  highlightMode?: "heat" | "cool" | null;
+  highlightMode?: "heat" | "cool" | "due" | null;
+  recurringCompletionSignal?: number;
 }
 
-export function TaskRow({ task, projects, sortMode, density, onUpdate, onStar, onDelete, onComplete, onUncomplete, onHeat, onCool, onTouch, highlightMode }: TaskRowProps) {
+export function TaskRow({
+  task,
+  projects,
+  sortMode,
+  density,
+  onUpdate,
+  onStar,
+  onDelete,
+  onComplete,
+  onUncomplete,
+  onHeat,
+  onCool,
+  onTouch,
+  highlightMode,
+  recurringCompletionSignal,
+}: TaskRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(task.title);
   const [notesExpanded, setNotesExpanded] = useState(false);
+  const [showRecurringCompletionCue, setShowRecurringCompletionCue] = useState(false);
 
   const isCompleted = !!task.completedAt;
   const isNew = task.lastTouchedAt === null && task.lastHeatTouchedAt === null;
@@ -53,6 +70,24 @@ export function TaskRow({ task, projects, sortMode, density, onUpdate, onStar, o
       : highlightMode === "cool"
         ? "task-row-highlight-cool"
         : undefined;
+  const rowRecurringCueClass = showRecurringCompletionCue ? "recurring-complete-row" : undefined;
+  const strikeClass = showRecurringCompletionCue ? "recurring-strike-target" : undefined;
+  const dueHighlightClass = highlightMode === "due" ? "due-date-highlight" : undefined;
+
+  useEffect(() => {
+    if (!recurringCompletionSignal) {
+      return;
+    }
+    setShowRecurringCompletionCue(true);
+
+    const timeoutId = window.setTimeout(() => {
+      setShowRecurringCompletionCue(false);
+    }, 900);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [recurringCompletionSignal]);
 
   const handleTitleClick = () => {
     if (!isCompleted) {
@@ -159,6 +194,7 @@ export function TaskRow({ task, projects, sortMode, density, onUpdate, onStar, o
         className={cn(
           "group bg-card transition-colors hover:bg-accent/30",
           rowHighlightClass,
+          rowRecurringCueClass,
           isCompleted && "text-muted-foreground italic"
         )}
         onClick={handleRowClick}
@@ -258,7 +294,8 @@ export function TaskRow({ task, projects, sortMode, density, onUpdate, onStar, o
                   "w-full text-left text-sm hover:text-primary cursor-pointer transition-all duration-200",
                   !isCompleted && !isNew && priorityStyles[task.priority],
                   !isCompleted && isNew && "font-bold text-green-600 dark:text-green-400",
-                  isCompleted && "line-through"
+                  isCompleted && "line-through",
+                  strikeClass
                 )}
                 onClick={handleTitleClick}
                 disabled={isCompleted}
@@ -275,13 +312,24 @@ export function TaskRow({ task, projects, sortMode, density, onUpdate, onStar, o
             notesExpanded && "border-b-0"
           )}
         >
-          <div className={cn("min-w-[5.75rem]", isCompleted && "line-through") }>
-            <DueDateDisplay
-              dueAt={task.dueAt}
-              onDateChange={handleDateChange}
-              disabled={isCompleted}
-              isCompleted={isCompleted}
-            />
+          <div className={cn("min-w-[5.75rem]", isCompleted && "line-through", strikeClass)}>
+            {dueHighlightClass ? (
+              <span className="due-date-highlight">
+                <DueDateDisplay
+                  dueAt={task.dueAt}
+                  onDateChange={handleDateChange}
+                  disabled={isCompleted}
+                  isCompleted={isCompleted}
+                />
+              </span>
+            ) : (
+              <DueDateDisplay
+                dueAt={task.dueAt}
+                onDateChange={handleDateChange}
+                disabled={isCompleted}
+                isCompleted={isCompleted}
+              />
+            )}
           </div>
         </td>
         <td
@@ -291,7 +339,7 @@ export function TaskRow({ task, projects, sortMode, density, onUpdate, onStar, o
             notesExpanded && "border-b-0"
           )}
         >
-          <div className={cn("min-w-[5.25rem]", isCompleted && "line-through") }>
+          <div className={cn("min-w-[5.25rem]", isCompleted && "line-through", strikeClass)}>
             <PrioritySelect
               value={task.priority}
               onValueChange={handlePriorityChange}
@@ -307,7 +355,7 @@ export function TaskRow({ task, projects, sortMode, density, onUpdate, onStar, o
             notesExpanded && "border-b-0"
           )}
         >
-          <div className={cn("min-w-[5.5rem]", isCompleted && "line-through") }>
+          <div className={cn("min-w-[5.5rem]", isCompleted && "line-through", strikeClass)}>
             <TaskProjectSelect
               projects={projects}
               value={task.projectId ?? null}
@@ -323,7 +371,7 @@ export function TaskRow({ task, projects, sortMode, density, onUpdate, onStar, o
             notesExpanded && "border-b-0"
           )}
         >
-          <div className={cn("min-w-[6rem]", isCompleted && "line-through") }>
+          <div className={cn("min-w-[6rem]", isCompleted && "line-through", strikeClass)}>
             <RecurrenceSelect
               value={task.repeatType}
               onValueChange={handleRecurrenceChange}

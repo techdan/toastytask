@@ -31,8 +31,9 @@ interface TaskListProps {
   onTouch: (taskId: number) => void;
   highlightedTask?: {
     id: number;
-    mode: "heat" | "cool";
+    mode: "heat" | "cool" | "due";
   } | null;
+  recurringCompletionSignals: ReadonlyMap<number, number>;
 }
 
 export function TaskList({
@@ -57,6 +58,7 @@ export function TaskList({
   onCool,
   onTouch,
   highlightedTask,
+  recurringCompletionSignals,
 }: TaskListProps) {
 
   // Helper function to get nearby task IDs for optimistic updates
@@ -168,6 +170,7 @@ export function TaskList({
                 onCool={handleCool}
                 onTouch={handleTouch}
                 highlightMode={highlightMode}
+                recurringCompletionSignal={recurringCompletionSignals.get(task.id)}
               />
             </tbody>
           );

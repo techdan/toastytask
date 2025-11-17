@@ -60,6 +60,7 @@ export async function POST(
 
     // Apply asymmetric decay to get current effective adjustment
     const now = new Date();
+    const mutationTimestamp = now.getTime();
     const { newAdjustment: decayedAdjustment } = applyAsymmetricDecay(
       storedAdjustment,
       existingTask.lastHeatTouchedAt,
@@ -143,6 +144,7 @@ export async function POST(
       baselineHeat,
       boost: boostHeatDelta,
       targetHeat,
+      mutationTimestamp,
     });
   } catch (error) {
     console.error("Failed to apply heat:", error);
