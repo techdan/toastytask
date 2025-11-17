@@ -598,6 +598,13 @@ function TasksPageContent() {
     const shouldSeedFromSorted = contextChanged || (nowHasTasks && wasPreviouslyEmpty);
 
     if (shouldSeedFromSorted) {
+      console.debug("[heat-debug] taskOrderEffect:seed", {
+        reason: contextChanged ? "context-changed" : "initial-load",
+        projectId: selectedProjectId,
+        sortMode,
+        sortDirection,
+        activeCount: activeTasks.length,
+      });
       // Clear lingering completed tasks when context changes (project or sort mode)
       if (contextChanged) {
         setLingeringCompletedIds(new Set());
@@ -622,10 +629,19 @@ function TasksPageContent() {
       previousActiveIds.some((id) => !currentIdSet.has(id));
 
     if (!membershipChanged) {
+      console.debug("[heat-debug] taskOrderEffect:skip", {
+        reason: "membership-unchanged",
+        activeCount: activeTasks.length,
+      });
       lastActiveIdsRef.current = currentActiveIds;
       return;
     }
 
+    console.debug("[heat-debug] taskOrderEffect:membership-change", {
+      previousIds: previousActiveIds.slice(0, 10),
+      currentIds: currentActiveIds.slice(0, 10),
+      activeCount: activeTasks.length,
+    });
     setTaskOrder((previousOrder) => {
       const activeIdSet = new Set(activeTasks.map((task) => task.id));
       const filteredOrder = previousOrder.filter((id) => activeIdSet.has(id));
