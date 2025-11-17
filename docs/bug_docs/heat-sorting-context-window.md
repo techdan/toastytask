@@ -20,3 +20,5 @@ If we ever see this behavior again, consider:
 1. Increasing the window size or sending all active IDs for small accounts.
 2. Adding telemetry on the server to log when a clicked row’s immediate neighbors were missing from the payload.
 3. Re-evaluating `taskOrder` stability to ensure local ordering doesn’t drift excessively between refreshes.
+
+_2025-11-16 update:_ Added client-side instrumentation (`[heat-debug]` logs in `app/tasks/page.tsx`) to capture target heat values, visible context IDs, and before/after task order snapshots whenever heat/cool mutations run. Check the browser console in production to trace future anomalies without redeploying.
