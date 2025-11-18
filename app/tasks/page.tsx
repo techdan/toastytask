@@ -598,13 +598,6 @@ function TasksPageContent() {
     const shouldSeedFromSorted = contextChanged || (nowHasTasks && wasPreviouslyEmpty);
 
     if (shouldSeedFromSorted) {
-      console.debug("[heat-debug] taskOrderEffect:seed", {
-        reason: contextChanged ? "context-changed" : "initial-load",
-        projectId: selectedProjectId,
-        sortMode,
-        sortDirection,
-        activeCount: activeTasks.length,
-      });
       // Clear lingering completed tasks when context changes (project or sort mode)
       if (contextChanged) {
         setLingeringCompletedIds(new Set());
@@ -629,19 +622,10 @@ function TasksPageContent() {
       previousActiveIds.some((id) => !currentIdSet.has(id));
 
     if (!membershipChanged) {
-      console.debug("[heat-debug] taskOrderEffect:skip", {
-        reason: "membership-unchanged",
-        activeCount: activeTasks.length,
-      });
       lastActiveIdsRef.current = currentActiveIds;
       return;
     }
 
-    console.debug("[heat-debug] taskOrderEffect:membership-change", {
-      previousIds: previousActiveIds.slice(0, 10),
-      currentIds: currentActiveIds.slice(0, 10),
-      activeCount: activeTasks.length,
-    });
     setTaskOrder((previousOrder) => {
       const activeIdSet = new Set(activeTasks.map((task) => task.id));
       const filteredOrder = previousOrder.filter((id) => activeIdSet.has(id));
@@ -1108,7 +1092,7 @@ function TasksPageContent() {
   }, [taskOrder]);
 
   const reorderTaskListWithTargetHeat = useCallback(
-    (taskId: number, targetHeat: number, metadata?: { requestId?: string }) => {
+    (taskId: number, targetHeat: number) => {
       const now = new Date();
       const simulatedTasks = activeTasks.map((task) =>
         task.id === taskId
@@ -1121,19 +1105,6 @@ function TasksPageContent() {
           : task
       );
       const orderedIds = sortTasksByMode(simulatedTasks, sortMode, sortDirection).map((task) => task.id);
-      console.debug("[heat-debug] reorderTaskListWithTargetHeat", {
-        taskId,
-        targetHeat,
-        requestId: metadata?.requestId ?? null,
-        orderedIdsPreview: orderedIds.slice(0, 10),
-        orderedIdsPreviewText: orderedIds.slice(0, 10).join(","),
-        previousOrderPreview: taskOrderRef.current.slice(0, 10),
-        previousOrderPreviewText: taskOrderRef.current.slice(0, 10).join(","),
-        contextPreview: simulatedTasks.slice(0, 5).map((task) => ({
-          id: task.id,
-          heat: task._freshHeat,
-        })),
-      });
       flushSync(() => {
         setTaskOrder(orderedIds);
       });
@@ -1143,34 +1114,12 @@ function TasksPageContent() {
 
   const runHeatMutation = useCallback(
     async (taskId: number, visibleTaskIds: number[]) => {
-      console.debug("[heat-debug] runHeatMutation:start", {
-        taskId,
-        visibleTaskIdsCount: visibleTaskIds.length,
-        visibleTaskIdsPreview: visibleTaskIds.slice(0, 20),
-        isOrderFresh,
-      });
       try {
         const response = await touchTaskMutation.mutateAsync({ taskId, visibleTaskIds });
         setHighlightedTask({ id: taskId, mode: "heat" });
         if (typeof response?.targetHeat === "number") {
-          const requestId =
-            typeof response?.requestId === "string" ? response.requestId : undefined;
-          console.debug("[heat-debug] runHeatMutation:targetHeat", {
-            taskId,
-            requestId,
-            targetHeat: response.targetHeat,
-            heatDelta: response.heatDelta,
-            adjustmentDelta: response.adjustmentDelta,
-          });
-          reorderTaskListWithTargetHeat(taskId, response.targetHeat, { requestId });
+          reorderTaskListWithTargetHeat(taskId, response.targetHeat);
         } else {
-          console.warn("[heat-debug] runHeatMutation:noTargetHeat", {
-            taskId,
-            responseSummary: {
-              heatDelta: response?.heatDelta,
-              adjustmentDelta: response?.adjustmentDelta,
-            },
-          });
           flushSync(() => {
             setTaskOrder(sortedActiveIds);
           });
@@ -1179,39 +1128,17 @@ function TasksPageContent() {
         console.error("Failed to apply heat mutation:", error);
       }
     },
-    [reorderTaskListWithTargetHeat, setHighlightedTask, sortedActiveIds, touchTaskMutation, isOrderFresh]
+    [reorderTaskListWithTargetHeat, setHighlightedTask, sortedActiveIds, touchTaskMutation]
   );
 
   const runCoolMutation = useCallback(
     async (taskId: number, visibleTaskIds: number[]) => {
-      console.debug("[heat-debug] runCoolMutation:start", {
-        taskId,
-        visibleTaskIdsCount: visibleTaskIds.length,
-        visibleTaskIdsPreview: visibleTaskIds.slice(0, 20),
-        isOrderFresh,
-      });
       try {
         const response = await coolTaskMutation.mutateAsync({ taskId, visibleTaskIds });
         setHighlightedTask({ id: taskId, mode: "cool" });
         if (typeof response?.targetHeat === "number") {
-          const requestId =
-            typeof response?.requestId === "string" ? response.requestId : undefined;
-          console.debug("[heat-debug] runCoolMutation:targetHeat", {
-            taskId,
-            requestId,
-            targetHeat: response.targetHeat,
-            heatDelta: response.heatDelta,
-            adjustmentDelta: response.adjustmentDelta,
-          });
-          reorderTaskListWithTargetHeat(taskId, response.targetHeat, { requestId });
+          reorderTaskListWithTargetHeat(taskId, response.targetHeat);
         } else {
-          console.warn("[heat-debug] runCoolMutation:noTargetHeat", {
-            taskId,
-            responseSummary: {
-              heatDelta: response?.heatDelta,
-              adjustmentDelta: response?.adjustmentDelta,
-            },
-          });
           flushSync(() => {
             setTaskOrder(sortedActiveIds);
           });
@@ -1220,7 +1147,7 @@ function TasksPageContent() {
         console.error("Failed to apply cool mutation:", error);
       }
     },
-    [coolTaskMutation, reorderTaskListWithTargetHeat, setHighlightedTask, sortedActiveIds, isOrderFresh]
+    [coolTaskMutation, reorderTaskListWithTargetHeat, setHighlightedTask, sortedActiveIds]
   );
 
   const executePendingHeatAction = useCallback(

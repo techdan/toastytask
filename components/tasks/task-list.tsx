@@ -60,84 +60,27 @@ export function TaskList({
   highlightedTask,
   recurringCompletionSignals,
 }: TaskListProps) {
-
   // Helper function to get nearby task IDs based on the actual on-screen order
-  const stringifyIds = (ids: number[]) => ids.join(",") || "(empty)";
-
-  const getNearbyTaskIds = useCallback((taskId: number, mutationType: "heat" | "cool"): number[] => {
+  const getNearbyTaskIds = useCallback((taskId: number): number[] => {
     const activeTasks = tasks.filter((t) => !t.completedAt);
     if (activeTasks.length === 0) {
-      console.debug("[heat-context] empty-active-list", {
-        mutationType,
-        taskId,
-      });
       return [];
     }
 
     const targetIndex = activeTasks.findIndex((t) => t.id === taskId);
     if (targetIndex === -1) {
-      const fallbackIds = activeTasks.map((task) => task.id);
-      console.warn("[heat-context] target-missing", {
-        mutationType,
-        taskId,
-        activeTaskCount: activeTasks.length,
-        fallbackIds,
-        fallbackIdsText: stringifyIds(fallbackIds),
-      });
-      return fallbackIds;
+      return activeTasks.map((task) => task.id);
     }
 
     const start = Math.max(0, targetIndex - CONTEXT_WINDOW);
     const end = Math.min(activeTasks.length, targetIndex + CONTEXT_WINDOW + 1);
-    const windowTasks = activeTasks.slice(start, end);
-    const nearbyTaskIds = windowTasks.map((task) => task.id);
-
-    const previewBefore = activeTasks
-      .slice(Math.max(0, targetIndex - 3), targetIndex)
-      .map((task) => task.id);
-    const previewAfter = activeTasks
-      .slice(targetIndex + 1, Math.min(activeTasks.length, targetIndex + 4))
-      .map((task) => task.id);
-    const activeTaskIds = activeTasks.map((task) => task.id);
-    console.debug("[heat-context] window", {
-      mutationType,
-      taskId,
-      sortMode,
-      sortDirection,
-      showCompleted,
-      activeTaskCount: activeTasks.length,
-      targetIndex,
-      windowStart: start,
-      windowEndExclusive: end,
-      windowSize: nearbyTaskIds.length,
-      previewBefore,
-      previewBeforeText: stringifyIds(previewBefore),
-      previewAfter,
-      previewAfterText: stringifyIds(previewAfter),
-      contextIds: nearbyTaskIds,
-      contextIdsText: stringifyIds(nearbyTaskIds),
-      activeSample:
-        activeTaskIds.length > 80
-          ? {
-              head: activeTaskIds.slice(0, 40),
-              headText: stringifyIds(activeTaskIds.slice(0, 40)),
-              tail: activeTaskIds.slice(-40),
-              tailText: stringifyIds(activeTaskIds.slice(-40)),
-            }
-          : activeTaskIds,
-      activeSampleText:
-        activeTaskIds.length > 80
-          ? undefined
-          : stringifyIds(activeTaskIds),
-    });
-
-    return nearbyTaskIds;
-  }, [showCompleted, sortDirection, sortMode, tasks]);
+    return activeTasks.slice(start, end).map((task) => task.id);
+  }, [tasks]);
 
   // Heat handler: increases heat adjustment to move task up
   const handleHeat = useCallback(
     (taskId: number) => {
-      const nearbyTaskIds = getNearbyTaskIds(taskId, "heat");
+      const nearbyTaskIds = getNearbyTaskIds(taskId);
       onHeat(taskId, nearbyTaskIds);
     },
     [getNearbyTaskIds, onHeat]
@@ -146,7 +89,7 @@ export function TaskList({
   // Cool handler: decreases heat adjustment to move task down
   const handleCool = useCallback(
     (taskId: number) => {
-      const nearbyTaskIds = getNearbyTaskIds(taskId, "cool");
+      const nearbyTaskIds = getNearbyTaskIds(taskId);
       onCool(taskId, nearbyTaskIds);
     },
     [getNearbyTaskIds, onCool]

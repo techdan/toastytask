@@ -21,6 +21,13 @@ const priorityStyles: Record<Priority, string> = {
   top: "font-bold text-[#990000] dark:text-[#dd5555]",
 };
 
+const priorityHoverStyles: Record<Priority, string> = {
+  low: "hover:text-primary group-hover:text-primary",
+  medium: "hover:text-primary group-hover:text-primary",
+  high: "hover:text-[#4a6585] dark:hover:text-[#9cc0e2] group-hover:text-[#4a6585] dark:group-hover:text-[#9cc0e2]",
+  top: "hover:text-[#c20000] dark:hover:text-[#ff7777] group-hover:text-[#c20000] dark:group-hover:text-[#ff7777]",
+};
+
 interface TaskRowProps {
   task: TaskWithFreshValues;
   projects: Project[];
@@ -291,8 +298,9 @@ export function TaskRow({
             ) : (
               <button
                 className={cn(
-                  "w-full text-left text-sm hover:text-primary cursor-pointer transition-all duration-200",
+                  "w-full text-left text-sm cursor-pointer transition-all duration-200",
                   !isCompleted && !isNew && priorityStyles[task.priority],
+                  !isCompleted && !isNew && priorityHoverStyles[task.priority],
                   !isCompleted && isNew && "font-bold text-green-600 dark:text-green-400",
                   isCompleted && "line-through",
                   strikeClass
