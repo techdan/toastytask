@@ -112,9 +112,6 @@ export async function POST(
     // Filter out the current task from context
     const contextTasks = contextTasksDeduped.filter((task) => task.id !== existingTask.id);
 
-    // Log context for debugging
-    console.log(`[heat-context] taskId=${taskId}, receivedContextSize=${contextTasksDeduped.length}, contextTaskCount=${contextTasks.length}`);
-
     // Calculate context-aware boost (move up 1 position)
     const boostHeatDelta =
       increment !== undefined
@@ -123,9 +120,6 @@ export async function POST(
             { heat: contextCurrentHeat, id: existingTask.id },
             contextTasks
           );
-
-    // Log the calculated boost to verify context-aware calculation
-    console.log(`[heat-delta] taskId=${taskId}, currentHeat=${contextCurrentHeat.toFixed(1)}, boostDelta=${boostHeatDelta.toFixed(1)}, contextTaskCount=${contextTasks.length}`);
 
     const targetHeat = Math.min(
       Math.max(contextCurrentHeat + boostHeatDelta, HEAT_CONFIG.MIN_FINAL_SCORE),

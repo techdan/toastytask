@@ -116,21 +116,6 @@ export async function POST(
     // Filter out the current task from context
     const contextTasks = contextTasksDeduped.filter((task) => task.id !== existingTask.id);
 
-    // Log context for debugging
-    console.log(`[cool-context] taskId=${taskId}, receivedContextSize=${contextTasksDeduped.length}, contextTaskCount=${contextTasks.length}`);
-
-    // DIAGNOSTIC: Log client-provided heats for comparison
-    if (contextTasks.length > 0) {
-      const sortedHeats = contextTasks.map(t => t.heat).sort((a, b) => b - a);
-      const heatsNearCurrent = sortedHeats.filter(h => h >= contextCurrentHeat - 15 && h <= contextCurrentHeat + 5);
-      console.log(`[cool-heat-distribution] heatsNear${contextCurrentHeat.toFixed(0)} (±15): [${heatsNearCurrent.map(h => h.toFixed(1)).join(', ')}]`);
-
-      const allTaskHeats = contextTasks
-        .sort((a, b) => b.heat - a.heat)
-        .map(t => `${t.id}:${Math.round(t.heat)}`);
-      console.log(`[cool-all-task-heats] totalTasks=${contextTasks.length}, allHeats: ${allTaskHeats.join(', ')}`);
-    }
-
     // Calculate context-aware drop (move down 3 positions)
     const dropHeatDelta =
       decrement !== undefined
@@ -139,9 +124,6 @@ export async function POST(
             { heat: contextCurrentHeat, id: existingTask.id },
             contextTasks
           );
-
-    // Log the calculated drop to verify context-aware calculation
-    console.log(`[cool-delta] taskId=${taskId}, currentHeat=${contextCurrentHeat.toFixed(1)}, dropDelta=${dropHeatDelta.toFixed(1)}, contextTaskCount=${contextTasks.length}`);
 
     const targetHeat = Math.min(
       Math.max(contextCurrentHeat + dropHeatDelta, HEAT_CONFIG.MIN_FINAL_SCORE),
