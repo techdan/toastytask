@@ -59,14 +59,10 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
   const queryClient = useQueryClient();
   const invalidatedTasksRef = useRef<Set<number>>(new Set());
 
-  // Use pre-calculated values from parent for consistency
-  const importance = task._freshImportance;
-
-  // Calculate breakdown fresh on every render (no useMemo)
-  // This ensures we always show the correct tooltip values
+  // Calculate everything fresh from task properties
+  // This ensures we're never showing stale values, even during optimistic updates
+  const importance = calculateImportanceV1(task);
   const breakdown = calculateHeatWithBreakdown(task, undefined, importance);
-
-  // Calculate importance factors fresh on every render (no useMemo)
   const importanceFactors = calculateImportanceV1WithFactors(task);
 
   // Check if heat is stale and trigger refresh if needed
@@ -74,8 +70,8 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
     if (mode !== "heat") return;
 
     const storedHeat = task.heat || 0;
-    // Use _freshHeat from parent (same value used for sorting)
-    const freshHeat = task._freshHeat ?? 0;
+    // Use our freshly calculated heat (from breakdown)
+    const freshHeat = breakdown.totalHeat;
     const heatDiff = Math.abs(freshHeat - storedHeat);
     const isStale = isHeatStale(task.heatCalculatedAt);
 
@@ -93,7 +89,7 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
       // Heat is fresh - clear the invalidation flag
       invalidatedTasksRef.current.delete(task.id);
     }
-  }, [task.id, task.heat, task.heatCalculatedAt, task._freshHeat, mode, queryClient]);
+  }, [task.id, task.heat, task.heatCalculatedAt, breakdown.totalHeat, mode, queryClient]);
 
   if (mode === "importance") {
     // Importance Mode: Detailed breakdown tooltip
@@ -153,8 +149,8 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
 
   // Heat Mode: Display heat as 0-145 points with breakdown tooltip
   // Heat v4: Display raw point value instead of percentage
-  // IMPORTANT: Use _freshHeat to match sorting value (calculated in parent)
-  const heat = task._freshHeat ?? 0;
+  // IMPORTANT: Calculate fresh from task properties to avoid stale values during optimistic updates
+  const heat = breakdown.totalHeat;
   const heatDisplay = Math.round(heat); // Display as integer (0-145)
   const stageLabel = getHeatLabelFromConfig(heat);
 
