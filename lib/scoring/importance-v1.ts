@@ -110,9 +110,12 @@ function getDueWeight(dueAt: Date | number | string | null | undefined, now: Dat
     return IMPORTANCE_CONFIG.DUE_WEIGHTS.none;
   }
 
-  // Reset hours for date-only comparison
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const dueStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+  // Reset hours for date-only comparison (USE UTC to avoid timezone issues)
+  // CRITICAL: Use UTC methods to ensure client and server calculate same importance
+  // regardless of timezone. Without this, server (UTC) and client (local TZ) get
+  // different diffDays for the same calendar dates, causing 7-8 point heat mismatches.
+  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const dueStart = new Date(Date.UTC(dueDate.getUTCFullYear(), dueDate.getUTCMonth(), dueDate.getUTCDate()));
 
   const diffMs = dueStart.getTime() - todayStart.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
