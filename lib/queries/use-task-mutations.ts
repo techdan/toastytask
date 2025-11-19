@@ -920,6 +920,16 @@ export function useCoolTask() {
           return { id: task.id, heat };
         });
 
+      // DIAGNOSTIC: Log client-calculated heat values for specific tasks to compare with server
+      const specificTaskIds = [67, 191, 59, 33, 88, taskId];
+      const specificTasks = contextTasks
+        .filter(t => specificTaskIds.includes(t.id))
+        .sort((a, b) => b.heat - a.heat);
+      if (specificTasks.length > 0) {
+        const details = specificTasks.map(t => `${t.id}:${t.heat.toFixed(1)}`).join(', ');
+        console.log(`[cool-client-heats] currentTask=${taskId}:${currentHeat.toFixed(1)}, contextTasks: ${details}`);
+      }
+
       const dropDelta = calculateCoolDrop(
         { heat: currentHeat, id: currentTask.id },
         contextTasks
