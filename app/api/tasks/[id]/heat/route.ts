@@ -78,12 +78,22 @@ export async function POST(
       now
     );
 
-    // Build context from nearby task IDs (performance optimization: ~20 tasks instead of all)
+    // Build context from all active task IDs (client now sends all active tasks, not just ±20 window)
+    // This fixes production bug where rapid clicks sent stale context due to React render cycle delays
     const neighborIds = visibleTaskIdsDeduped.filter((id) => id !== existingTask.id);
+
+    // Log context for debugging production issues
+    console.log(`[heat-context] taskId=${taskId}, receivedContextSize=${visibleTaskIdsDeduped.length}, neighborCount=${neighborIds.length}`);
 
     let contextTasks: Array<{id: number; heat: number}> = [];
     if (neighborIds.length > 0) {
       const neighborRecords = await taskRepository.findManyByIds(neighborIds, userId);
+
+      // Verify we got all the neighbors we expected
+      if (neighborRecords.length !== neighborIds.length) {
+        console.warn(`[heat-context-mismatch] Expected ${neighborIds.length} neighbors but got ${neighborRecords.length}`);
+      }
+
       contextTasks = neighborRecords.map((neighbor) => {
         // Recalculate importanceV1 fresh (don't trust DB value)
         // importanceV1 is time-dependent and can become stale in the database
@@ -101,6 +111,9 @@ export async function POST(
             { heat: contextCurrentHeat, id: existingTask.id },
             contextTasks
           );
+
+    // Log the calculated boost to verify context-aware calculation
+    console.log(`[heat-delta] taskId=${taskId}, currentHeat=${contextCurrentHeat.toFixed(1)}, boostDelta=${boostHeatDelta.toFixed(1)}, contextTaskCount=${contextTasks.length}`);
 
     const targetHeat = Math.min(
       Math.max(contextCurrentHeat + boostHeatDelta, HEAT_CONFIG.MIN_FINAL_SCORE),

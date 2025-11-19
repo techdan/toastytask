@@ -6,8 +6,6 @@ import { TaskListHeader } from "./task-list-header";
 import { cn } from "@/lib/utils";
 import type { Task, SortMode, Project, TaskWithFreshValues, TaskDensity, SortDirection } from "@/types";
 
-const CONTEXT_WINDOW = 20;
-
 interface TaskListProps {
   tasks: TaskWithFreshValues[];
   projects: Project[];
@@ -60,39 +58,32 @@ export function TaskList({
   highlightedTask,
   recurringCompletionSignals,
 }: TaskListProps) {
-  // Helper function to get nearby task IDs based on the actual on-screen order
-  const getNearbyTaskIds = useCallback((taskId: number): number[] => {
+  // Helper function to get all active task IDs in display order
+  // CRITICAL: Passing ALL active tasks eliminates dependency on client-side ordering being correct.
+  // The server recalculates fresh heat for all tasks and determines context-aware deltas.
+  // This fixes production bug where rapid heat/cool clicks sent stale context due to
+  // React render cycle delays between TanStack Query cache updates and useMemo recalculation.
+  const getAllActiveTaskIds = useCallback((): number[] => {
     const activeTasks = tasks.filter((t) => !t.completedAt);
-    if (activeTasks.length === 0) {
-      return [];
-    }
-
-    const targetIndex = activeTasks.findIndex((t) => t.id === taskId);
-    if (targetIndex === -1) {
-      return activeTasks.map((task) => task.id);
-    }
-
-    const start = Math.max(0, targetIndex - CONTEXT_WINDOW);
-    const end = Math.min(activeTasks.length, targetIndex + CONTEXT_WINDOW + 1);
-    return activeTasks.slice(start, end).map((task) => task.id);
+    return activeTasks.map((task) => task.id);
   }, [tasks]);
 
   // Heat handler: increases heat adjustment to move task up
   const handleHeat = useCallback(
     (taskId: number) => {
-      const nearbyTaskIds = getNearbyTaskIds(taskId);
-      onHeat(taskId, nearbyTaskIds);
+      const allActiveTaskIds = getAllActiveTaskIds();
+      onHeat(taskId, allActiveTaskIds);
     },
-    [getNearbyTaskIds, onHeat]
+    [getAllActiveTaskIds, onHeat]
   );
 
   // Cool handler: decreases heat adjustment to move task down
   const handleCool = useCallback(
     (taskId: number) => {
-      const nearbyTaskIds = getNearbyTaskIds(taskId);
-      onCool(taskId, nearbyTaskIds);
+      const allActiveTaskIds = getAllActiveTaskIds();
+      onCool(taskId, allActiveTaskIds);
     },
-    [getNearbyTaskIds, onCool]
+    [getAllActiveTaskIds, onCool]
   );
 
   const handleTouch = useCallback(
