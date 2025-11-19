@@ -167,6 +167,15 @@ const compareTasks = (
     if (sortValueB !== sortValue) {
       return sortValueB - sortValue;
     }
+
+    // Tie-breaker for equal heat: more recently heated tasks sort first
+    if (sortMode === "heat") {
+      const aHeatTime = a.lastHeatTouchedAt ? toMilliseconds(a.lastHeatTouchedAt) : 0;
+      const bHeatTime = b.lastHeatTouchedAt ? toMilliseconds(b.lastHeatTouchedAt) : 0;
+      if (bHeatTime !== aHeatTime) {
+        return bHeatTime - aHeatTime; // More recent first
+      }
+    }
   }
 
   if (a.dueAt && b.dueAt) {

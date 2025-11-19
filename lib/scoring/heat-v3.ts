@@ -434,16 +434,16 @@ export function calculateHeatBoost(
     HEAT_CONFIG.MAX_FINAL_SCORE
   );
 
-  // Include tasks at same heat level (ties) OR above
-  const tasksAboveOrEqual = tasks
-    .filter((t) => t.heat >= currentTask.heat)
+  // Include tasks ABOVE current heat level (skip tasks at same level)
+  const tasksAbove = tasks
+    .filter((t) => t.heat > currentTask.heat)
     .sort((a, b) => a.heat - b.heat); // nearest first
 
   let contextTarget: number;
-  if (tasksAboveOrEqual.length > 0) {
-    // Found tasks at same level or above - move just above the nearest one
+  if (tasksAbove.length > 0) {
+    // Found tasks above - move just above the nearest one
     contextTarget = clamp(
-      tasksAboveOrEqual[0].heat + 1,
+      tasksAbove[0].heat + 1,
       HEAT_CONFIG.MIN_FINAL_SCORE,
       HEAT_CONFIG.MAX_FINAL_SCORE
     );
