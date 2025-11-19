@@ -105,6 +105,11 @@ export async function POST(
         const freshHeat = calculateHeat({ ...neighbor, importanceV1: freshImportance }, now);
         return { id: neighbor.id, heat: freshHeat };
       });
+
+      // DIAGNOSTIC: Log heat distribution to identify calculation mismatches
+      const sortedHeats = contextTasks.map(t => t.heat).sort((a, b) => b - a);
+      const heatsNearCurrent = sortedHeats.filter(h => h >= contextCurrentHeat - 15 && h <= contextCurrentHeat + 5);
+      console.log(`[cool-heat-distribution] heatsNear${contextCurrentHeat.toFixed(0)} (±15): [${heatsNearCurrent.map(h => h.toFixed(1)).join(', ')}]`);
     }
 
     // Calculate context-aware drop (move down 3 positions)

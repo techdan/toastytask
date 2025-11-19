@@ -527,11 +527,15 @@ export function calculateCoolDrop(
     console.log(`[cool-calc] using minTarget=${contextTarget.toFixed(1)} (no tasks in range)`);
   }
 
-  // Apply cap: move to the GREATER of (context target) or (current - 10)
-  const targetHeat = Math.max(minTarget, contextTarget);
+  // CRITICAL FIX: Don't apply hard cap when we have valid context
+  // The whole point of context-aware positioning is to position relative to nearby tasks,
+  // not to enforce arbitrary caps. The cap should only be a fallback when NO context exists.
+  // This fixes the bug where dropping 3 positions lands us at heat X, but the cap forces
+  // us to a different heat value, defeating context-aware positioning.
+  const targetHeat = tasksInRange.length > 0 ? contextTarget : minTarget;
   const drop = targetHeat - currentTask.heat;
 
-  console.log(`[cool-calc] finalTargetHeat=${targetHeat.toFixed(1)}, drop=${drop.toFixed(1)}`);
+  console.log(`[cool-calc] finalTargetHeat=${targetHeat.toFixed(1)}, drop=${drop.toFixed(1)}, capApplied=${tasksInRange.length === 0}`);
 
   return drop;
 }
