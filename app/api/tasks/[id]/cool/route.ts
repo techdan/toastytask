@@ -110,6 +110,20 @@ export async function POST(
       const sortedHeats = contextTasks.map(t => t.heat).sort((a, b) => b - a);
       const heatsNearCurrent = sortedHeats.filter(h => h >= contextCurrentHeat - 15 && h <= contextCurrentHeat + 5);
       console.log(`[cool-heat-distribution] heatsNear${contextCurrentHeat.toFixed(0)} (±15): [${heatsNearCurrent.map(h => h.toFixed(1)).join(', ')}]`);
+
+      // DIAGNOSTIC: Count duplicates to identify if multiple tasks have same heat
+      const heatCounts = new Map<number, number>();
+      contextTasks.forEach(t => {
+        const rounded = Math.round(t.heat);
+        heatCounts.set(rounded, (heatCounts.get(rounded) || 0) + 1);
+      });
+      const duplicates = Array.from(heatCounts.entries())
+        .filter(([, count]) => count > 1)
+        .sort(([a], [b]) => b - a)
+        .slice(0, 5);
+      if (duplicates.length > 0) {
+        console.log(`[cool-heat-duplicates] tasksWithSameHeat: ${duplicates.map(([heat, count]) => `${heat}(${count}x)`).join(', ')}`);
+      }
     }
 
     // Calculate context-aware drop (move down 3 positions)
