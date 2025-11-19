@@ -492,6 +492,22 @@ export function calculateCoolDrop(
   // This ensures we don't skip over nearby tasks when trying to move 3 positions
   const tasksInRange = tasksBelowOrEqual.filter((t) => t.heat >= minTarget);
 
+  // DIAGNOSTIC LOGGING: Track why context isn't being used
+  console.log(`[cool-calc] taskId=${currentTask.id}, currentHeat=${currentTask.heat.toFixed(1)}, minTarget=${minTarget.toFixed(1)}`);
+  console.log(`[cool-calc] totalContextTasks=${tasks.length}, tasksBelowOrEqual=${tasksBelowOrEqual.length}, tasksInRange=${tasksInRange.length}`);
+
+  // Log sample of nearby heat values for debugging
+  if (tasksBelowOrEqual.length > 0) {
+    const sampleBelow = tasksBelowOrEqual.slice(0, 5).map(t => t.heat.toFixed(1)).join(', ');
+    console.log(`[cool-calc] sampleTasksBelow (top 5): [${sampleBelow}]`);
+  }
+  if (tasksInRange.length > 0) {
+    const sampleInRange = tasksInRange.slice(0, 5).map(t => t.heat.toFixed(1)).join(', ');
+    console.log(`[cool-calc] sampleTasksInRange (top 5): [${sampleInRange}]`);
+  } else {
+    console.log(`[cool-calc] NO TASKS IN RANGE - falling back to max drop cap`);
+  }
+
   let contextTarget: number;
   if (tasksInRange.length > 0) {
     // Move down up to 3 positions, but only from tasks within range
@@ -504,14 +520,18 @@ export function calculateCoolDrop(
       HEAT_CONFIG.MIN_FINAL_SCORE,
       HEAT_CONFIG.MAX_FINAL_SCORE
     );
+    console.log(`[cool-calc] targetIndex=${targetIndex}, contextTarget=${contextTarget.toFixed(1)}`);
   } else {
     // No tasks in range - use max drop
     contextTarget = minTarget;
+    console.log(`[cool-calc] using minTarget=${contextTarget.toFixed(1)} (no tasks in range)`);
   }
 
   // Apply cap: move to the GREATER of (context target) or (current - 10)
   const targetHeat = Math.max(minTarget, contextTarget);
   const drop = targetHeat - currentTask.heat;
+
+  console.log(`[cool-calc] finalTargetHeat=${targetHeat.toFixed(1)}, drop=${drop.toFixed(1)}`);
 
   return drop;
 }
