@@ -111,6 +111,17 @@ export async function POST(
       const heatsNearCurrent = sortedHeats.filter(h => h >= contextCurrentHeat - 15 && h <= contextCurrentHeat + 5);
       console.log(`[cool-heat-distribution] heatsNear${contextCurrentHeat.toFixed(0)} (±15): [${heatsNearCurrent.map(h => h.toFixed(1)).join(', ')}]`);
 
+      // DIAGNOSTIC: Log task IDs and heat values for tasks near the current heat
+      // This allows direct comparison with client-side calculations
+      const tasksNearCurrent = contextTasks
+        .filter(t => t.heat >= contextCurrentHeat - 15 && t.heat <= contextCurrentHeat + 5)
+        .sort((a, b) => b.heat - a.heat)
+        .slice(0, 10);
+      if (tasksNearCurrent.length > 0) {
+        const taskDetails = tasksNearCurrent.map(t => `${t.id}:${t.heat.toFixed(1)}`).join(', ');
+        console.log(`[cool-task-heats] top10TasksNear${contextCurrentHeat.toFixed(0)}: ${taskDetails}`);
+      }
+
       // DIAGNOSTIC: Count duplicates to identify if multiple tasks have same heat
       const heatCounts = new Map<number, number>();
       contextTasks.forEach(t => {
