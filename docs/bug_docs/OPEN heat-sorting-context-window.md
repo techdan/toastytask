@@ -242,3 +242,299 @@ OR if no tasks in range:
 2. **Capture ALL logs** - Copy the full sequence of `[cool-*]` logs from Vercel
 3. **Share the diagnostic output** - This will definitively show which scenario is occurring
 4. **Implement the fix** based on the scenario identified
+
+---
+
+## 2025-11-18 Update: Root Cause Identified - Timezone Mismatch in Heat Calculations
+
+### Executive Summary
+After extensive diagnostic logging and testing, we've identified the root cause: **client and server calculate different heat values for the same tasks due to timezone differences in due date calculations**. The server (Vercel, running in UTC) and client (user's local timezone) interpret due dates differently, causing 7-8 point heat discrepancies. This creates sparse task distribution on the server, making context-aware positioning fail.
+
+### Investigation Timeline
+
+#### Step 1: Cap Removal Fix (SUCCESSFUL ✅)
+**Problem:** Even when valid context tasks were found, `calculateCoolDrop` was enforcing the -10 cap via `Math.max(minTarget, contextTarget)`.
+
+**Evidence from logs:**
+```
+[cool-calc] contextTarget=42.0
+[cool-calc] finalTargetHeat=43.0, drop=-10.0
+```
+The algorithm calculated `contextTarget=42.0` but then capped it to 43.0 (current 53 - max drop 10).
+
+**Fix Applied:** Changed line 535 in `lib/scoring/heat-v3.ts`:
+```typescript
+// BEFORE (line 531):
+const targetHeat = Math.max(minTarget, contextTarget);
+
+// AFTER (line 535):
+const targetHeat = tasksInRange.length > 0 ? contextTarget : minTarget;
+const drop = targetHeat - currentTask.heat;
+
+console.log(`[cool-calc] finalTargetHeat=${targetHeat.toFixed(1)}, drop=${drop.toFixed(1)}, capApplied=${tasksInRange.length === 0}`);
+```
+
+**Result:** ✅ This fix is correct and has been deployed. When `tasksInRange.length > 0`, we now use `contextTarget` without enforcing the cap.
+
+**Status:** DEPLOYED AND WORKING
+
+#### Step 2: Heat Distribution Analysis (REVEALED REAL ISSUE)
+After the cap fix, testing revealed the issue persisted. Added logging to compare client vs server heat calculations.
+
+**Server logs for specific tasks:**
+```
+[cool-specific-tasks] 88:60.0, 33:59.0, 59:59.0, 67:52.0, 191:48.0
+[cool-calc] tasksInRange=3
+```
+
+**Client logs for same tasks:**
+```
+[cool-client-heats] 88:53.0, 59:52.0, 33:52.0, 67:44.0, 191:48.0
+```
+
+**Key Findings:**
+- **Most tasks:** 7-8 point difference (88: 60 vs 53, 59: 59 vs 52, 33: 59 vs 52, 67: 52 vs 44)
+- **Task 191:** MATCHED EXACTLY at 48.0 (likely has no due date)
+- **Impact:** Server sees only 3 tasks in range [43-53], client sees 6+ tasks in same range
+
+#### Step 3: Timezone Hypothesis
+The fact that task 191 (likely no due date) matched perfectly while tasks with due dates differed by 7-8 points suggested the issue was in due date calculations.
+
+**Root Cause Identified:** `lib/scoring/importance-v1.ts` lines 114-118:
+```typescript
+// PROBLEM CODE - uses LOCAL timezone:
+const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+const dueStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+
+const diffMs = dueStart.getTime() - todayStart.getTime();
+const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+```
+
+**Why this causes the issue:**
+- `new Date(year, month, date)` creates a date in the **LOCAL timezone**
+- Server runs in UTC, client runs in user's local timezone (e.g., PST)
+- For a task due "2025-11-19 00:00:00 PST":
+  - Client (PST): Creates `2025-11-19 00:00:00 PST` → 1 day from now
+  - Server (UTC): Creates `2025-11-19 00:00:00 UTC` → Already passed (it's currently 3 AM UTC)
+- This causes server to calculate higher urgency → higher importance → higher heat
+
+#### Step 4: UTC Fix Attempt (FAILED ❌ - REVERTED)
+**Attempted Fix:** Changed `importance-v1.ts` to use UTC methods:
+```typescript
+const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+const dueStart = new Date(Date.UTC(dueDate.getUTCFullYear(), dueDate.getUTCMonth(), dueDate.getUTCDate()));
+```
+
+**Result:** ❌ **MADE PROBLEM WORSE**
+
+**Client logs after UTC fix:**
+```
+[cool-client-heats] currentTask=106:53.0, contextTasks: 88:60.0, 59:59.0, 33:59.0, 67:52.0, 191:48.0
+```
+
+Now BOTH client and server calculated the same (incorrect) higher values. The sparse distribution problem now existed on both sides.
+
+**Why it failed:**
+- Simply forcing everything to UTC changes the MEANING of due dates
+- Example: User sets task due "November 19" at 9 PM PST
+  - Stored as `2025-11-19 00:00:00` (user's intention: due at midnight their time)
+  - UTC interpretation: `2025-11-19 00:00:00 UTC` = November 18, 4 PM PST (already passed!)
+  - This makes tasks appear due sooner than user intended
+
+**Revert:** Committed via `git revert HEAD` - UTC fix has been removed from codebase.
+
+### Current State
+
+#### What's Fixed ✅
+1. **Cap removal in `heat-v3.ts`** - Context-aware positioning now works correctly when context exists
+2. **Comprehensive diagnostic logging** - Can now see exact heat calculations on both client and server
+
+#### What's Broken ❌
+1. **Timezone handling in `importance-v1.ts`** - Due date calculations use local timezone, causing client/server mismatch
+2. **Heat distribution mismatch** - Server sees sparse distribution, client sees dense distribution
+3. **Context-aware positioning** - Fails because server doesn't see enough tasks in range
+
+#### Evidence Summary
+| Task ID | Client Heat | Server Heat | Difference | Has Due Date |
+|---------|-------------|-------------|------------|--------------|
+| 88      | 53.0        | 60.0        | +7.0       | Yes (likely) |
+| 59      | 52.0        | 59.0        | +7.0       | Yes          |
+| 33      | 52.0        | 59.0        | +7.0       | Yes          |
+| 67      | 44.0        | 52.0        | +8.0       | Yes          |
+| 191     | 48.0        | 48.0        | **0.0**    | No (likely)  |
+
+### Required Solution: Proper Timezone Handling Throughout System
+
+The fix is NOT to simply force everything to UTC. Instead, we need to **properly handle local vs UTC throughout the system**.
+
+#### Options to Consider:
+
+**Option 1: Store timezone-aware due dates**
+- Store user's timezone with due dates
+- Calculate `diffDays` in user's timezone, not server's
+- Requires schema change and timezone data
+
+**Option 2: Store due dates as "user-local midnight" timestamps**
+- When user sets "due November 19", store as timestamp representing midnight in THEIR timezone
+- Server converts to user's timezone before calculating `diffDays`
+- Requires knowing user's timezone
+
+**Option 3: Normalize all calculations to UTC but preserve user intent**
+- Store due dates in UTC but include timezone offset
+- Calculate "days until due" in user's timezone
+- More complex but semantically correct
+
+**Option 4: Client sends heat values (simpler but less secure)**
+- Client calculates heat using correct local timezone
+- Server uses client-provided heat for context
+- Server still calculates authoritative heat for storage
+- Risk: Client could manipulate heat values
+
+### Files Modified During Investigation
+
+1. **`lib/scoring/heat-v3.ts`** ✅ KEEP
+   - Lines 495-538: Added diagnostic logging to `calculateCoolDrop`
+   - Line 535: **CRITICAL FIX** - Removed hard cap when context exists
+   - Status: Deployed and working
+
+2. **`app/api/tasks/[id]/cool/route.ts`** ✅ KEEP
+   - Lines 109-143: Added heat distribution logging
+   - Logs all task heats, specific tasks, duplicates
+   - Status: Deployed and working
+
+3. **`lib/queries/use-task-mutations.ts`** ✅ KEEP
+   - Lines 923-931: Added client-side heat logging
+   - Status: Deployed and working
+
+4. **`lib/scoring/importance-v1.ts`** ⚠️ PROBLEM IDENTIFIED
+   - Lines 114-118: Uses local timezone for due date calculations
+   - Status: NOT FIXED - needs proper timezone handling
+
+### Next Steps
+
+1. **Decide on timezone strategy** - Choose from options above
+2. **Implement proper timezone handling** - In `importance-v1.ts` and anywhere else due dates are used
+3. **Test in production** - Verify client and server calculate identical heat values
+4. **Monitor diagnostic logs** - Confirm `tasksInRange` count increases and context-aware positioning works
+5. **Remove diagnostic logging** - Once confirmed working, clean up verbose logs
+
+### How to Verify Fix
+
+When properly fixed, you should see:
+```
+[cool-client-heats] currentTask=106:53.0, contextTasks: 88:53.0, 59:52.0, 33:52.0, 67:44.0
+[cool-specific-tasks] 88:53.0, 33:52.0, 59:52.0, 67:44.0, 191:48.0
+[cool-calc] tasksInRange=6 (or more)
+[cool-calc] finalTargetHeat=50.0, drop=-3.0, capApplied=false
+```
+
+Client and server heat values should match exactly.
+
+---
+
+## 2025-11-18 Update: Final Solution - Client-Authoritative Heat for Context
+
+### Root Cause Summary
+
+**CONFIRMED:** The root cause is timezone mismatch in due date calculations at [lib/scoring/importance-v1.ts:114-118](lib/scoring/importance-v1.ts#L114-L118):
+
+```typescript
+const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+const dueStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+```
+
+This creates Date objects in the **local timezone**:
+- **Client (browser):** User's timezone (e.g., PST = UTC-8)
+- **Server (Vercel):** UTC
+
+**Impact:**
+- Same timestamp interpreted differently by client and server
+- Different "days until due" → different importance → different heat (7-8 point mismatch)
+- Server sees sparse task distribution, client sees dense distribution
+- Context-aware positioning fails because server doesn't see tasks in expected range
+
+**Evidence:**
+- Tasks **with** due dates: 7-8 point heat difference between client and server
+- Task 191 **without** due date: EXACT match (48.0) - proves due date calculation is the issue
+
+### Related Issues
+
+**Heat Badge Display Bug:**
+In addition to the positioning bug, there's an intermittent issue where the HeatBadge displays incorrect values (though tasks still sort based on correct `_freshHeat` values). This is likely related to the same client/server heat calculation mismatch causing stale or incorrect values to be displayed in the badge UI.
+
+### Chosen Solution: Client-Authoritative Heat for Context
+
+After evaluating multiple approaches (timezone-aware server calculations, storing user timezone, pre-calculated values), we've chosen the simplest and most robust solution:
+
+**Approach:**
+1. **Client calculates heats** for all context tasks using correct local timezone
+2. **Client sends calculated heats** along with task IDs in heat/cool API requests
+3. **Server uses client-provided heats** for context-aware positioning logic (`calculateCoolDrop`, `calculateHeatBoost`)
+4. **Server independently calculates** authoritative heat for the target task for storage
+5. **Server's calculation** is what gets persisted to database (source of truth)
+
+**Why this works:**
+- ✅ Client has correct timezone context for due date calculations
+- ✅ Server uses accurate heat values for positioning decisions
+- ✅ Server remains authoritative for stored data
+- ✅ No schema changes required
+- ✅ Works perfectly when user travels to different timezones (browser timezone auto-updates)
+- ✅ Simple implementation with minimal changes
+- ✅ Low risk - client can only affect positioning of their own tasks, not persistence
+
+**Tradeoffs considered:**
+- Client could theoretically manipulate heat values, but impact is limited to positioning only
+- Server and client calculate same thing twice (minor inefficiency)
+- Alternative of sending timezone to server would be more "pure" architecturally but adds complexity without significant benefit
+
+### Implementation Plan
+
+**Files to modify:**
+
+1. **`components/tasks/task-list.tsx`**
+   - Update context payload to send `{ id: number, heat: number }[]` instead of just `number[]`
+   - Calculate heat for each task using `calculateImportanceV1` and `calculateHeat`
+
+2. **`app/api/tasks/[id]/heat/route.ts`**
+   - Update request interface to accept `visibleTaskIds: Array<{ id: number, heat: number }>`
+   - Use client-provided heats for context instead of recalculating
+   - Keep server-side calculation for target task's new heat (for storage)
+
+3. **`app/api/tasks/[id]/cool/route.ts`**
+   - Same changes as heat route
+
+4. **`lib/scoring/heat-v3.ts`**
+   - Update `calculateCoolDrop` signature to accept heats directly
+   - Update `calculateHeatBoost` signature to accept heats directly
+   - Remove server-side recalculation of context task heats
+
+5. **`components/tasks/heat-badge.tsx`** (if needed)
+   - Investigate and fix intermittent display bug
+   - Ensure badge consistently uses `task._freshHeat`
+   - May need to track down state synchronization issues
+
+### Testing Plan
+
+**Verify the fix works:**
+1. Deploy changes to production
+2. Trigger heat/cool operations
+3. Check logs:
+   - `[cool-client-heats]` and `[cool-specific-tasks]` should now show matching values
+   - `[cool-calc] tasksInRange` count should increase (more tasks found in range)
+   - `[cool-calc] finalTargetHeat` should reflect context-aware positioning (not -10 cap)
+4. Verify tasks position correctly relative to visible neighbors
+5. Verify heat badge displays correct values consistently
+
+**Test edge cases:**
+- Heat/cool near top and bottom of list
+- Large lists (100+ tasks)
+- Rapid successive heat/cool clicks
+- User traveling to different timezone (tasks should recalculate correctly)
+
+### Cleanup After Fix
+
+Once verified working in production:
+1. Remove diagnostic logging from `heat-v3.ts` (lines 495-538)
+2. Remove diagnostic logging from API routes
+3. Remove client-side heat logging
+4. Update this document status to CLOSED with resolution summary

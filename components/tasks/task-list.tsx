@@ -4,6 +4,8 @@ import { useCallback } from "react";
 import { TaskRow } from "./task-row";
 import { TaskListHeader } from "./task-list-header";
 import { cn } from "@/lib/utils";
+import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
+import { calculateHeat } from "@/lib/scoring/heat-v3";
 import type { Task, SortMode, Project, TaskWithFreshValues, TaskDensity, SortDirection } from "@/types";
 
 interface TaskListProps {
@@ -24,8 +26,8 @@ interface TaskListProps {
   onDelete: (id: number) => void;
   onComplete: (id: number) => void;
   onUncomplete: (id: number) => void;
-  onHeat: (taskId: number, visibleTaskIds: number[]) => void;
-  onCool: (taskId: number, visibleTaskIds: number[]) => void;
+  onHeat: (taskId: number, visibleTaskIds: Array<{ id: number; heat: number }>) => void;
+  onCool: (taskId: number, visibleTaskIds: Array<{ id: number; heat: number }>) => void;
   onTouch: (taskId: number) => void;
   highlightedTask?: {
     id: number;
@@ -58,32 +60,43 @@ export function TaskList({
   highlightedTask,
   recurringCompletionSignals,
 }: TaskListProps) {
-  // Helper function to get all active task IDs in display order
-  // CRITICAL: Passing ALL active tasks eliminates dependency on client-side ordering being correct.
-  // The server recalculates fresh heat for all tasks and determines context-aware deltas.
-  // This fixes production bug where rapid heat/cool clicks sent stale context due to
-  // React render cycle delays between TanStack Query cache updates and useMemo recalculation.
-  const getAllActiveTaskIds = useCallback((): number[] => {
+  // Helper function to get all active tasks with client-calculated heats
+  // CRITICAL FIX FOR TIMEZONE BUG: Client calculates heats using correct local timezone.
+  // Server was calculating heats in UTC while client used local time, causing 7-8 point
+  // heat mismatches for tasks with due dates. This led to sparse task distribution on server
+  // and context-aware positioning failures.
+  //
+  // Solution: Client sends pre-calculated heats along with IDs. Server uses client heats
+  // for context-aware positioning logic, ensuring both see the same task distribution.
+  // Server still independently calculates authoritative heat for the target task (for storage).
+  const getAllActiveTasksWithHeats = useCallback((): Array<{ id: number; heat: number }> => {
     const activeTasks = tasks.filter((t) => !t.completedAt);
-    return activeTasks.map((task) => task.id);
+    const now = new Date();
+
+    return activeTasks.map((task) => {
+      // Calculate heat using client's local timezone (correct for due date calculations)
+      const importance = calculateImportanceV1(task, now);
+      const heat = calculateHeat(task, now, importance);
+      return { id: task.id, heat };
+    });
   }, [tasks]);
 
   // Heat handler: increases heat adjustment to move task up
   const handleHeat = useCallback(
     (taskId: number) => {
-      const allActiveTaskIds = getAllActiveTaskIds();
-      onHeat(taskId, allActiveTaskIds);
+      const allActiveTasksWithHeats = getAllActiveTasksWithHeats();
+      onHeat(taskId, allActiveTasksWithHeats);
     },
-    [getAllActiveTaskIds, onHeat]
+    [getAllActiveTasksWithHeats, onHeat]
   );
 
   // Cool handler: decreases heat adjustment to move task down
   const handleCool = useCallback(
     (taskId: number) => {
-      const allActiveTaskIds = getAllActiveTaskIds();
-      onCool(taskId, allActiveTaskIds);
+      const allActiveTasksWithHeats = getAllActiveTasksWithHeats();
+      onCool(taskId, allActiveTasksWithHeats);
     },
-    [getAllActiveTaskIds, onCool]
+    [getAllActiveTasksWithHeats, onCool]
   );
 
   const handleTouch = useCallback(

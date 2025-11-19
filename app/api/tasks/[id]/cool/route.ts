@@ -20,7 +20,11 @@ export const runtime = 'nodejs';
  *
  * Request body (optional):
  * - decrement?: number - Manual decrement override (for context-aware from client)
- * - visibleTaskIds?: number[] - Task IDs for context-aware calculation (server calculates fresh heat)
+ * - visibleTaskIds?: Array<{id: number, heat: number}> - Context tasks with CLIENT-calculated heats
+ *
+ * CRITICAL: Client sends pre-calculated heats to fix timezone bug.
+ * Server uses client heats for context positioning (client has correct local timezone).
+ * Server still independently calculates authoritative heat for target task (for storage).
  *
  * Key Features:
  * - Asymmetric decay: Cool decays 2x faster (3-day half-life vs 7-day for heat)
@@ -48,7 +52,23 @@ export async function POST(
     // Validate required visibleTaskIds parameter
     if (!visibleTaskIds || !Array.isArray(visibleTaskIds) || visibleTaskIds.length === 0) {
       return NextResponse.json(
-        { error: "visibleTaskIds is required and must be a non-empty array" },
+        { error: "visibleTaskIds is required and must be a non-empty array of {id, heat} objects" },
+        { status: 400 }
+      );
+    }
+
+    // Validate format: should be Array<{id: number, heat: number}>
+    const isValidFormat = visibleTaskIds.every(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof item.id === "number" &&
+        typeof item.heat === "number"
+    );
+
+    if (!isValidFormat) {
+      return NextResponse.json(
+        { error: "visibleTaskIds must be an array of {id: number, heat: number} objects" },
         { status: 400 }
       );
     }
@@ -59,8 +79,18 @@ export async function POST(
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
-    const visibleTaskIdsOrdered = visibleTaskIds as number[];
-    const visibleTaskIdsDeduped = Array.from(new Set(visibleTaskIdsOrdered));
+    // Type assertion for the new format
+    const contextTasksWithHeats = visibleTaskIds as Array<{ id: number; heat: number }>;
+
+    // Dedupe by ID (keep first occurrence)
+    const seen = new Set<number>();
+    const contextTasksDeduped = contextTasksWithHeats.filter((task) => {
+      if (seen.has(task.id)) {
+        return false;
+      }
+      seen.add(task.id);
+      return true;
+    });
 
     // Calculate old heat for delta
     const storedAdjustment = existingTask.heatAdjustment || 0;
@@ -82,65 +112,23 @@ export async function POST(
       now
     );
 
-    // Build context from all active task IDs (client now sends all active tasks, not just ±20 window)
-    // This fixes production bug where rapid clicks sent stale context due to React render cycle delays
-    const neighborIds = visibleTaskIdsDeduped.filter((id) => id !== existingTask.id);
+    // TIMEZONE FIX: Use CLIENT-CALCULATED heats for context (client has correct local timezone)
+    // Filter out the current task from context
+    const contextTasks = contextTasksDeduped.filter((task) => task.id !== existingTask.id);
 
-    // Log context for debugging production issues
-    console.log(`[cool-context] taskId=${taskId}, receivedContextSize=${visibleTaskIdsDeduped.length}, neighborCount=${neighborIds.length}`);
+    // Log context for debugging
+    console.log(`[cool-context] taskId=${taskId}, receivedContextSize=${contextTasksDeduped.length}, contextTaskCount=${contextTasks.length}`);
 
-    let contextTasks: Array<{id: number; heat: number}> = [];
-    if (neighborIds.length > 0) {
-      const neighborRecords = await taskRepository.findManyByIds(neighborIds, userId);
-
-      // Verify we got all the neighbors we expected
-      if (neighborRecords.length !== neighborIds.length) {
-        console.warn(`[cool-context-mismatch] Expected ${neighborIds.length} neighbors but got ${neighborRecords.length}`);
-      }
-
-      contextTasks = neighborRecords.map((neighbor) => {
-        // CRITICAL FIX: Recalculate importanceV1 fresh (don't trust DB value)
-        // importanceV1 is time-dependent and can become stale in the database
-        const freshImportance = calculateImportanceV1(neighbor);
-        const freshHeat = calculateHeat({ ...neighbor, importanceV1: freshImportance }, now);
-        return { id: neighbor.id, heat: freshHeat };
-      });
-
-      // DIAGNOSTIC: Log heat distribution to identify calculation mismatches
+    // DIAGNOSTIC: Log client-provided heats for comparison
+    if (contextTasks.length > 0) {
       const sortedHeats = contextTasks.map(t => t.heat).sort((a, b) => b - a);
       const heatsNearCurrent = sortedHeats.filter(h => h >= contextCurrentHeat - 15 && h <= contextCurrentHeat + 5);
       console.log(`[cool-heat-distribution] heatsNear${contextCurrentHeat.toFixed(0)} (±15): [${heatsNearCurrent.map(h => h.toFixed(1)).join(', ')}]`);
 
-      // DIAGNOSTIC: Log task IDs and heat values for ALL tasks (to find missing ones)
       const allTaskHeats = contextTasks
         .sort((a, b) => b.heat - a.heat)
         .map(t => `${t.id}:${Math.round(t.heat)}`);
       console.log(`[cool-all-task-heats] totalTasks=${contextTasks.length}, allHeats: ${allTaskHeats.join(', ')}`);
-
-      // DIAGNOSTIC: Log specific tasks mentioned by user for detailed comparison
-      const specificTaskIds = [67, 191, 59, 33, 88, 106];
-      const specificTasks = contextTasks.filter(t => specificTaskIds.includes(t.id));
-      if (specificTasks.length > 0) {
-        const details = specificTasks
-          .sort((a, b) => b.heat - a.heat)
-          .map(t => `${t.id}:${t.heat.toFixed(1)}`)
-          .join(', ');
-        console.log(`[cool-specific-tasks] ${details}`);
-      }
-
-      // DIAGNOSTIC: Count duplicates to identify if multiple tasks have same heat
-      const heatCounts = new Map<number, number>();
-      contextTasks.forEach(t => {
-        const rounded = Math.round(t.heat);
-        heatCounts.set(rounded, (heatCounts.get(rounded) || 0) + 1);
-      });
-      const duplicates = Array.from(heatCounts.entries())
-        .filter(([, count]) => count > 1)
-        .sort(([a], [b]) => b - a)
-        .slice(0, 5);
-      if (duplicates.length > 0) {
-        console.log(`[cool-heat-duplicates] tasksWithSameHeat: ${duplicates.map(([heat, count]) => `${heat}(${count}x)`).join(', ')}`);
-      }
     }
 
     // Calculate context-aware drop (move down 3 positions)

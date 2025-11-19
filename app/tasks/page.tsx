@@ -79,7 +79,7 @@ type PendingStarIntent = {
 type PendingHeatAction = {
   type: "heat" | "cool";
   taskId: number;
-  visibleTaskIds: number[];
+  visibleTaskIds: Array<{ id: number; heat: number }>;
 };
 
 type HighlightedTask = {
@@ -1113,7 +1113,7 @@ function TasksPageContent() {
   );
 
   const runHeatMutation = useCallback(
-    async (taskId: number, visibleTaskIds: number[]) => {
+    async (taskId: number, visibleTaskIds: Array<{ id: number; heat: number }>) => {
       try {
         const response = await touchTaskMutation.mutateAsync({ taskId, visibleTaskIds });
         setHighlightedTask({ id: taskId, mode: "heat" });
@@ -1132,7 +1132,7 @@ function TasksPageContent() {
   );
 
   const runCoolMutation = useCallback(
-    async (taskId: number, visibleTaskIds: number[]) => {
+    async (taskId: number, visibleTaskIds: Array<{ id: number; heat: number }>) => {
       try {
         const response = await coolTaskMutation.mutateAsync({ taskId, visibleTaskIds });
         setHighlightedTask({ id: taskId, mode: "cool" });
@@ -1162,7 +1162,7 @@ function TasksPageContent() {
   );
 
   const handleHeatRequest = useCallback(
-    (taskId: number, visibleTaskIds: number[]) => {
+    (taskId: number, visibleTaskIds: Array<{ id: number; heat: number }>) => {
       if (!isOrderFresh) {
         setPendingHeatAction({ type: "heat", taskId, visibleTaskIds });
         setIsRefreshModalOpen(true);
@@ -1174,7 +1174,7 @@ function TasksPageContent() {
   );
 
   const handleCoolRequest = useCallback(
-    (taskId: number, visibleTaskIds: number[]) => {
+    (taskId: number, visibleTaskIds: Array<{ id: number; heat: number }>) => {
       if (!isOrderFresh) {
         setPendingHeatAction({ type: "cool", taskId, visibleTaskIds });
         setIsRefreshModalOpen(true);

@@ -658,7 +658,7 @@ export function useUncompleteTask() {
 }
 
 // Heat task - Apply heat adjustment
-async function heatTask(id: number, visibleTaskIds?: number[]): Promise<TouchTaskResponse> {
+async function heatTask(id: number, visibleTaskIds?: Array<{ id: number; heat: number }>): Promise<TouchTaskResponse> {
   const response = await fetch(`/api/tasks/${id}/heat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -673,7 +673,7 @@ async function heatTask(id: number, visibleTaskIds?: number[]): Promise<TouchTas
 }
 
 // Cool task - Apply cool adjustment
-async function coolTask(id: number, visibleTaskIds?: number[]): Promise<CoolTaskResponse> {
+async function coolTask(id: number, visibleTaskIds?: Array<{ id: number; heat: number }>): Promise<CoolTaskResponse> {
   const response = await fetch(`/api/tasks/${id}/cool`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -768,7 +768,7 @@ export function useTouchTask() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ taskId, visibleTaskIds }: { taskId: number; visibleTaskIds?: number[] }) =>
+    mutationFn: ({ taskId, visibleTaskIds }: { taskId: number; visibleTaskIds?: Array<{ id: number; heat: number }> }) =>
       heatTask(taskId, visibleTaskIds),
     onMutate: async ({ taskId, visibleTaskIds }) => {
       const actionId = registerHeatAction(taskId);
@@ -790,16 +790,12 @@ export function useTouchTask() {
 
       const now = new Date();
 
-      const currentImportance = calculateImportanceV1(currentTask, now);
-      const currentHeat = calculateHeat(currentTask, now, currentImportance);
+      // Use client-provided heats (already calculated with correct timezone)
+      const currentTaskWithHeat = visibleTaskIds.find(t => t.id === taskId);
+      const currentHeat = currentTaskWithHeat?.heat ?? calculateHeat(currentTask, now, calculateImportanceV1(currentTask, now));
 
-      const contextTasks = previousTasks
-        .filter((task) => visibleTaskIds.includes(task.id) && task.id !== taskId)
-        .map((task) => {
-          const importance = calculateImportanceV1(task, now);
-          const heat = calculateHeat(task, now, importance);
-          return { id: task.id, heat };
-        });
+      // Filter out current task from context (client already sent all task heats)
+      const contextTasks = visibleTaskIds.filter(t => t.id !== taskId);
 
       const boostDelta = calculateHeatBoost(
         { heat: currentHeat, id: currentTask.id },
@@ -814,6 +810,7 @@ export function useTouchTask() {
         HEAT_CONFIG.MAX_FINAL_SCORE
       );
 
+      const currentImportance = calculateImportanceV1(currentTask, now);
       const { newAdjustment } = resolveAdjustmentForTargetHeat(
         targetHeat,
         {
@@ -887,7 +884,7 @@ export function useCoolTask() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ taskId, visibleTaskIds }: { taskId: number; visibleTaskIds?: number[] }) =>
+    mutationFn: ({ taskId, visibleTaskIds }: { taskId: number; visibleTaskIds?: Array<{ id: number; heat: number }> }) =>
       coolTask(taskId, visibleTaskIds),
     onMutate: async ({ taskId, visibleTaskIds }) => {
       const actionId = registerHeatAction(taskId);
@@ -909,16 +906,12 @@ export function useCoolTask() {
 
       const now = new Date();
 
-      const currentImportance = calculateImportanceV1(currentTask, now);
-      const currentHeat = calculateHeat(currentTask, now, currentImportance);
+      // Use client-provided heats (already calculated with correct timezone)
+      const currentTaskWithHeat = visibleTaskIds.find(t => t.id === taskId);
+      const currentHeat = currentTaskWithHeat?.heat ?? calculateHeat(currentTask, now, calculateImportanceV1(currentTask, now));
 
-      const contextTasks = previousTasks
-        .filter((task) => visibleTaskIds.includes(task.id) && task.id !== taskId)
-        .map((task) => {
-          const importance = calculateImportanceV1(task, now);
-          const heat = calculateHeat(task, now, importance);
-          return { id: task.id, heat };
-        });
+      // Filter out current task from context (client already sent all task heats)
+      const contextTasks = visibleTaskIds.filter(t => t.id !== taskId);
 
       // DIAGNOSTIC: Log client-calculated heat values for specific tasks to compare with server
       const specificTaskIds = [67, 191, 59, 33, 88, taskId];
@@ -943,6 +936,7 @@ export function useCoolTask() {
         HEAT_CONFIG.MAX_FINAL_SCORE
       );
 
+      const currentImportance = calculateImportanceV1(currentTask, now);
       const { newAdjustment } = resolveAdjustmentForTargetHeat(
         targetHeat,
         {
