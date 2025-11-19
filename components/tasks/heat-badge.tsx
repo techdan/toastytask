@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -21,12 +21,12 @@ import {
   getHeatLabelFromConfig,
 } from "@/lib/scoring/importance-colors";
 import { HEAT_CONFIG } from "@/lib/scoring/heat-config";
-import type { Task, SortMode } from "@/types";
+import type { Task, SortMode, TaskWithFreshValues } from "@/types";
 import { cn } from "@/lib/utils";
 import { PRIMARY_TASKS_QUERY_KEY } from "@/lib/queries/task-query-keys";
 
 interface HeatBadgeProps {
-  task: Task;
+  task: TaskWithFreshValues;
   mode: SortMode;
   isCompleted?: boolean;
 }
@@ -59,46 +59,27 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
   const queryClient = useQueryClient();
   const invalidatedTasksRef = useRef<Set<number>>(new Set());
 
-  // Calculate fresh importance (pure calculation architecture)
-  const importance = useMemo(
-    () => calculateImportanceV1(task),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [task.priority, task.dueAt, task.starLevel, task.star]
-  );
+  // Use pre-calculated values from parent for consistency
+  const importance = task._freshImportance;
 
-  // Calculate heat breakdown for tooltip using fresh importance
-  const breakdown = useMemo(
-    () => calculateHeatWithBreakdown(task, undefined, importance),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      task.heatAdjustment,
-      task.lastTouchedAt,
-      task.lastHeatTouchedAt,
-      task.priority,
-      task.dueAt,
-      task.starLevel,
-      task.star,
-      importance,
-    ]
-  );
+  // Calculate breakdown fresh on every render (no useMemo)
+  // This ensures we always show the correct tooltip values
+  const breakdown = calculateHeatWithBreakdown(task, undefined, importance);
 
-  // Calculate importance factors with breakdown for tooltip
-  const importanceFactors = useMemo(
-    () => calculateImportanceV1WithFactors(task),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [task.priority, task.dueAt, task.starLevel, task.star]
-  );
+  // Calculate importance factors fresh on every render (no useMemo)
+  const importanceFactors = calculateImportanceV1WithFactors(task);
 
   // Check if heat is stale and trigger refresh if needed
   useEffect(() => {
-    if (mode !== "heat" || !breakdown) return;
+    if (mode !== "heat") return;
 
     const storedHeat = task.heat || 0;
-    const freshHeat = breakdown.totalHeat;
+    // Use _freshHeat from parent (same value used for sorting)
+    const freshHeat = task._freshHeat ?? 0;
     const heatDiff = Math.abs(freshHeat - storedHeat);
     const isStale = isHeatStale(task.heatCalculatedAt);
 
-    // If heat is stale or differs significantly (>1%), invalidate query to trigger server refresh
+    // If heat is stale or differs significantly, invalidate query to trigger server refresh
     if (isStale || heatDiff > 0.5) {
       // Only invalidate once per task (until it's been updated)
       if (!invalidatedTasksRef.current.has(task.id)) {
@@ -112,7 +93,7 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
       // Heat is fresh - clear the invalidation flag
       invalidatedTasksRef.current.delete(task.id);
     }
-  }, [task.id, task.heat, task.heatCalculatedAt, breakdown, mode, queryClient]);
+  }, [task.id, task.heat, task.heatCalculatedAt, task._freshHeat, mode, queryClient]);
 
   if (mode === "importance") {
     // Importance Mode: Detailed breakdown tooltip
@@ -172,7 +153,8 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
 
   // Heat Mode: Display heat as 0-145 points with breakdown tooltip
   // Heat v4: Display raw point value instead of percentage
-  const heat = breakdown?.totalHeat || 0;
+  // IMPORTANT: Use _freshHeat to match sorting value (calculated in parent)
+  const heat = task._freshHeat ?? 0;
   const heatDisplay = Math.round(heat); // Display as integer (0-145)
   const stageLabel = getHeatLabelFromConfig(heat);
 
@@ -205,7 +187,7 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
 
 interface HeatBreakdownTooltipProps {
   breakdown: HeatV3Breakdown;
-  task: Task;
+  task: TaskWithFreshValues;
   stageLabel: string;
 }
 
