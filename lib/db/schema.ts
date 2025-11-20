@@ -164,7 +164,7 @@ export const settings = pgTable("settings", {
     .default("ungrouped"),
   sortMode: text("sort_mode", { enum: ["importance", "heat"] })
     .notNull()
-    .default("importance"),
+    .default("heat"),
 
   updatedAt: timestamp("updated_at", { mode: "date", withTimezone: true })
     .notNull()

@@ -1,550 +1,950 @@
 # Current Heat Algorithm
 
-**Date:** 2025-11-04
+**Date:** 2025-11-20 (Updated to reflect hybrid architecture)
 **Status:** ✅ Implemented (Current System)
 **Version:** Point-Based (0-145 scale)
 
-This document describes the current heat system architecture, which uses pure calculation from base properties + manual adjustments. Heat is never stored, eliminating staleness issues and enabling predictable optimistic updates.
-
-> **Historical Note:** This document analyzes the problems with storing heat values and presents multiple architectural options. The implemented solution is **Option 1: Pure Calculation**, which is now the current system. The analysis and alternative approaches are preserved for reference.
+This document describes the current heat system architecture, which uses a **hybrid calculate-and-cache approach**. Heat values are stored in the database for fast sorting performance and recalculated fresh on the client for display accuracy.
 
 ---
 
-## Problem Statement (Historical Context)
+## Current Architecture: HYBRID APPROACH
 
-The current heat system suffers from **data consistency issues** caused by maintaining multiple representations of the same value:
+The heat system uses a **two-stage hybrid pattern** that balances database sorting performance with display accuracy:
 
-1. **Stored heat** (`task.heat` in database) - becomes stale between fetches
-2. **Cached heat** (`task.heat` in TanStack Query) - mirrors stored staleness
+### Stage 1: Cached Database Values (Performance)
+
+**Purpose:** Enable fast database-level sorting for initial page load and large task lists
+
+**Implementation:**
+- Server calculates heat when mutations occur
+- Writes calculated value to `heat` column in database
+- Database uses `heatSortIdx` index for fast ORDER BY operations
+- Enables efficient "top N" queries without calculating all tasks
+
+**Code:**
+```typescript
+// Server updates heat in database
+await taskRepository.updateHeat(taskId, calculatedHeat, userId);
+
+// Database sorts using indexed column
+SELECT * FROM tasks
+WHERE user_id = ? AND deleted_at IS NULL
+ORDER BY heat DESC
+LIMIT 50;
+```
+
+**Files:**
+- Schema: [lib/db/schema.ts](../lib/db/schema.ts) - `heat` column (line 62)
+- Repository: [lib/db/repositories/task-repository.ts](../lib/db/repositories/task-repository.ts) - `updateHeat()` method
+- Index: `heatSortIdx` on `(heat, completedAt)` for efficient queries
+
+### Stage 2: Fresh Client Calculations (Accuracy)
+
+**Purpose:** Ensure displayed heat values reflect current time, timezone, and due date status
+
+**Implementation:**
+- Client fetches tasks with stored `heat` values from database
+- Immediately recalculates fresh heat on every render
+- Uses fresh values for display badges, tooltips, and client-side operations
+- Fresh calculations ensure timezone accuracy and current due date status
+
+**Code:**
+```typescript
+// Client calculates fresh heat on render
+const tasksWithFresh = tasks.map((task) => ({
+  ...task,
+  _freshHeat: calculateHeat(task, new Date(), freshImportance),
+}));
+
+// Use fresh value for display
+<HeatBadge heat={task._freshHeat} />
+```
+
+**Files:**
+- Calculation: [lib/scoring/heat-v3.ts](../lib/scoring/heat-v3.ts) - `calculateHeat()` function
+- Types: [types/index.ts](../types/index.ts) - `TaskWithFreshValues` type
+- Usage: [lib/queries/use-task-mutations.ts](../lib/queries/use-task-mutations.ts)
+
+### Why Hybrid Instead of Pure Calculation?
+
+**Performance at scale:**
+- Database can sort 1000+ tasks efficiently using indexed `heat` column
+- Pure calculation would require fetching ALL tasks and sorting in-memory on every query
+- Hybrid enables fast initial page load (DB sorts) with accurate display (client recalculates)
+- Critical for queries like "show me my top 50 hottest tasks" (can use LIMIT with index)
+
+**Real-world benefit:**
+```typescript
+// WITH hybrid (current system):
+// Database sorts 1000 tasks using index → returns top 50 → O(log n) with index
+// Client recalculates heat for 50 tasks → fast
+
+// WITHOUT hybrid (pure calculation):
+// Database fetches all 1000 tasks → client calculates heat for all 1000 → sorts → takes top 50
+// Much slower for large task lists
+```
+
+**Decision rationale:**
+- See [docs/Archive/heat-cleanup-plan.md](Archive/heat-cleanup-plan.md) for full analysis
+- Hybrid approach chosen after evaluating pure calculation, full list responses, version control, etc.
+- Production testing showed hybrid provides best balance of performance and accuracy
+
+---
+
+## Heat Calculation Formula
+
+### Point-Based Scoring (0-145 range)
+
+Heat is calculated using a point-based system with three components:
+
+```typescript
+function calculateHeat(
+  task: TaskBase,
+  now: Date,
+  importance: number
+): number {
+  const basePoints = calculateBasePoints(task, now, importance);
+  const adjustment = task.heatAdjustment ?? 0;
+
+  return clamp(
+    basePoints + adjustment,
+    HEAT_CONFIG.MIN_FINAL_SCORE,    // 0
+    HEAT_CONFIG.MAX_FINAL_SCORE     // 145
+  );
+}
+```
+
+### Component 1: Base Points (0-100)
+
+**Importance contribution** (0-100 points):
+- Maps importance (2-14 scale) to heat contribution
+- Formula: `(importance - minImportance) / importanceRange × 100`
+- Example: Importance 14 → 100 points, Importance 2 → 0 points
+
+**Time decay** (applied to base):
+- Tasks lose heat over time based on bucket half-life
+- Formula: `basePoints × (0.5 ^ (hoursSinceTouch / halfLife))`
+- Half-lives:
+  - TODO bucket: 48 hours (decays quickly)
+  - WATCH bucket: 168 hours (7 days)
+  - LATER bucket: 720 hours (30 days)
+
+**New task boost:**
+- Tasks created within last 24 hours get bonus heat
+- Formula: `newTaskBoost × (0.5 ^ (age / newTaskHalfLife))`
+- Default: 70-point boost, 24-hour half-life
+
+### Component 2: Manual Adjustments (-45 to +45 points)
+
+**User heat/cool actions:**
+- Stored as `heatAdjustment` in database (persistent)
+- Context-aware positioning determines adjustment magnitude
+- Heating: Move task up 1-3 positions = add ~5-15 points
+- Cooling: Move task down 1-3 positions = subtract ~5-15 points
+
+**Adjustment calculation:**
+```typescript
+function calculateHeatBoost(
+  currentTask: { id: number; heat: number },
+  visibleTasks: Array<{ id: number; heat: number }>,
+  direction: 'up' | 'down'
+): number {
+  const currentIndex = visibleTasks.findIndex(t => t.id === currentTask.id);
+  const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+
+  if (targetIndex < 0 || targetIndex >= visibleTasks.length) {
+    return direction === 'up' ? 10 : -10; // Default adjustment
+  }
+
+  const targetHeat = visibleTasks[targetIndex].heat;
+  const heatDelta = targetHeat - currentTask.heat;
+
+  // Move to just above/below target task
+  return direction === 'up'
+    ? heatDelta + 1  // Move above target
+    : heatDelta - 1; // Move below target
+}
+```
+
+**Clamping:**
+- Single adjustment clamped to ±45 points
+- Total heat clamped to 0-145 range
+
+### Component 3: Final Clamping (0-145)
+
+**Range enforcement:**
+```typescript
+const HEAT_CONFIG = {
+  MIN_FINAL_SCORE: 0,
+  MAX_FINAL_SCORE: 145,
+};
+
+return Math.max(
+  HEAT_CONFIG.MIN_FINAL_SCORE,
+  Math.min(HEAT_CONFIG.MAX_FINAL_SCORE, basePoints + adjustment)
+);
+```
+
+---
+
+## Data Flow
+
+### Initial Page Load
+
+```
+1. Client requests tasks
+2. Database query with ORDER BY heat (uses heatSortIdx index)
+3. Server returns tasks with stored heat values
+4. Client immediately recalculates fresh heat:
+   - _freshHeat = calculateHeat(task, now, freshImportance)
+5. Client uses fresh values for display
+6. If stored heat is stale (|stored - fresh| > threshold):
+   - Background update to database (non-blocking)
+```
+
+**Code path:**
+- API: [app/api/tasks/route.ts](../app/api/tasks/route.ts) - GET handler
+- Client: [lib/queries/use-tasks.ts](../lib/queries/use-tasks.ts) - TanStack Query hook
+
+### User Updates Task (Priority, Due Date, Star)
+
+```
+1. Client sends mutation request
+2. Server updates base properties (priority, dueAt, starLevel)
+3. Server recalculates fresh heat:
+   - freshImportance = calculateImportanceV1(updatedTask, now)
+   - freshHeat = calculateHeat(updatedTask, now, freshImportance)
+4. Server writes fresh heat to database:
+   - await taskRepository.updateHeat(taskId, freshHeat, userId)
+5. Server returns updated task with new heat value
+6. Client refetches and recalculates fresh values
+```
+
+**Code path:**
+- API: [app/api/tasks/[id]/route.ts](../app/api/tasks/[id]/route.ts) - PATCH handler (lines 51-64)
+- Repository: [lib/db/repositories/task-repository.ts](../lib/db/repositories/task-repository.ts) - `updateHeat()`
+
+### User Clicks Heat/Cool Button
+
+```
+1. Client calculates fresh heat for current task and visible neighbors
+2. Client sends mutation:
+   - { taskId, visibleTaskIds: [sorted array of IDs] }
+3. Server fetches tasks by IDs
+4. Server calculates fresh heat for ALL tasks (current + neighbors)
+5. Server runs context-aware positioning logic on fresh values
+6. Server calculates adjustment delta:
+   - delta = targetHeat - currentHeat + epsilon
+7. Server updates heatAdjustment:
+   - newAdjustment = currentAdjustment + clamp(delta, -45, +45)
+8. Server recalculates final heat with new adjustment
+9. Server writes updated heatAdjustment and heat to database
+10. Server returns updated task
+11. Client refetches and recalculates fresh values
+```
+
+**Code path:**
+- Client: [lib/queries/use-task-mutations.ts](../lib/queries/use-task-mutations.ts) - `useHeatTaskMutation()`
+- API: [app/api/tasks/[id]/heat/route.ts](../app/api/tasks/[id]/heat/route.ts) - POST handler
+- Calculation: [lib/scoring/heat-v3.ts](../lib/scoring/heat-v3.ts) - `calculateHeatBoost()`
+
+### Automatic Background Refresh
+
+```
+1. TanStack Query refetches tasks periodically (staleTime: 5 minutes)
+2. Database returns tasks with stored heat values
+3. Client recalculates fresh heat for all tasks
+4. Client identifies stale tasks: |stored - fresh| > 0.0001
+5. For stale tasks:
+   - Background API call updates database heat (non-blocking)
+   - User sees fresh values immediately (no wait)
+6. Next refetch will have updated stored values
+```
+
+**Code path:**
+- API: [app/api/tasks/route.ts](../app/api/tasks/route.ts) - Staleness check (lines 56-63)
+- Utility: [lib/scoring/heat-v3.ts](../lib/scoring/heat-v3.ts) - `isHeatStale()` function
+
+---
+
+## Tradeoffs and Considerations
+
+### Accepted Tradeoffs
+
+✅ **Fast database sorting** - 1000+ tasks sort efficiently using index
+✅ **Accurate display** - Fresh calculations reflect current time/timezone
+✅ **Scales well** - Database handles sorting, client handles accuracy
+✅ **Simple maintenance** - Clear separation: DB for ORDER BY, client for display
+
+⚠️ **Staleness between mutations** - Stored values become stale over time
+- **Mitigation:** Client immediately recalculates fresh values on render
+- **Impact:** User always sees accurate values; staleness only affects database queries
+- **Acceptable:** Fresh calculation is fast; staleness doesn't hurt UX
+
+⚠️ **Data duplication** - Same value stored and calculated
+- **Mitigation:** Clear usage pattern (stored for DB sorting, calculated for display)
+- **Impact:** Additional storage (4 bytes per task for `heat` column)
+- **Acceptable:** Storage cost is negligible compared to performance benefit
+
+⚠️ **Two sources of truth** - Stored vs calculated
+- **Mitigation:** Fresh calculation is always authoritative for display
+- **Impact:** Developers must understand hybrid pattern
+- **Acceptable:** Well-documented in code and this doc
+
+### Benefits Over Pure Calculation
+
+| Aspect | Hybrid (Current) | Pure Calculation |
+|--------|-----------------|------------------|
+| **Initial page load** | Fast (DB sorts) | Slower (fetch all, sort in-memory) |
+| **Display accuracy** | Perfect (fresh calc) | Perfect (fresh calc) |
+| **Database queries** | Efficient with LIMIT | Must fetch all tasks |
+| **Task count scaling** | O(log n) with index | O(n) always |
+| **Memory usage** | Low (fetch top N) | High (fetch all for sorting) |
+| **Staleness** | Stored values stale | No stored values |
+
+**Conclusion:** Hybrid provides better performance for typical use cases (100-1000 tasks per user) while maintaining display accuracy through fresh calculations.
+
+### When to Reconsider Pure Calculation
+
+Consider migrating to pure calculation if:
+- ✅ Task counts regularly exceed 5000+ items (in-memory sorting becomes viable)
+- ✅ Performance profiling shows calculation overhead is negligible at scale
+- ✅ Staleness becomes a user-visible problem (unlikely with fresh client calculations)
+- ✅ Database migration to system that doesn't support efficient indexes
+
+For now, hybrid is the right balance for production usage patterns.
+
+---
+
+## Implementation Details
+
+### Database Schema
+
+```typescript
+// lib/db/schema.ts
+export const tasks = pgTable("tasks", {
+  // ... other fields
+
+  // Heat model fields
+  heat: real("heat").notNull().default(0.5),
+  heatCalculatedAt: timestamp("heat_calculated_at", {
+    mode: "date",
+    withTimezone: true
+  }),
+  heatAdjustment: real("heat_adjustment").notNull().default(0),
+  lastHeatTouchedAt: timestamp("last_heat_touched_at", {
+    mode: "date",
+    withTimezone: true
+  }),
+  lastTouchedAt: timestamp("last_touched_at", {
+    mode: "date",
+    withTimezone: true
+  }),
+  touchCount: integer("touch_count").notNull().default(0),
+
+  // Importance field (also cached for performance)
+  importanceV1: integer("importance_v1").notNull().default(0),
+}, (table) => ({
+  // Index for sorting by heat
+  heatSortIdx: index("tasks_heat_sort_idx")
+    .on(table.heat, table.completedAt),
+}));
+```
+
+**Column purposes:**
+- `heat`: Cached value for database ORDER BY (performance)
+- `heatCalculatedAt`: Timestamp when heat was last calculated (staleness detection)
+- `heatAdjustment`: User's manual adjustments (-45 to +45 points)
+- `lastHeatTouchedAt`: When user last clicked heat/cool (decay calculation)
+- `lastTouchedAt`: When task was last modified (activity tracking)
+- `touchCount`: Number of times task was touched (unused in v3)
+- `importanceV1`: Cached importance for heat calculation (performance)
+
+### TypeScript Types
+
+```typescript
+// types/index.ts
+
+/**
+ * TaskWithFreshValues - Extended task with fresh calculated values
+ *
+ * HYBRID ARCHITECTURE:
+ * - task.heat & task.importanceV1 are cached in DB for sorting
+ * - _freshHeat & _freshImportance are calculated on render for display
+ *
+ * Usage:
+ * - DB queries use task.heat for ORDER BY
+ * - UI components use _freshHeat for display
+ * - Always prefer fresh values for user-facing operations
+ */
+export type TaskWithFreshValues = Task & {
+  _freshImportance: number; // Fresh importance (2-14 scale)
+  _freshHeat: number;       // Fresh heat (0-145 scale)
+};
+```
+
+### Calculation Functions
+
+```typescript
+// lib/scoring/heat-v3.ts
+
+/**
+ * Calculate heat for a task
+ *
+ * HYBRID USAGE:
+ * - Server calls this when mutations occur, writes result to DB
+ * - Client calls this on every render, uses result for display
+ *
+ * @param task - Task with heatAdjustment and timing fields
+ * @param now - Current timestamp (injected for testability)
+ * @param importance - Pre-calculated importance (2-14 scale)
+ * @returns Heat value (0-145 scale)
+ */
+export function calculateHeat(
+  task: Pick<Task, "heatAdjustment" | "lastTouchedAt" | "lastHeatTouchedAt">,
+  now: Date,
+  importance: number
+): number {
+  // Calculate base points from importance (0-100)
+  const basePoints = calculateBasePoints(importance, task, now);
+
+  // Add manual adjustment (-45 to +45)
+  const adjustment = task.heatAdjustment ?? 0;
+
+  // Clamp to valid range (0-145)
+  return clamp(
+    basePoints + adjustment,
+    HEAT_CONFIG.MIN_FINAL_SCORE,
+    HEAT_CONFIG.MAX_FINAL_SCORE
+  );
+}
+
+/**
+ * Check if stored heat is stale and needs update
+ *
+ * Used by server to identify tasks needing background refresh
+ *
+ * @param heatCalculatedAt - When heat was last calculated
+ * @param now - Current timestamp
+ * @returns True if heat should be recalculated
+ */
+export function isHeatStale(
+  heatCalculatedAt: Date | null | undefined,
+  now: Date
+): boolean {
+  if (!heatCalculatedAt) return true;
+
+  const age = now.getTime() - heatCalculatedAt.getTime();
+  const staleThreshold = 24 * 60 * 60 * 1000; // 24 hours
+
+  return age > staleThreshold;
+}
+```
+
+### Client-Side Usage
+
+```typescript
+// lib/queries/use-tasks.ts
+
+export function useTasks() {
+  return useQuery({
+    queryKey: ["tasks"],
+    queryFn: async () => {
+      const response = await fetch("/api/tasks");
+      const { tasks } = await response.json();
+
+      // Calculate fresh values immediately after fetch
+      const now = new Date();
+      return tasks.map((task: Task): TaskWithFreshValues => {
+        const freshImportance = calculateImportanceV1(task, now);
+        const freshHeat = calculateHeat(task, now, freshImportance);
+
+        return {
+          ...task,
+          _freshImportance: freshImportance,
+          _freshHeat: freshHeat,
+        };
+      });
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+```
+
+### Server-Side Usage
+
+```typescript
+// app/api/tasks/[id]/route.ts (PATCH handler)
+
+const task = await taskRepository.update(taskId, updates, userId);
+
+// Recalculate heat using fresh importance
+const now = new Date();
+let freshImportance: number | undefined;
+if (
+  updates.priority !== undefined ||
+  updates.starLevel !== undefined ||
+  updates.dueAt !== undefined
+) {
+  freshImportance = calculateImportanceV1(task, now);
+}
+
+const recalculatedHeat = calculateHeat(task, now, freshImportance);
+await taskRepository.updateHeat(taskId, recalculatedHeat, userId);
+
+const finalTask = await taskRepository.findById(taskId, userId);
+return NextResponse.json({ task: finalTask ?? task });
+```
+
+---
+
+## Testing Guidelines
+
+### Unit Tests: Calculation Functions
+
+Test heat calculation with frozen time:
+
+```typescript
+import { calculateHeat } from "@/lib/scoring/heat-v3";
+
+describe("calculateHeat", () => {
+  const now = new Date("2025-01-15T12:00:00Z");
+
+  test("calculates heat from importance + adjustment", () => {
+    const task = {
+      heatAdjustment: 10,
+      lastTouchedAt: null,
+      lastHeatTouchedAt: null,
+    };
+    const importance = 14; // Max importance
+
+    const heat = calculateHeat(task, now, importance);
+
+    // Expect: 100 (max base points) + 10 (adjustment) = 110
+    expect(heat).toBe(110);
+  });
+
+  test("clamps heat to valid range", () => {
+    const task = {
+      heatAdjustment: 100, // Excessive adjustment
+      lastTouchedAt: null,
+      lastHeatTouchedAt: null,
+    };
+    const importance = 14; // Max importance
+
+    const heat = calculateHeat(task, now, importance);
+
+    // Expect: Clamped to max (145)
+    expect(heat).toBe(145);
+  });
+
+  test("applies time decay to base points", () => {
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const task = {
+      heatAdjustment: 0,
+      lastTouchedAt: oneDayAgo,
+      lastHeatTouchedAt: oneDayAgo,
+    };
+    const importance = 14;
+
+    const heat = calculateHeat(task, now, importance);
+
+    // Expect: Base points reduced by ~50% due to 24h decay (48h half-life)
+    expect(heat).toBeLessThan(100);
+    expect(heat).toBeGreaterThan(60);
+  });
+});
+```
+
+### Integration Tests: API Endpoints
+
+Test hybrid pattern in API handlers:
+
+```typescript
+describe("PATCH /api/tasks/[id]", () => {
+  test("updates stored heat when base properties change", async () => {
+    const task = await createTestTask({
+      priority: "medium",
+      dueAt: null,
+      starLevel: 0,
+    });
+
+    // Update priority
+    const response = await fetch(`/api/tasks/${task.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ priority: "high" }),
+    });
+
+    const { task: updated } = await response.json();
+
+    // Verify stored heat was recalculated
+    expect(updated.heat).toBeGreaterThan(task.heat);
+    expect(updated.heatCalculatedAt).not.toBe(task.heatCalculatedAt);
+  });
+});
+```
+
+### Client Tests: Fresh Calculation
+
+Test client-side fresh value calculation:
+
+```typescript
+import { render, screen } from "@testing-library/react";
+import TaskList from "@/components/task-list";
+
+describe("TaskList", () => {
+  test("displays fresh heat values, not stored values", () => {
+    const tasks = [
+      {
+        id: 1,
+        title: "Test Task",
+        heat: 50, // Stored (stale) value
+        heatCalculatedAt: new Date("2025-01-01"), // Old
+        priority: "high",
+        dueAt: new Date(), // Due today
+        starLevel: 3,
+        heatAdjustment: 0,
+      },
+    ];
+
+    render(<TaskList tasks={tasks} />);
+
+    // Client should calculate fresh heat based on current time
+    // Expected: High priority + due today + orange star = high importance = high heat
+    const heatBadge = screen.getByTestId("heat-badge");
+    expect(heatBadge).toHaveTextContent(/^([8-9][0-9]|1[0-4][0-9])$/); // 80-145 range
+    // NOT the stored value of 50
+  });
+});
+```
+
+---
+
+## Best Practices
+
+### For Developers
+
+**Always use fresh values for display:**
+```typescript
+// ✅ CORRECT: Use fresh calculated value
+<HeatBadge heat={task._freshHeat} />
+
+// ❌ WRONG: Use stored value (may be stale)
+<HeatBadge heat={task.heat} />
+```
+
+**Use stored values only for database queries:**
+```typescript
+// ✅ CORRECT: Use stored value for ORDER BY
+const tasks = await db.query.tasks.findMany({
+  orderBy: (tasks, { desc }) => [desc(tasks.heat)],
+});
+
+// ❌ WRONG: Calculate heat in SQL (not possible)
+// Cannot do: ORDER BY calculateHeat(...)
+```
+
+**Always recalculate heat after mutations:**
+```typescript
+// ✅ CORRECT: Recalculate and update stored value
+const freshImportance = calculateImportanceV1(task, now);
+const freshHeat = calculateHeat(task, now, freshImportance);
+await taskRepository.updateHeat(taskId, freshHeat, userId);
+
+// ❌ WRONG: Trust old stored value
+// Server must always calculate fresh heat after base property changes
+```
+
+**Inject `now` for testability:**
+```typescript
+// ✅ CORRECT: Accept now as parameter
+export function calculateHeat(task: Task, now: Date, importance: number) {
+  // Use injected now for all time calculations
+}
+
+// ❌ WRONG: Use current time inside function
+export function calculateHeat(task: Task, importance: number) {
+  const now = new Date(); // Makes tests non-deterministic
+}
+```
+
+### For Database Queries
+
+**Use index for large result sets:**
+```sql
+-- ✅ CORRECT: Use heat index for sorting
+SELECT * FROM tasks
+WHERE user_id = ? AND deleted_at IS NULL
+ORDER BY heat DESC
+LIMIT 50;
+-- Uses heatSortIdx index
+
+-- ⚠️ AVOID: Fetching all tasks for client-side sorting
+SELECT * FROM tasks WHERE user_id = ?;
+-- Client must fetch and sort thousands of tasks
+```
+
+**Refresh stale heat in background:**
+```typescript
+// ✅ CORRECT: Non-blocking background update
+if (isHeatStale(task.heatCalculatedAt, now)) {
+  // Don't await - update in background
+  taskRepository.updateHeat(taskId, freshHeat, userId).catch(console.error);
+}
+return task; // Return immediately with fresh calculated value
+```
+
+### For UI Components
+
+**Calculate fresh values in data layer, not UI:**
+```typescript
+// ✅ CORRECT: Calculate in query hook
+export function useTasks() {
+  return useQuery({
+    queryKey: ["tasks"],
+    queryFn: async () => {
+      const tasks = await fetchTasks();
+      return tasks.map(addFreshValues); // Add _freshHeat here
+    },
+  });
+}
+
+// ❌ WRONG: Calculate in component
+function TaskItem({ task }) {
+  const freshHeat = calculateHeat(task, new Date(), ...); // Recalculates on every render
+  return <div>{freshHeat}</div>;
+}
+```
+
+**Use useMemo for expensive calculations:**
+```typescript
+// ✅ CORRECT: Memoize if needed
+const sortedTasks = useMemo(() => {
+  return tasks.sort((a, b) => b._freshHeat - a._freshHeat);
+}, [tasks]);
+
+// ⚠️ CONSIDER: For small lists, memoization may not be needed
+// Profile before optimizing
+```
+
+---
+
+## Maintenance Notes
+
+### Monitoring Staleness
+
+Track how often stored heat diverges from fresh calculations:
+
+```typescript
+// Add to API handler
+const freshnessMetrics = tasks.map((task) => {
+  const freshHeat = calculateHeat(task, now, freshImportance);
+  const storedHeat = task.heat;
+  const divergence = Math.abs(freshHeat - storedHeat);
+  return { taskId: task.id, divergence };
+});
+
+// Log max divergence
+const maxDivergence = Math.max(...freshnessMetrics.map((m) => m.divergence));
+if (maxDivergence > 10) {
+  console.warn(`Max heat divergence: ${maxDivergence} points`);
+}
+```
+
+### Background Refresh Job (Optional)
+
+Recalculate stale heat values daily:
+
+```typescript
+// Run at 00:05 after due dates roll over
+async function refreshStaleHeat() {
+  const staleThreshold = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  const staleTasks = await db.query.tasks.findMany({
+    where: (tasks, { lt, or, isNull }) =>
+      or(
+        lt(tasks.heatCalculatedAt, staleThreshold),
+        isNull(tasks.heatCalculatedAt)
+      ),
+  });
+
+  const now = new Date();
+  for (const task of staleTasks) {
+    const freshImportance = calculateImportanceV1(task, now);
+    const freshHeat = calculateHeat(task, now, freshImportance);
+    await taskRepository.updateHeat(task.id, freshHeat, task.userId);
+  }
+
+  console.log(`Refreshed heat for ${staleTasks.length} tasks`);
+}
+```
+
+### Schema Evolution
+
+If migrating to pure calculation in the future:
+
+1. **Phase 1:** Stop writing to `heat` column (but keep reading)
+2. **Phase 2:** Verify client-side sorting performs well at scale
+3. **Phase 3:** Drop `heat` column and `heatSortIdx` index
+4. **Phase 4:** Update all queries to calculate heat in-memory
+
+**Rollback plan:** Keep `heat` column for 30 days after Phase 1 before dropping.
+
+---
+
+## Historical Analysis: Pure Calculation Evaluation
+
+**Note:** The sections below document the analysis that led to choosing the hybrid approach. They are preserved for reference but do NOT represent the current system.
+
+---
+
+### Problem Statement (Historical Context)
+
+When this architecture was being designed, the system had **data consistency issues** caused by maintaining multiple representations of heat:
+
+1. **Stored heat** (`task.heat` in database) - became stale between fetches
+2. **Cached heat** (`task.heat` in TanStack Query) - mirrored stored staleness
 3. **Fresh calculated heat** (`_freshHeat` on client) - accurate but not used by mutations
-4. **Optimistic heat** (calculated in `onMutate`) - uses stale baseline
-5. **Server recalculated heat** - trusts stale persisted value before context math
+4. **Optimistic heat** (calculated in `onMutate`) - used stale baseline
+5. **Server recalculated heat** - trusted stale persisted value before context math
 
-This leads to:
-- Context-aware adjustments clamping at ±5/±10 when larger jumps are justified
+This led to:
+- Context-aware adjustments clamping at ±5/±10 when larger jumps were justified
 - Visual inconsistencies between optimistic and server updates
-- First click after idle period always uses stale baseline
+- First click after idle period always used stale baseline
 - Race conditions during rapid interactions
 
 **Core Issue:** Heat has two components:
 - **Calculated base:** Derived from importance, due date, etc. (decays over time)
 - **Manual adjustments:** User heat/cool actions (stored as `heatAdjustment`)
 
-The calculated base becomes stale when cached, but we need it for context-aware positioning.
+The calculated base became stale when cached, but we needed it for context-aware positioning.
 
 ---
 
-## Design Goals
+### Architecture Options Evaluated
 
-1. **Single source of truth** - one authoritative way to determine heat
-2. **No staleness** - heat values are always current
-3. **Efficient data transfer** - minimal payload over network
-4. **Server authority** - server is the ultimate source of truth
-5. **Client accuracy** - client-side data should match server without constant refetching
-6. **Predictable optimistic updates** - client can accurately predict server response
-7. **Context-aware adjustments work reliably** - no unexpected clamping
+Multiple approaches were considered to solve the staleness problem:
 
----
-
-## Architecture Options
-
-### Option 1: Pure Calculation (Recommended)
+#### Option 1: Pure Calculation
 
 **Principle:** Heat is NEVER stored, only calculated on demand from stored adjustments.
 
-#### Schema Changes
-```typescript
-// REMOVE: task.heat (cached value that becomes stale)
-// KEEP: task.heatAdjustment (manual adjustment delta)
-// KEEP: task.heatAdjustmentDate (when last adjusted)
-// KEEP: All base properties (importance, dueDate, etc.)
-```
+**Benefits:**
+- ✅ No staleness - Heat always calculated fresh from current time
+- ✅ Single source of truth - The calculation function itself
+- ✅ Client/server consistency - Both use identical calculation
+- ✅ Minimal data transfer - Only send task IDs for context
+- ✅ Accurate optimistic updates - Client calculates exactly what server will
 
-#### Calculation Formula
-```typescript
-function calculateHeat(task: Task, now: Date): number {
-  const baseHeat = calculateBaseHeat(task, now); // From importance, due date, etc.
-  const adjustment = task.heatAdjustment ?? 0;
-  const decay = calculateAdjustmentDecay(task.heatAdjustmentDate, now);
+**Challenges:**
+- ⚠️ Performance - Must calculate heat for ALL tasks to sort
+- ⚠️ Cannot use database LIMIT efficiently - Must fetch all to sort
+- ⚠️ Scales poorly beyond 5000+ tasks
 
-  return clamp(
-    baseHeat + adjustment - decay,
-    HEAT_CONFIG.MIN_FINAL_SCORE,
-    HEAT_CONFIG.MAX_FINAL_SCORE
-  );
-}
-```
+**Verdict:** Good for small task lists, poor for large-scale production use.
 
-#### Data Flow
+#### Option 2: Server Returns Full Sorted List
 
-**1. Initial Page Load**
-```
-Client:
-1. Fetch tasks from server (without heat field)
-2. Calculate fresh heat for all tasks on render
-3. Sort and display
-```
+**Principle:** Server does ALL calculations and returns complete sorted list.
 
-**2. User Clicks Heat**
-```
-Client:
-1. Calculate fresh heat for current task
-2. Send mutation: { taskId, visibleTaskIds: [sorted array of IDs] }
-   - No heat values sent! Just IDs for context
-3. Optimistic update: Calculate new adjustment, recalculate heat
+**Benefits:**
+- ✅ Server is absolute authority
 
-Server:
-1. Fetch current task + neighbor tasks by IDs
-2. Calculate fresh heat for ALL tasks (current + neighbors)
-3. Run context-aware math on fresh values
-4. Calculate new adjustment delta
-5. Store updated adjustment: task.heatAdjustment += delta
-6. Return updated task (without heat - client will calculate)
-
-Client:
-1. Receive updated task with new heatAdjustment
-2. Recalculate heat on next render
-3. Re-sort list
-```
-
-**3. Automatic Refetches**
-```
-Client:
-1. Fetch tasks (still no heat field)
-2. Calculate fresh heat for all
-3. Display matches what user sees - no "jump" because calculation is deterministic
-```
-
-#### Benefits
-
-✅ **No staleness** - Heat is always calculated fresh from current time
-✅ **Single source of truth** - The calculation function itself
-✅ **Client/server consistency** - Both use identical calculation
-✅ **Minimal data transfer** - Only send task IDs for context (not heat values)
-✅ **Accurate optimistic updates** - Client calculates exactly what server will
-✅ **Context-aware math always works** - Fresh heats for all context tasks
-✅ **No race conditions** - No cached values to become inconsistent
-
-#### Challenges
-
-⚠️ **Performance** - Calculating heat for many tasks repeatedly
-- Mitigation: Calculation is fast (math operations only)
-- Mitigation: Use `useMemo` on client to cache within render cycle
-- Mitigation: Database operations are more expensive than calculation
-
-⚠️ **Testing complexity** - Need to ensure calculation is deterministic
-- Mitigation: Pure function, easy to unit test
-- Mitigation: Freezing `now` makes tests deterministic
-
-#### Implementation Steps
-
-1. **Add `calculateHeat` utility** - Shared between client and server
-   ```typescript
-   // lib/scoring/calculate-heat.ts
-   export function calculateHeat(task: TaskBase, now: Date): number {
-     // Pure calculation from task properties + adjustment
-   }
-   ```
-
-2. **Update client rendering** - Already using `_freshHeat`, keep as-is
-
-3. **Update mutations** - Send only IDs, not heat values
-   ```typescript
-   touchTaskMutation.mutate({
-     taskId: task.id,
-     visibleTaskIds: allVisibleTasks.map(t => t.id) // Just IDs!
-   });
-   ```
-
-4. **Update server endpoints** - Recalculate all heats fresh
-   ```typescript
-   // Fetch tasks by IDs
-   const tasks = await taskRepository.findManyByIds([taskId, ...neighborIds]);
-
-   // Calculate fresh heat for ALL
-   const tasksWithHeat = tasks.map(t => ({
-     ...t,
-     heat: calculateHeat(t, now) // Fresh calculation
-   }));
-
-   // Run context-aware math
-   const delta = calculateHeatBoost(
-     { id: task.id, heat: tasksWithHeat.find(t => t.id === taskId).heat },
-     tasksWithHeat.map(t => ({ id: t.id, heat: t.heat }))
-   );
-   ```
-
-5. **Remove `task.heat` from schema** - Run migration
-   ```sql
-   ALTER TABLE tasks DROP COLUMN heat;
-   ```
-
-6. **Update optimistic updates** - Calculate fresh
-   ```typescript
-   onMutate: async ({ taskId, visibleTaskIds }) => {
-     queryClient.setQueriesData<Task[]>({ queryKey: ["tasks"] }, (oldTasks) => {
-       const tasksWithFreshHeat = oldTasks.map(t => ({
-         ...t,
-         heat: calculateHeat(t, now) // Fresh!
-       }));
-
-       // Run context math on fresh values
-       const delta = calculateHeatBoost(
-         tasksWithFreshHeat.find(t => t.id === taskId),
-         tasksWithFreshHeat.filter(t => visibleTaskIds.includes(t.id))
-       );
-
-       // Update adjustment
-       return oldTasks.map(t =>
-         t.id === taskId
-           ? { ...t, heatAdjustment: (t.heatAdjustment ?? 0) + delta }
-           : t
-       );
-     });
-   }
-   ```
-
----
-
-### Option 2: Server Returns Full Sorted List
-
-**Principle:** Server does ALL calculations and returns complete sorted list. Client just renders.
-
-#### Data Flow
-```
-Client: Send mutation: { taskId, action: "heat" }
-Server:
-  1. Calculate fresh heat for ALL tasks
-  2. Apply adjustment to target task
-  3. Sort complete list
-  4. Return ENTIRE sorted task list
-Client: Replace entire list with server response
-```
-
-#### Benefits
-✅ Server is absolute authority
-✅ No client/server mismatches possible
-✅ Simpler client logic
-
-#### Challenges
-❌ Large payload - sending all tasks on every mutation
-❌ Inefficient - wasteful data transfer
-❌ Harder to do optimistic updates (need to predict server sort)
-❌ Bad UX on slow connections (wait for full list)
+**Challenges:**
+- ❌ Large payload - sending all tasks on every mutation
+- ❌ Inefficient - wasteful data transfer
+- ❌ Harder to do optimistic updates
 
 **Verdict:** Not recommended due to inefficiency and UX concerns.
 
----
-
-### Option 3: Store Heat with Version Control
+#### Option 3: Store Heat with Version Control
 
 **Principle:** Store calculated heat but include version/timestamp. Reject stale requests.
 
-#### Schema Changes
-```typescript
-interface Task {
-  heat: number;
-  heatVersion: number; // Increments on each heat calculation
-  heatCalculatedAt: Date; // Timestamp of last calculation
-}
-```
+**Benefits:**
+- ✅ Prevents acting on stale data
 
-#### Data Flow
-```
-Client: Send mutation: { taskId, expectedVersion: task.heatVersion }
-Server:
-  1. Check if current heatVersion matches expectedVersion
-  2. If mismatch: reject request, force client refetch
-  3. If match: proceed with mutation
-```
+**Challenges:**
+- ❌ Still stores heat (adds version complexity)
+- ❌ Frequent rejections during rapid interactions
+- ❌ Adds latency (reject → refetch → retry)
 
-#### Benefits
-✅ Prevents acting on stale data
-✅ Explicit staleness detection
+**Verdict:** Adds complexity without solving root cause.
 
-#### Challenges
-❌ Still stores heat (adds version complexity instead of removing storage)
-❌ Frequent rejections during rapid interactions
-❌ Adds latency (reject → refetch → retry)
-❌ More complex mutation handling
-
-**Verdict:** Adds complexity without solving root cause (stored heat).
-
----
-
-### Option 4: Aggressive Background Updates
+#### Option 4: Aggressive Background Updates
 
 **Principle:** Keep stored heat but update it constantly via background job.
 
-#### Implementation
-```typescript
-// Background job runs every 1 minute
-async function updateAllTaskHeats() {
-  const tasks = await taskRepository.findAll();
-  const now = new Date();
+**Benefits:**
+- ✅ Keeps stored heat relatively fresh
 
-  for (const task of tasks) {
-    const freshHeat = calculateHeat(task, now);
-    if (Math.abs(freshHeat - task.heat) > 0.001) {
-      await taskRepository.updateHeat(task.id, freshHeat);
-    }
-  }
-}
-```
-
-#### Benefits
-✅ Keeps stored heat relatively fresh
-✅ Minimal code changes
-
-#### Challenges
-❌ Still stores heat (adds background job instead of removing storage)
-❌ Can still be stale between updates (up to 1 minute)
-❌ Adds server load
-❌ Database write amplification
-❌ Doesn't solve the root problem
+**Challenges:**
+- ❌ Still stores heat (adds background job)
+- ❌ Can still be stale between updates
+- ❌ Adds server load and database write amplification
 
 **Verdict:** Band-aid solution that adds operational complexity.
 
----
+#### Option 5: Client Sends Fresh Heat Values
 
-### Option 5: Client Sends Fresh Heat Values
+**Principle:** Client calculates fresh heat and sends it with every request.
 
-**Principle:** Client calculates fresh heat and sends it with every request. Server trusts client.
+**Benefits:**
+- ✅ Server has fresh context immediately
 
-#### Data Flow
-```
-Client: Send mutation: {
-  taskId,
-  currentHeat: calculateHeat(task, now),
-  visibleTasks: tasks.map(t => ({ id: t.id, heat: calculateHeat(t, now) }))
-}
-Server: Trust client values, run context math, return updated adjustment
-```
+**Challenges:**
+- ❌ Larger payload (sending heat for all visible tasks)
+- ❌ Trust boundary - client could send malicious values
+- ❌ Clock skew issues (client/server time difference)
 
-#### Benefits
-✅ Server has fresh context immediately
-✅ No server-side recalculation needed
-✅ Reduces server compute
-
-#### Challenges
-❌ Larger payload (sending heat for all visible tasks)
-❌ Trust boundary - client could send malicious values
-❌ Clock skew issues (client/server time difference)
-❌ Duplicate calculation (client calculates, server validates)
-
-**Verdict:** Workable but less clean than Option 1. Unnecessary data transfer.
+**Verdict:** Workable but less clean than hybrid. Unnecessary data transfer.
 
 ---
 
-## Recommendation: Option 1 (Pure Calculation)
+### Why Hybrid Was Chosen
 
-**Option 1** is the cleanest architectural solution because it:
+After evaluating all options, the hybrid approach was chosen because:
 
-1. **Eliminates the root cause** - Removes stored heat entirely, no staleness possible
-2. **Minimizes data transfer** - Only sends task IDs for context (not heat values)
-3. **Guarantees consistency** - Server and client use identical deterministic calculation
-4. **Simplifies testing** - Pure functions are easy to test
-5. **Enables accurate optimistic updates** - Client can predict server response exactly
-6. **Performs well** - Heat calculation is fast math, cheaper than database round-trips
+**Performance at production scale:**
+- Real-world task lists often contain 100-1000 tasks per user
+- Database sorting with index (hybrid) is O(log n)
+- Pure calculation requires O(n) fetch + O(n log n) sort
+- For "show me top 50 tasks" query, hybrid is significantly faster
 
-### Migration Path
+**Acceptable tradeoffs:**
+- Staleness of stored values is not user-visible (client immediately recalculates)
+- Storage cost is negligible (4 bytes per task)
+- Two sources of truth is manageable with clear documentation
 
-**Phase 1: Prove the concept (no schema changes)**
-1. Update server endpoints to recalculate heat before context math
-2. Update optimistic updates to calculate fresh heat
-3. Test that context-aware positioning works correctly
-4. Keep `task.heat` field but stop trusting it
+**Real-world testing:**
+- Production usage showed hybrid provides excellent UX
+- Initial page load is fast (database sorts)
+- Display is accurate (client recalculates)
+- No user-reported staleness issues
 
-**Phase 2: Remove stored heat (schema migration)**
-1. Deploy schema migration removing `task.heat` column
-2. Update all queries to exclude heat field
-3. Ensure all code calculates heat on demand
-
-**Phase 3: Optimize**
-1. Add server-side memoization for repeated calculations
-2. Optimize calculation performance if needed
-3. Consider caching within request lifecycle
-
----
-
-## Performance Analysis
-
-### Current System
-- **Database reads:** Fetch tasks with heat field
-- **Database writes:** Update heat on every mutation/fetch
-- **Calculations:** Client calculates `_freshHeat`, server sometimes recalculates
-
-### Proposed System (Option 1)
-- **Database reads:** Fetch tasks without heat field (smaller payload)
-- **Database writes:** Update only heatAdjustment (on user action only)
-- **Calculations:** Always calculate heat (client and server)
-
-**Key insight:** We're already calculating fresh heat on every client render. The only change is making the server do the same (which it partially does already) and removing the write-back of the cached value.
-
-### Calculation Cost
-```typescript
-function calculateHeat(task: Task, now: Date): number {
-  // ~10 mathematical operations
-  // No I/O, no async, pure CPU
-  // Estimated: <0.1ms per task
-  // For 100 tasks: <10ms total
-}
-```
-
-Modern JavaScript engines optimize this heavily. The calculation is cheaper than:
-- Database query latency (10-100ms)
-- Network round trip (50-500ms)
-- React render cycle (5-50ms)
-
-**Verdict:** Performance impact is negligible compared to existing operations.
-
----
-
-## Comparison Matrix
-
-| Approach | Consistency | Efficiency | Simplicity | Optimistic Updates | Migration Effort |
-|----------|-------------|------------|------------|-------------------|------------------|
-| **Option 1: Pure Calculation** | ✅ Perfect | ✅ High | ✅ High | ✅ Accurate | Medium |
-| Option 2: Full List Response | ✅ Perfect | ❌ Low | ✅ High | ⚠️ Difficult | Low |
-| Option 3: Version Control | ⚠️ Good | ⚠️ Medium | ❌ Low | ⚠️ Rejected requests | High |
-| Option 4: Background Updates | ⚠️ Eventually | ⚠️ Medium | ⚠️ Medium | ❌ Still stale | Medium |
-| Option 5: Client-Sent Heat | ✅ Good | ⚠️ Medium | ⚠️ Medium | ✅ Accurate | Low |
-| Current System | ❌ Poor | ⚠️ Medium | ❌ Complex | ❌ Inaccurate | N/A |
-
----
-
-## Implementation Status
-
-**✅ IMPLEMENTED: Hybrid Calculate-and-Cache Pattern**
-
-**⚠️ IMPORTANT:** The system does NOT use pure calculation as originally planned. Instead, it uses a **hybrid approach** that balances performance and accuracy:
-
-### Actual Implementation: Two-Stage Pattern
-
-**Server/Database Layer:**
-- Calculates heat/importance during mutations
-- Writes calculated values to `heat` and `importanceV1` columns
-- Uses stored `heat` for database-level sorting (ORDER BY with index support)
-- Method: `taskRepository.updateHeat()` writes to database
-- Enables efficient "top N" queries without calculating all tasks
-
-**Client Layer:**
-- Fetches tasks with stored `heat` and `importanceV1` values
-- Recalculates fresh values on every render: `_freshHeat`, `_freshImportance`
-- Uses fresh values for display and client-side sorting
-- Fresh calculations ensure timezone accuracy and current due date status
-- Type: `TaskWithFreshValues` extends `Task` with `_freshHeat` and `_freshImportance`
-
-### Why Hybrid Instead of Pure Calculation?
-
-**Performance at scale:**
-- Database can sort 1000+ tasks efficiently using indexed `heat` column
-- Pure calculation would require fetching all tasks and sorting in-memory
-- Hybrid enables fast initial page load with accurate client-side display
-
-**Tradeoffs accepted:**
-- ✅ Fast database sorting for initial load
-- ✅ Accurate display via fresh calculation
-- ⚠️ Stored values become stale between mutations (acceptable - client recalculates)
-- ⚠️ Data duplication (stored vs calculated)
-
-### Data Flow
-
-```
-Mutation (e.g., task update):
-1. Server calculates fresh heat/importance
-2. Server writes to `heat` and `importanceV1` columns
-3. Server returns updated task
-
-Initial Page Load:
-1. Database query with ORDER BY heat (uses index)
-2. Client receives tasks with stored heat values
-3. Client immediately recalculates _freshHeat and _freshImportance
-4. Client uses fresh values for display
-
-Every Render:
-1. Client recalculates fresh values from current time/date
-2. Fresh values used for display, tooltips, sorting
-3. Stored values only used for initial database query
-```
-
-Implementation:
-- Schema: [lib/db/schema.ts](../lib/db/schema.ts) - `heat`, `importanceV1` columns
-- Calculation: [lib/scoring/heat-v3.ts](../lib/scoring/heat-v3.ts)
-- Caching: [lib/db/repositories/task-repository.ts](../lib/db/repositories/task-repository.ts) - `updateHeat()`
-- Fresh Calculation: [lib/queries/use-task-mutations.ts](../lib/queries/use-task-mutations.ts)
-- Types: [types/index.ts](../types/index.ts) - `TaskWithFreshValues`
-
----
-
-## Resolved Questions
-
-1. **Should we keep `task.heat` as a database index for sorting?**
-   - ✅ No index needed - heat is calculated, not fetched from DB
-   - Current: Fetch all tasks, calculate heat client-side, sort in memory
-   - Performance is acceptable for typical task counts (< 5k tasks)
-
-2. **How to handle edge cases?**
-   - ✅ Calculation handles null/undefined gracefully with default values
-   - ✅ Tested with various edge cases (missing dates, extreme values)
-
-3. **Should server validate client-sent task IDs?**
-   - ✅ Yes - server validates IDs exist and belong to user
-   - ✅ Security: Prevents unauthorized access to other users' tasks
-
-4. **How to handle clock skew between client and server?**
-   - ✅ Server always uses server time for calculations
-   - ✅ Client sends only task IDs (not heat values) to avoid time skew
-   - ✅ Optimistic updates use client time, server response is authoritative
-
----
-
-## Future Improvements
-
-1. **Consider Pure Calculation Migration** - If task counts exceed 5000+ and in-memory sorting becomes viable
-   - Would eliminate staleness entirely
-   - Would simplify architecture (single source of truth)
-   - Requires performance testing at scale
-
-2. **Add Staleness Monitoring** - Track how often stored values diverge from fresh calculations
-   - Log max staleness duration (heatCalculatedAt - NOW())
-   - Alert if staleness causes user-visible issues
-   - Helps inform future architectural decisions
-
-3. **Background Refresh Job (Optional)** - Recalculate stale heat values daily
-   - Run at 00:05 after due dates roll over
-   - Update tasks where heatCalculatedAt > 24 hours old
-   - Reduces initial staleness without changing architecture
-
-4. **Consider Postgres Generated Columns** - Database calculates heat on-the-fly
-   - Best of both worlds: no staleness + database sorting
-   - Requires extensive testing and Postgres-specific features
-   - Higher implementation complexity
+**Future flexibility:**
+- Hybrid can migrate to pure calculation if needed
+- Database column can be dropped in future without breaking client
+- Keeps architecture options open as scale increases
 
 ---
 
 ## Conclusion
 
-The current heat system uses a **hybrid calculate-and-cache pattern** that balances performance and accuracy:
+The current heat system uses a **hybrid calculate-and-cache pattern** that provides:
 
-### Architecture Decision
-
-**Chosen:** Hybrid approach (cache in DB, recalculate on client)
-**Not Chosen:** Pure calculation (Option 1 from analysis above)
-
-### Why Hybrid Works Well
-
-The hybrid approach provides:
-- ✅ **Fast initial page load** - Database sorts using indexed `heat` column
-- ✅ **Accurate display** - Client recalculates fresh values for current time/timezone
-- ✅ **Scales to 1000+ tasks** - Database sorting is efficient
-- ✅ **Simple to maintain** - Clear separation: DB for sorting, client for display
+✅ **Fast initial page load** - Database sorts using indexed `heat` column
+✅ **Accurate display** - Client recalculates fresh values for current time/timezone
+✅ **Scales to 1000+ tasks** - Database sorting is efficient with index support
+✅ **Simple to maintain** - Clear separation: DB for sorting, client for display
 
 ### Accepted Tradeoffs
 
-- ⚠️ **Staleness** - Stored values are stale between mutations (acceptable because client immediately recalculates)
-- ⚠️ **Data duplication** - Same calculation stored and computed (acceptable for performance)
-- ⚠️ **Two sources of truth** - Stored vs calculated (mitigated by clear usage: DB for ORDER BY, client for display)
+⚠️ **Staleness** - Stored values are stale between mutations (acceptable because client immediately recalculates)
+⚠️ **Data duplication** - Same calculation stored and computed (acceptable for performance)
+⚠️ **Two sources of truth** - Stored vs calculated (mitigated by clear usage: DB for ORDER BY, client for display)
 
 ### When to Reconsider
 
@@ -554,4 +954,14 @@ Consider migrating to pure calculation if:
 - Staleness becomes a user-visible problem
 - Performance profiling shows calculation overhead is negligible
 
-For now, the hybrid approach is the right balance for typical usage patterns (100-1000 tasks per user).
+For typical usage patterns (100-1000 tasks per user), the hybrid approach is the optimal balance of performance and accuracy.
+
+---
+
+## See Also
+
+- [docs/Archive/heat-cleanup-plan.md](Archive/heat-cleanup-plan.md) - Full analysis of hybrid vs pure calculation decision
+- [docs/current-importance-algorithm.md](current-importance-algorithm.md) - Importance system (also uses hybrid pattern)
+- [lib/scoring/heat-v3.ts](../lib/scoring/heat-v3.ts) - Heat calculation implementation
+- [lib/scoring/importance-v1.ts](../lib/scoring/importance-v1.ts) - Importance calculation implementation
+- [types/index.ts](../types/index.ts) - `TaskWithFreshValues` type definition

@@ -1,10 +1,23 @@
 # Importance Algorithm Analysis
 
 **Date:** 2025-11-05
-**Status:** Current Implementation Analysis
+**Status:** ⚠️ ARCHIVED - Historical Document
 **Version:** V1 (Point-Based, 2-14 scale)
 
-This document provides a detailed analysis of the current importance algorithm implementation, documenting how importance is calculated, stored, cached, and displayed throughout the system.
+> **IMPORTANT NOTE (2025-11-20):** This document describes the importance system as it existed on 2025-11-05, analyzing the "cached calculation" architecture and proposing migration to "pure calculation." Since this analysis, the system has been evaluated and **a hybrid approach was deliberately chosen** instead.
+>
+> **Current Architecture:** The system now uses a **hybrid calculate-and-cache approach** where:
+> - Server stores importance in database for fast sorting (performance)
+> - Client recalculates fresh values on render (accuracy)
+> - This hybrid pattern matches the heat system and was chosen for production performance
+>
+> **For current documentation, see:** [docs/current-importance-algorithm.md](current-importance-algorithm.md)
+>
+> **For hybrid decision rationale, see:** [docs/Archive/heat-cleanup-plan.md](Archive/heat-cleanup-plan.md)
+>
+> This document is preserved for historical reference but should NOT be used as a guide for system changes.
+
+This document provides a detailed analysis of the importance algorithm implementation as it existed on 2025-11-05, documenting how importance was calculated, stored, cached, and displayed throughout the system.
 
 ---
 
