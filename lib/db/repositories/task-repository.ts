@@ -230,18 +230,6 @@ export class TaskRepository implements ITaskRepository {
     return updatedTask;
   }
 
-  async snooze(id: number, untilDate: Date, userId: string): Promise<Task> {
-    const [updatedTask] = await this.db
-      .update(tasks)
-      .set({
-        nextSurfaceAt: untilDate,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
-      .returning();
-    return updatedTask;
-  }
-
   async complete(id: number, userId: string): Promise<Task> {
     // First, fetch the task to check if it's recurring
     const task = await this.findById(id, userId);
@@ -342,11 +330,5 @@ export class TaskRepository implements ITaskRepository {
       .update(tasks)
       .set({ heat, heatCalculatedAt: now, updatedAt: now })
       .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
-  }
-
-  async recalculateAllHeat(userId: string): Promise<void> {
-    // This will be implemented in Phase 3 when we build the heat calculation engine
-    // For now, this is a placeholder
-    console.log(`recalculateAllHeat not yet implemented for user ${userId}`);
   }
 }

@@ -26,7 +26,6 @@ export interface ITaskRepository {
 
   // Special operations
   touch(id: number, userId: string): Promise<Task>;
-  snooze(id: number, untilDate: Date, userId: string): Promise<Task>;
   complete(id: number, userId: string): Promise<Task>;
   uncomplete(id: number, userId: string): Promise<Task>;
   archive(id: number, userId: string): Promise<Task>;
@@ -35,7 +34,6 @@ export interface ITaskRepository {
   // Bulk operations
   moveToBucket(ids: number[], bucket: Bucket, userId: string): Promise<void>;
   updateHeat(id: number, heat: number, userId: string): Promise<void>;
-  recalculateAllHeat(userId: string): Promise<void>;
 }
 
 export interface TaskQueryOptions {
