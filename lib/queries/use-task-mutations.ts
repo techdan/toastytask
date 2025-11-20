@@ -200,6 +200,7 @@ export function useCreateTask() {
         dueAt: newTask.dueAt ?? null,
         bucket: newTask.bucket ?? "todo",
         repeatType: newTask.repeatType ?? "none",
+        repeatRule: newTask.repeatRule ?? null,
         heat: newTask.heat ?? 0.5,
         heatCalculatedAt: now,
         heatAdjustment: 0, // V3: Direct heat adjustment

@@ -76,7 +76,7 @@ export const RECURRENCE_REGISTRY: Record<RepeatType, RecurrenceRuleDef> = {
     description: "Task does not recur",
     sortOrder: 0,
     group: "common",
-    calculateNext: (dueDate) => {
+    calculateNext: (_dueDate) => {
       throw new Error("Cannot calculate next due date for non-recurring task");
     },
     getDisplayText: () => "Does not repeat",

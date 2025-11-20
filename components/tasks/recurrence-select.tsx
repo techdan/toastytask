@@ -35,7 +35,7 @@ export function RecurrenceSelect({ value, onValueChange, disabled }: RecurrenceS
   ], [recurrenceOptions]);
 
   // Get current label from registry
-  const currentLabel = RECURRENCE_REGISTRY[currentValue]?.label || "None";
+  const currentLabel = RECURRENCE_REGISTRY[currentValue as RepeatType]?.label || "None";
 
   const handleValueChange = (newValue: string) => {
     onValueChange(newValue as Task["repeatType"]);
