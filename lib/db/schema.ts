@@ -53,9 +53,10 @@ export const tasks = pgTable("tasks", {
     .default("todo"),
 
   // Recurrence (Phase 7)
-  repeatType: text("repeat_type", { enum: ["none", "daily", "weekly", "monthly"] })
+  repeatType: text("repeat_type")
     .notNull()
     .default("none"),
+  repeatRule: text("repeat_rule"), // JSON-serialized RecurrenceConfig (only for "custom" type)
 
   // Heat model fields - See docs/current-heat-algorithm.md
   heat: real("heat").notNull().default(0.5), // DEPRECATED: Heat is now calculated, not stored (kept for migration)

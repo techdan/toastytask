@@ -1,70 +1,10 @@
 import { eq, and, isNull, desc, asc, inArray, sql } from "drizzle-orm";
 import type { ITaskRepository, TaskQueryOptions } from "./interfaces";
 import type { Task, NewTask } from "@/lib/db/schema";
-import type { Bucket } from "@/types";
-import { RepeatType } from "@/types";
+import type { Bucket, RepeatType } from "@/types";
 import { tasks } from "@/lib/db/schema";
 import { getDatabase } from "@/lib/db/client";
-
-/**
- * Calculate the next due date for a recurring task
- */
-function calculateNextDueDate(currentDueDate: Date | null, repeatType: string): Date {
-  const now = new Date();
-  const baseDate = currentDueDate || now;
-
-  // Helper: days in month
-  const daysInMonth = (year: number, monthIndex: number) => {
-    return new Date(year, monthIndex + 1, 0).getDate();
-  };
-
-  switch (repeatType) {
-    case RepeatType.DAILY: {
-      const next = new Date(baseDate);
-      next.setDate(next.getDate() + 1);
-      return next;
-    }
-    case RepeatType.WEEKLY: {
-      const next = new Date(baseDate);
-      next.setDate(next.getDate() + 7);
-      return next;
-    }
-    case RepeatType.MONTHLY: {
-      // Smarter monthly advance:
-      // - Keep the same day-of-month as the original due date when possible
-      // - If completing late, advance to the next occurrence that is not in the past
-      // - If target month has fewer days, clamp to last day of that month
-      const anchor = baseDate.getDate();
-
-      // Reference point: the later of current due date or now
-      const ref = now > baseDate ? now : baseDate;
-
-      let year = ref.getFullYear();
-      let month = ref.getMonth();
-
-      // If the reference day has already passed (>= anchor), move to next month
-      if (ref.getDate() >= anchor) {
-        month += 1;
-        if (month > 11) {
-          month = 0;
-          year += 1;
-        }
-      }
-
-      const dim = daysInMonth(year, month);
-      const day = Math.min(anchor, dim);
-
-      const next = new Date(baseDate);
-      next.setFullYear(year);
-      next.setMonth(month);
-      next.setDate(day);
-      return next;
-    }
-    default:
-      // If no repeat type or "none", return the current date (no change)
-      return baseDate;
-  }
-}
+import { calculateNextDueDate as registryCalculateNextDueDate, isRecurring } from "@/lib/recurrence/registry";
 
 export class TaskRepository implements ITaskRepository {
   private db = getDatabase();
@@ -309,9 +249,12 @@ export class TaskRepository implements ITaskRepository {
       throw new Error(`Task with id ${id} not found`);
     }
 
-    // If the task is recurring (repeatType is not "none"), advance the due date instead of marking as completed
-    if (task.repeatType && task.repeatType !== RepeatType.NONE) {
-      const nextDueDate = calculateNextDueDate(task.dueAt, task.repeatType);
+    // If the task is recurring, advance the due date instead of marking as completed
+    if (task.repeatType && isRecurring(task.repeatType as RepeatType)) {
+      if (!task.dueAt) {
+        throw new Error(`Recurring task ${id} must have a due date`);
+      }
+      const nextDueDate = registryCalculateNextDueDate(task.repeatType as RepeatType, task.dueAt);
       const [updatedTask] = await this.db
         .update(tasks)
         .set({

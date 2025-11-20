@@ -81,7 +81,7 @@ export function TaskProjectSelect({
       onOpenChange={setIsOpen}
       disabled={disabled}
     >
-      <SelectTrigger className="h-6 w-full px-2 text-left text-xs">
+      <SelectTrigger className="project-trigger">
         <SelectValue>
           <div className="flex items-center gap-1.5">
             {value !== null && (

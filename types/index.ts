@@ -20,7 +20,11 @@ export const RepeatType = {
   NONE: "none",
   DAILY: "daily",
   WEEKLY: "weekly",
+  BIWEEKLY: "biweekly",
   MONTHLY: "monthly",
+  SEMIANNUAL: "semiannual",
+  ANNUAL: "annual",
+  CUSTOM: "custom", // For future advanced rule-based recurrence
 } as const;
 
 export type RepeatType = (typeof RepeatType)[keyof typeof RepeatType];

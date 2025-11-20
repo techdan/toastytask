@@ -129,27 +129,6 @@ export function SettingsDrawer({
                 </div>
 
                 <div className="space-y-3">
-                  <Label htmlFor="defaultBucket" className="text-sm font-medium">
-                    Default Bucket
-                  </Label>
-                  <Select
-                    value={settings.defaultBucket}
-                    onValueChange={(value) =>
-                      updateSetting("defaultBucket", value as SettingsType["defaultBucket"])
-                    }
-                  >
-                    <SelectTrigger id="defaultBucket" className="h-11 text-base">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todo">Todo</SelectItem>
-                      <SelectItem value="watch">Watch</SelectItem>
-                      <SelectItem value="later">Later</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-3">
                   <Label htmlFor="defaultDueDate" className="text-sm font-medium">
                     Default Due Date
                   </Label>

@@ -10,7 +10,6 @@ import type { NewTask } from "@/types";
 interface QuickAddProps {
   onAdd: (task: Omit<NewTask, "createdAt" | "updatedAt">) => void;
   defaultPriority?: "low" | "medium" | "high" | "top";
-  defaultBucket?: "todo" | "watch" | "later";
   currentProjectId?: number | null;
 }
 
@@ -37,7 +36,7 @@ function calculateDueDate(defaultDueDate: "none" | "today" | "tomorrow" | "next_
   }
 }
 
-export function QuickAdd({ onAdd, defaultPriority, defaultBucket, currentProjectId }: QuickAddProps) {
+export function QuickAdd({ onAdd, defaultPriority, currentProjectId }: QuickAddProps) {
   const [title, setTitle] = useState("");
   const [isAdding, setIsAdding] = useState(false);
 
@@ -55,14 +54,13 @@ export function QuickAdd({ onAdd, defaultPriority, defaultBucket, currentProject
     try {
       // Use settings defaults if available, otherwise fall back to props or hardcoded defaults
       const priority = defaultPriority || settings?.defaultPriority || "medium";
-      const bucket = defaultBucket || settings?.defaultBucket || "todo";
       const dueAt = calculateDueDate(settings?.defaultDueDate || "none");
 
       // Create task with defaults
       await onAdd({
         title: trimmedTitle,
         priority,
-        bucket,
+        bucket: "todo", // Always default to "todo"
         star: false,
         dueAt,
         projectId: currentProjectId ?? null,

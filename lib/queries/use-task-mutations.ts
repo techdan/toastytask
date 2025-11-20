@@ -10,7 +10,7 @@ import {
 } from "@/lib/scoring/heat-v3";
 import { HEAT_CONFIG } from "@/lib/scoring/heat-config";
 import { PRIMARY_TASKS_QUERY_KEY } from "./task-query-keys";
-import type { Task, NewTask } from "@/types";
+import type { Task, NewTask, RepeatType } from "@/types";
 import type { HeatV3Breakdown } from "@/lib/scoring/heat-v3";
 import { applyStarLevelToTask, mergeTaskWithCachedNotes } from "./task-cache-helpers";
 import {
@@ -18,6 +18,7 @@ import {
   registerHeatAction,
   shouldProcessHeatActionResponse,
 } from "./heat-action-tracker";
+import { calculateNextDueDate as registryCalculateNextDueDate, isRecurring } from "@/lib/recurrence/registry";
 
 interface TaskResponse {
   task: Task;
@@ -502,7 +503,6 @@ export function useStarTask(options?: UseStarTaskOptions) {
 
 // Helper to optimistically calculate next due date for recurring tasks
 function calculateOptimisticNextDueDate(currentDueDate: Date | null | number, repeatType: string): Date {
-  const now = new Date();
   let baseDate: Date;
 
   if (currentDueDate) {
@@ -510,50 +510,11 @@ function calculateOptimisticNextDueDate(currentDueDate: Date | null | number, re
       ? new Date(currentDueDate * 1000)
       : new Date(currentDueDate);
   } else {
-    baseDate = now;
+    baseDate = new Date();
   }
 
-  // Helper: days in month
-  const daysInMonth = (year: number, monthIndex: number) => new Date(year, monthIndex + 1, 0).getDate();
-
-  switch (repeatType) {
-    case "daily": {
-      const next = new Date(baseDate);
-      next.setDate(next.getDate() + 1);
-      return next;
-    }
-    case "weekly": {
-      const next = new Date(baseDate);
-      next.setDate(next.getDate() + 7);
-      return next;
-    }
-    case "monthly": {
-      const anchor = baseDate.getDate();
-      const ref = now > baseDate ? now : baseDate;
-
-      let year = ref.getFullYear();
-      let month = ref.getMonth();
-
-      if (ref.getDate() >= anchor) {
-        month += 1;
-        if (month > 11) {
-          month = 0;
-          year += 1;
-        }
-      }
-
-      const dim = daysInMonth(year, month);
-      const day = Math.min(anchor, dim);
-
-      const next = new Date(baseDate);
-      next.setFullYear(year);
-      next.setMonth(month);
-      next.setDate(day);
-      return next;
-    }
-    default:
-      return baseDate;
-  }
+  // Use registry for calculation
+  return registryCalculateNextDueDate(repeatType as RepeatType, baseDate);
 }
 
 // Hook: Complete task (handles recurring tasks)
@@ -580,7 +541,7 @@ export function useCompleteTask() {
 
           // If the task is recurring, advance the due date
           // If not recurring, mark as completed
-          if (task.repeatType && task.repeatType !== "none") {
+          if (task.repeatType && isRecurring(task.repeatType as RepeatType)) {
             // Optimistic: advance due date immediately
             const nextDueDate = calculateOptimisticNextDueDate(task.dueAt, task.repeatType);
             const updatedTask = { ...task, dueAt: nextDueDate };

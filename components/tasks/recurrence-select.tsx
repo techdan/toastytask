@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Repeat } from "lucide-react";
 import {
   Select,
@@ -12,6 +12,7 @@ import {
 import { RepeatType } from "@/types";
 import type { Task } from "@/types";
 import { cn } from "@/lib/utils";
+import { RECURRENCE_REGISTRY, getRecurrenceOptions } from "@/lib/recurrence/registry";
 
 interface RecurrenceSelectProps {
   value: Task["repeatType"];
@@ -19,19 +20,22 @@ interface RecurrenceSelectProps {
   disabled?: boolean;
 }
 
-const recurrenceLabels: Record<string, string> = {
-  [RepeatType.NONE]: "None",
-  [RepeatType.DAILY]: "Daily",
-  [RepeatType.WEEKLY]: "Weekly",
-  [RepeatType.MONTHLY]: "Monthly",
-};
-
-const recurrenceOrder = [RepeatType.NONE, RepeatType.DAILY, RepeatType.WEEKLY, RepeatType.MONTHLY];
-
 export function RecurrenceSelect({ value, onValueChange, disabled }: RecurrenceSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const currentValue = value || RepeatType.NONE;
   const showIcon = currentValue !== RepeatType.NONE;
+
+  // Get all recurrence options from registry (excludes "none" and "custom")
+  const recurrenceOptions = useMemo(() => getRecurrenceOptions(), []);
+
+  // Build full list including "None" option
+  const allOptions = useMemo(() => [
+    RECURRENCE_REGISTRY[RepeatType.NONE],
+    ...recurrenceOptions
+  ], [recurrenceOptions]);
+
+  // Get current label from registry
+  const currentLabel = RECURRENCE_REGISTRY[currentValue]?.label || "None";
 
   const handleValueChange = (newValue: string) => {
     onValueChange(newValue as Task["repeatType"]);
@@ -55,7 +59,7 @@ export function RecurrenceSelect({ value, onValueChange, disabled }: RecurrenceS
         {showIcon && (
           <>
             <Repeat className="h-3 w-3" />
-            <span>{recurrenceLabels[currentValue]}</span>
+            <span>{currentLabel}</span>
           </>
         )}
       </button>
@@ -75,16 +79,16 @@ export function RecurrenceSelect({ value, onValueChange, disabled }: RecurrenceS
         <SelectValue>
           <div className="flex items-center gap-1">
             {showIcon && <Repeat className="h-3 w-3" />}
-            <span>{recurrenceLabels[currentValue]}</span>
+            <span>{currentLabel}</span>
           </div>
         </SelectValue>
       </SelectTrigger>
       <SelectContent className="text-xs">
-        {recurrenceOrder.map((repeatType) => (
-          <SelectItem key={repeatType} value={repeatType} className="text-xs py-1 pl-2 pr-6">
+        {allOptions.map((option) => (
+          <SelectItem key={option.id} value={option.id} className="text-xs py-1 pl-2 pr-6">
             <div className="flex items-center gap-1.5">
-              {repeatType !== RepeatType.NONE && <Repeat className="h-3 w-3" />}
-              {recurrenceLabels[repeatType]}
+              {option.id !== RepeatType.NONE && <Repeat className="h-3 w-3" />}
+              {option.label}
             </div>
           </SelectItem>
         ))}

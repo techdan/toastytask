@@ -35,17 +35,29 @@ export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted }: D
     }
 
     const dueDate = typeof dueAt === "number" ? new Date(dueAt * 1000) : new Date(dueAt);
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const dueYear = dueDate.getFullYear();
+    const isDifferentYear = dueYear !== currentYear;
+
+    // Helper to format date with optional year
+    const formatDate = (date: Date) => {
+      const month = monthNames[date.getMonth()];
+      const day = date.getDate();
+      const shortYear = `'${String(dueYear).slice(-2)}`;
+      return isDifferentYear ? `${month} ${day} ${shortYear}` : `${month} ${day}`;
+    };
 
     // If completed, just show the date without any special formatting
     if (isCompleted) {
-      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       return {
-        text: `${monthNames[dueDate.getMonth()]} ${dueDate.getDate()}`,
+        text: formatDate(dueDate),
         textClassName: "",
       };
     }
 
-    const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
@@ -59,9 +71,8 @@ export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted }: D
     const isTomorrow = dueStart.getTime() === tomorrowStart.getTime();
 
     if (isPastDue) {
-      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       return {
-        text: `${monthNames[dueDate.getMonth()]} ${dueDate.getDate()}`,
+        text: formatDate(dueDate),
         textClassName: "text-white font-medium",
         wrapperClassName: "rounded bg-red-500 px-2 py-0.5",
       };
@@ -76,9 +87,8 @@ export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted }: D
     }
 
     // Future date
-    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     return {
-      text: `${monthNames[dueDate.getMonth()]} ${dueDate.getDate()}`,
+      text: formatDate(dueDate),
       textClassName: "text-foreground",
     };
   };
