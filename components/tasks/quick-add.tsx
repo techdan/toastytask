@@ -61,7 +61,6 @@ export function QuickAdd({ onAdd, defaultPriority, currentProjectId }: QuickAddP
         title: trimmedTitle,
         priority,
         bucket: "todo", // Always default to "todo"
-        star: false,
         dueAt,
         projectId: currentProjectId ?? null,
         heat: 0.0,

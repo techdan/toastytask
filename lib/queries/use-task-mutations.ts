@@ -194,7 +194,6 @@ export function useCreateTask() {
         projectId: newTask.projectId ?? null,
         userId: null,
         priority: newTask.priority ?? "medium",
-        star: false, // Deprecated V2 - kept for schema compatibility
         starLevel: newTask.starLevel ?? 0, // V3: 0=none, 1=blue, 2=yellow, 3=orange
         starIntentVersion: 0,
         dueAt: newTask.dueAt ?? null,
@@ -204,13 +203,9 @@ export function useCreateTask() {
         heat: newTask.heat ?? 0.5,
         heatCalculatedAt: now,
         heatAdjustment: 0, // V3: Direct heat adjustment
-        heatTouchCount: 0, // Deprecated V2 - kept for schema compatibility
-        otherTouchCount: 0, // Deprecated V2 - kept for schema compatibility
         lastHeatTouchedAt: null,
         lastTouchedAt: null,
-        nextSurfaceAt: null, // Deprecated V2 - kept for schema compatibility
-        coldStorageAt: null,
-        touchCount: 0, // Deprecated V1 - kept for schema compatibility
+        touchCount: 0, // Still used - incremented on touch
         importanceV1: 0, // DEPRECATED: Will be calculated on render (pure calculation architecture)
         completedAt: null,
         archivedAt: null,

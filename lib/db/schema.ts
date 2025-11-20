@@ -42,7 +42,6 @@ export const tasks = pgTable("tasks", {
   priority: text("priority", { enum: ["low", "medium", "high", "top"] })
     .notNull()
     .default("medium"),
-  star: boolean("star").notNull().default(false), // DEPRECATED: Use starLevel instead
   starLevel: integer("star_level").notNull().default(0), // 0=none, 1=blue, 2=yellow, 3=orange
   starIntentVersion: bigint("star_intent_version", { mode: "number" }).notNull().default(0),
   dueAt: timestamp("due_at", { mode: "date", withTimezone: true }),
@@ -64,15 +63,7 @@ export const tasks = pgTable("tasks", {
   heatAdjustment: real("heat_adjustment").notNull().default(0), // Direct adjustment (-45 to +45 points)
   lastHeatTouchedAt: timestamp("last_heat_touched_at", { mode: "date", withTimezone: true }),
   lastTouchedAt: timestamp("last_touched_at", { mode: "date", withTimezone: true }),
-
-  // DEPRECATED: Cold storage fields (removed in current algorithm)
-  nextSurfaceAt: timestamp("next_surface_at", { mode: "date", withTimezone: true }), // DEPRECATED: Snooze removed
-  coldStorageAt: timestamp("cold_storage_at", { mode: "date", withTimezone: true }), // DEPRECATED: Auto-archival removed
-
-  // DEPRECATED: Legacy heat tracking fields (kept for migration safety)
-  heatTouchCount: real("heat_touch_count").notNull().default(0), // DEPRECATED: Click counter (replaced by heatAdjustment)
-  otherTouchCount: integer("other_touch_count").notNull().default(0), // DEPRECATED: Activity tracking removed
-  touchCount: integer("touch_count").notNull().default(0), // DEPRECATED: Legacy counter (unused)
+  touchCount: integer("touch_count").notNull().default(0), // Still used - incremented on touch
 
   // Calculated fields
   importanceV1: integer("importance_v1").notNull().default(0),
@@ -109,14 +100,8 @@ export const tasks = pgTable("tasks", {
   completedAtIdx: index("tasks_completed_at_idx").on(table.completedAt),
   // Composite index for active tasks sorted by importance
   activeImportanceIdx: index("tasks_active_importance_idx").on(table.deletedAt, table.importanceV1),
-  // DEPRECATED: Heat sorting index (heat is now calculated, not stored)
-  heatSortIdx: index("tasks_heat_sort_idx").on(table.heat, table.completedAt, table.coldStorageAt),
-  // Index for cold storage queries
-  coldStorageIdx: index("tasks_cold_storage_idx").on(table.coldStorageAt, table.lastTouchedAt),
-  // Index for resurfacing queries (snoozed tasks)
-  resurfacingIdx: index("tasks_resurfacing_idx").on(table.nextSurfaceAt),
-  // Index for new task queries (both counters = 0)
-  newTaskIdx: index("tasks_new_task_idx").on(table.heatTouchCount, table.otherTouchCount, table.completedAt),
+  // Heat sorting index (still used for database-level sorting)
+  heatSortIdx: index("tasks_heat_sort_idx").on(table.heat, table.completedAt),
 }));
 
 // Settings table (single row for user preferences)
@@ -169,11 +154,6 @@ export const settings = pgTable("settings", {
   retirementDays: integer("retirement_days").notNull().default(90),
   reviewCadenceWatch: integer("review_cadence_watch").notNull().default(7), // days
   reviewCadenceLater: integer("review_cadence_later").notNull().default(30), // days
-
-  // Snooze presets (Phase 3)
-  snoozeTodoDays: integer("snooze_todo_days").notNull().default(1),
-  snoozeWatchDays: integer("snooze_watch_days").notNull().default(7),
-  snoozeLaterDays: integer("snooze_later_days").notNull().default(30),
 
   // UI preferences
   groupingMode: text("grouping_mode", {

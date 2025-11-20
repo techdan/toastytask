@@ -1,8 +1,41 @@
 # Heat & Importance System Cleanup Plan
 
 **Date:** 2025-01-19
-**Status:** 🔍 Analysis Complete - Ready for Migration
+**Status:** ✅ Code Changes Complete - Awaiting Dev Testing
 **Goal:** Remove deprecated columns, indexes, and code from legacy heat model versions
+
+**Progress:**
+- ✅ Phase 1 Complete: Stale code removed (heat-v2.ts, unused methods)
+- ✅ Phase 2 Complete: `star` column removed from schema & code
+- ✅ Phase 3 Complete: Heat V2 columns & indexes removed from schema & code
+- ⏳ Phase 4 Pending: Local testing required before commit
+- ⏸️ Phase 5 Pending: Production deployment (after testing)
+
+### Changes Completed (Not Yet Committed)
+
+**Files Modified:**
+1. `lib/db/schema.ts` - Removed deprecated columns: `star`, `nextSurfaceAt`, `coldStorageAt`, `heatTouchCount`, `otherTouchCount`, and snooze settings
+2. `lib/db/schema.ts` - Removed deprecated indexes: `coldStorageIdx`, `resurfacingIdx`, `newTaskIdx`
+3. `lib/db/schema.ts` - Updated `heatSortIdx` to remove reference to deleted `coldStorageAt` column
+4. `lib/queries/use-task-mutations.ts` - Removed references to deprecated fields in optimistic updates
+5. `components/tasks/quick-add.tsx` - Removed `star: false` field reference
+6. `lib/db/seed.ts` - Changed `star: true` to `starLevel: 2`
+7. `lib/scoring/importance-v1.ts` - Updated type definitions to remove `star` field
+8. `lib/hooks/use-task-importance.ts` - Updated type definitions to remove `star` field
+
+**Files Deleted:**
+- `lib/scoring/heat-v2.ts` (655 lines of unused V2 algorithm)
+
+**Repository Methods Removed:**
+- `taskRepository.snooze()` - Never called, snooze feature removed
+- `taskRepository.recalculateAllHeat()` - Never implemented
+
+**Migration Script Created:**
+- `migrations/cleanup-deprecated-heat-columns.sql` - Ready-to-run production migration
+
+**Build Status:** ✅ Passing (no errors, only pre-existing warnings in recurrence system)
+
+**Next Step:** Run `npm run db:push` to apply schema changes to dev database, then test thoroughly.
 
 ---
 
@@ -309,7 +342,53 @@ Reality from codebase analysis:
 
 ---
 
-### Phase 4: Production Deployment
+### Phase 4: Local Testing & Validation
+
+**Impact:** None - testing in dev environment
+**Risk:** Low - can rollback schema changes easily
+**Estimated Time:** 30 minutes
+
+#### Steps
+
+1. **Apply schema changes to dev database**
+   ```bash
+   npm run db:push
+   ```
+
+2. **Start dev server**
+   ```bash
+   npm run dev
+   ```
+
+3. **Test all task operations**
+   - [ ] Create new tasks (verify no `star` field errors)
+   - [ ] Toggle star levels (1, 2, 3, back to 0)
+   - [ ] Heat/cool tasks
+   - [ ] Complete tasks (including recurring)
+   - [ ] Edit task properties (priority, due date, etc.)
+   - [ ] View task list sorting
+   - [ ] Check that no database errors appear in logs
+
+4. **Verify database state**
+   ```bash
+   # Connect to dev database and verify columns are gone
+   psql $DATABASE_URL
+   \d tasks;  -- Should NOT show: star, nextSurfaceAt, coldStorageAt, heatTouchCount, otherTouchCount
+   \d settings;  -- Should NOT show: snoozeTodoDays, snoozeWatchDays, snoozeLaterDays
+   ```
+
+5. **If issues found**
+   - Identify the problem
+   - Fix code
+   - Rollback schema: `git restore lib/db/schema.ts && npm run db:push`
+   - Re-test
+
+6. **If all tests pass**
+   - Proceed to commit (Phase 5)
+
+---
+
+### Phase 5: Production Deployment
 
 **Impact:** High - schema changes
 **Risk:** Medium - columns are unused but still defined
@@ -318,9 +397,11 @@ Reality from codebase analysis:
 
 #### Pre-Deployment Checklist
 
-- [ ] All phases 1-3 tested in development
-- [ ] All tests passing
-- [ ] Database backup taken
+- [ ] Phase 4 local testing completed successfully
+- [ ] All functionality verified working
+- [ ] Build passing with no errors
+- [ ] Code changes committed to repository
+- [ ] Production database backup taken
 - [ ] Rollback migration prepared
 - [ ] Deployment window scheduled (low traffic)
 

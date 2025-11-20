@@ -46,7 +46,7 @@ async function seed() {
         projectId: personalProject?.id,
         priority: "medium",
         bucket: "todo",
-        star: true,
+        starLevel: 2, // Yellow star
         heat: 0.7,
         importanceV1: 6,
         createdAt: new Date(),
