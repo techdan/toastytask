@@ -4,7 +4,7 @@ import type { Task, NewTask } from "@/lib/db/schema";
 import type { Bucket, RepeatType } from "@/types";
 import { tasks } from "@/lib/db/schema";
 import { getDatabase } from "@/lib/db/client";
-import { calculateNextDueDate as registryCalculateNextDueDate, isRecurring } from "@/lib/recurrence/registry";
+import { calculateNextDueDate as registryCalculateNextDueDate, isRecurring, parseAndCalculate } from "@/lib/recurrence/registry";
 
 export class TaskRepository implements ITaskRepository {
   private db = getDatabase();
@@ -254,7 +254,19 @@ export class TaskRepository implements ITaskRepository {
       if (!task.dueAt) {
         throw new Error(`Recurring task ${id} must have a due date`);
       }
-      const nextDueDate = registryCalculateNextDueDate(task.repeatType as RepeatType, task.dueAt);
+
+      // Handle custom recurrence rules
+      let nextDueDate: Date;
+      if (task.repeatType === "custom") {
+        if (!task.repeatRule) {
+          throw new Error(`Custom recurring task ${id} must have a repeatRule`);
+        }
+        nextDueDate = parseAndCalculate(task.dueAt, task.repeatRule);
+      } else {
+        // Use built-in recurrence pattern
+        nextDueDate = registryCalculateNextDueDate(task.repeatType as RepeatType, task.dueAt);
+      }
+
       const [updatedTask] = await this.db
         .update(tasks)
         .set({

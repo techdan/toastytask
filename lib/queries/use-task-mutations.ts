@@ -18,7 +18,7 @@ import {
   registerHeatAction,
   shouldProcessHeatActionResponse,
 } from "./heat-action-tracker";
-import { calculateNextDueDate as registryCalculateNextDueDate, isRecurring } from "@/lib/recurrence/registry";
+import { calculateNextDueDate as registryCalculateNextDueDate, isRecurring, parseAndCalculate } from "@/lib/recurrence/registry";
 
 interface TaskResponse {
   task: Task;
@@ -503,7 +503,11 @@ export function useStarTask(options?: UseStarTaskOptions) {
 }
 
 // Helper to optimistically calculate next due date for recurring tasks
-function calculateOptimisticNextDueDate(currentDueDate: Date | null | number, repeatType: string): Date {
+function calculateOptimisticNextDueDate(
+  currentDueDate: Date | null | number,
+  repeatType: string,
+  repeatRule?: string | null
+): Date {
   let baseDate: Date;
 
   if (currentDueDate) {
@@ -514,7 +518,15 @@ function calculateOptimisticNextDueDate(currentDueDate: Date | null | number, re
     baseDate = new Date();
   }
 
-  // Use registry for calculation
+  // Handle custom recurrence rules
+  if (repeatType === 'custom') {
+    if (!repeatRule) {
+      throw new Error('Custom recurrence requires repeatRule');
+    }
+    return parseAndCalculate(baseDate, repeatRule);
+  }
+
+  // Use registry for built-in patterns
   return registryCalculateNextDueDate(repeatType as RepeatType, baseDate);
 }
 
@@ -544,7 +556,7 @@ export function useCompleteTask() {
           // If not recurring, mark as completed
           if (task.repeatType && isRecurring(task.repeatType as RepeatType)) {
             // Optimistic: advance due date immediately
-            const nextDueDate = calculateOptimisticNextDueDate(task.dueAt, task.repeatType);
+            const nextDueDate = calculateOptimisticNextDueDate(task.dueAt, task.repeatType, task.repeatRule);
             const updatedTask = { ...task, dueAt: nextDueDate };
 
             // Note: We no longer calculate importanceV1 optimistically

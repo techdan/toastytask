@@ -1,6 +1,9 @@
 // Recurrence Registry - Central source of truth for all recurrence patterns
 
 import type { RepeatType } from "@/types";
+import type { RecurrenceConfig } from "@/types/recurrence";
+import { parseRecurrenceConfig, describeRecurrenceRule } from "@/types/recurrence";
+import { calculateNextDueDate as calculateCustomDueDate } from "@/lib/recurrence/calculator";
 
 /**
  * Recurrence rule definition
@@ -202,4 +205,31 @@ export function isRecurring(repeatType: RepeatType): boolean {
 export function getRecurrenceDisplayText(repeatType: RepeatType): string {
   const rule = getRecurrenceRule(repeatType);
   return rule.getDisplayText();
+}
+
+/**
+ * Parse and calculate next due date for custom recurrence rules
+ * @param dueDate The current due date
+ * @param repeatRule JSON string containing the custom recurrence config
+ * @returns The next due date
+ */
+export function parseAndCalculate(dueDate: Date, repeatRule: string): Date {
+  const config = parseRecurrenceConfig(repeatRule);
+
+  // Use the custom calculation engine
+  return calculateCustomDueDate(dueDate, config.rule);
+}
+
+/**
+ * Get display text for custom recurrence rules
+ * @param repeatRule JSON string containing the custom recurrence config
+ * @returns Human-readable description
+ */
+export function getCustomRuleDisplayText(repeatRule: string): string {
+  try {
+    const config = parseRecurrenceConfig(repeatRule);
+    return describeRecurrenceRule(config.rule);
+  } catch (error) {
+    return "Custom (invalid)";
+  }
 }

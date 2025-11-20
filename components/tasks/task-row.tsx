@@ -148,8 +148,8 @@ export function TaskRow({
     onUpdate(task.id, { dueAt: date });
   };
 
-  const handleRecurrenceChange = (repeatType: Task["repeatType"]) => {
-    onUpdate(task.id, { repeatType });
+  const handleRecurrenceChange = (repeatType: Task["repeatType"], repeatRule?: string | null) => {
+    onUpdate(task.id, { repeatType, repeatRule });
   };
 
   const handleProjectChange = (projectId: number | null) => {
@@ -382,6 +382,7 @@ export function TaskRow({
           <div className={cn("min-w-[6rem]", isCompleted && "line-through", strikeClass)}>
             <RecurrenceSelect
               value={task.repeatType}
+              repeatRule={task.repeatRule}
               onValueChange={handleRecurrenceChange}
               disabled={isCompleted}
             />
