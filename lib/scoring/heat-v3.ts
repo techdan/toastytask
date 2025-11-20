@@ -21,10 +21,13 @@ import { getHeatColorFromConfig, getHeatLabelFromConfig } from "./importance-col
  * - Context-aware positioning: Heat moves up 1, Cool moves down 3 positions
  * - Asymmetric decay: Cool decays 2x faster (3-day vs 7-day half-life)
  * - Enhanced star: 3 levels (blue/yellow/orange) = +1/+2/+3 to base importance
- * - Pure calculation: Heat is NEVER stored, only calculated from base properties + adjustments
+ * - Hybrid pattern: Heat is cached in DB for sorting, recalculated fresh on client for display
  * - No time skew: Server calculates fresh heat from task IDs, not client-sent values
  *
- * See: docs/current-heat-algorithm.md
+ * ARCHITECTURE: Hybrid Calculate-and-Cache Pattern
+ * - Server: Calculates and caches heat in database for efficient ORDER BY operations
+ * - Client: Recalculates fresh values on every render for accurate display
+ * - See: docs/current-heat-algorithm.md for detailed architecture explanation
  */
 
 // ============================================================================
@@ -192,6 +195,24 @@ function calculateRecency(
 /**
  * Calculate heat score for a task
  * Heat v4: Returns a value between 0 and 145 (point-based)
+ *
+ * HYBRID PATTERN - When/Where This Function Is Called:
+ *
+ * SERVER SIDE:
+ * - During mutations (task updates, heat/cool actions, etc.)
+ * - Result is written to database via taskRepository.updateHeat()
+ * - Cached value enables efficient database-level sorting (ORDER BY heat)
+ *
+ * CLIENT SIDE:
+ * - On every render to calculate _freshHeat for display
+ * - Used for accurate tooltips, badges, and client-side sorting
+ * - Ensures timezone accuracy and current time-based calculations
+ * - Type: TaskWithFreshValues includes _freshHeat and _freshImportance
+ *
+ * Data Flow:
+ * 1. Server: calculateHeat() → updateHeat() → Database (cached for ORDER BY)
+ * 2. Client: Fetch tasks → calculateHeat() → _freshHeat (for display)
+ * 3. Result: Fast initial load (DB sorted) + Accurate display (fresh calculation)
  *
  * IMPORTANT: Heat values are always integers. Each component is rounded
  * to prevent fractional accumulation, especially from exponential decay.

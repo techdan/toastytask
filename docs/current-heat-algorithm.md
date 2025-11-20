@@ -415,20 +415,65 @@ Modern JavaScript engines optimize this heavily. The calculation is cheaper than
 
 ## Implementation Status
 
-**✅ IMPLEMENTED: Option 1 - Pure Calculation with Stored Adjustments**
+**✅ IMPLEMENTED: Hybrid Calculate-and-Cache Pattern**
 
-This approach is now the current system:
-- ✅ Heat is calculated on demand, never stored
-- ✅ Only `heatAdjustment` is persisted in database
-- ✅ Client and server use identical calculation logic
-- ✅ Optimistic updates are predictable and accurate
-- ✅ No time skew: server calculates from task IDs, not client values
-- ⏳ Phase 2: Remove `task.heat` column (pending migration)
+**⚠️ IMPORTANT:** The system does NOT use pure calculation as originally planned. Instead, it uses a **hybrid approach** that balances performance and accuracy:
+
+### Actual Implementation: Two-Stage Pattern
+
+**Server/Database Layer:**
+- Calculates heat/importance during mutations
+- Writes calculated values to `heat` and `importanceV1` columns
+- Uses stored `heat` for database-level sorting (ORDER BY with index support)
+- Method: `taskRepository.updateHeat()` writes to database
+- Enables efficient "top N" queries without calculating all tasks
+
+**Client Layer:**
+- Fetches tasks with stored `heat` and `importanceV1` values
+- Recalculates fresh values on every render: `_freshHeat`, `_freshImportance`
+- Uses fresh values for display and client-side sorting
+- Fresh calculations ensure timezone accuracy and current due date status
+- Type: `TaskWithFreshValues` extends `Task` with `_freshHeat` and `_freshImportance`
+
+### Why Hybrid Instead of Pure Calculation?
+
+**Performance at scale:**
+- Database can sort 1000+ tasks efficiently using indexed `heat` column
+- Pure calculation would require fetching all tasks and sorting in-memory
+- Hybrid enables fast initial page load with accurate client-side display
+
+**Tradeoffs accepted:**
+- ✅ Fast database sorting for initial load
+- ✅ Accurate display via fresh calculation
+- ⚠️ Stored values become stale between mutations (acceptable - client recalculates)
+- ⚠️ Data duplication (stored vs calculated)
+
+### Data Flow
+
+```
+Mutation (e.g., task update):
+1. Server calculates fresh heat/importance
+2. Server writes to `heat` and `importanceV1` columns
+3. Server returns updated task
+
+Initial Page Load:
+1. Database query with ORDER BY heat (uses index)
+2. Client receives tasks with stored heat values
+3. Client immediately recalculates _freshHeat and _freshImportance
+4. Client uses fresh values for display
+
+Every Render:
+1. Client recalculates fresh values from current time/date
+2. Fresh values used for display, tooltips, sorting
+3. Stored values only used for initial database query
+```
 
 Implementation:
-- Code: [lib/scoring/heat-v3.ts](../lib/scoring/heat-v3.ts)
-- API: [app/api/tasks/\[id\]/heat/route.ts](../app/api/tasks/[id]/heat/route.ts)
-- Mutations: [lib/queries/use-task-mutations.ts](../lib/queries/use-task-mutations.ts)
+- Schema: [lib/db/schema.ts](../lib/db/schema.ts) - `heat`, `importanceV1` columns
+- Calculation: [lib/scoring/heat-v3.ts](../lib/scoring/heat-v3.ts)
+- Caching: [lib/db/repositories/task-repository.ts](../lib/db/repositories/task-repository.ts) - `updateHeat()`
+- Fresh Calculation: [lib/queries/use-task-mutations.ts](../lib/queries/use-task-mutations.ts)
+- Types: [types/index.ts](../types/index.ts) - `TaskWithFreshValues`
 
 ---
 
@@ -454,23 +499,59 @@ Implementation:
 
 ---
 
-## Future Improvements (Phase 2)
+## Future Improvements
 
-1. **Remove `task.heat` column** - Clean up deprecated stored heat field
-2. **Remove `heatCalculatedAt`** - No longer needed since heat is never stored
-3. **Add performance monitoring** - Track calculation costs in production
-4. **Consider memoization** - Cache calculations within request lifecycle if needed
+1. **Consider Pure Calculation Migration** - If task counts exceed 5000+ and in-memory sorting becomes viable
+   - Would eliminate staleness entirely
+   - Would simplify architecture (single source of truth)
+   - Requires performance testing at scale
+
+2. **Add Staleness Monitoring** - Track how often stored values diverge from fresh calculations
+   - Log max staleness duration (heatCalculatedAt - NOW())
+   - Alert if staleness causes user-visible issues
+   - Helps inform future architectural decisions
+
+3. **Background Refresh Job (Optional)** - Recalculate stale heat values daily
+   - Run at 00:05 after due dates roll over
+   - Update tasks where heatCalculatedAt > 24 hours old
+   - Reduces initial staleness without changing architecture
+
+4. **Consider Postgres Generated Columns** - Database calculates heat on-the-fly
+   - Best of both worlds: no staleness + database sorting
+   - Requires extensive testing and Postgres-specific features
+   - Higher implementation complexity
 
 ---
 
 ## Conclusion
 
-The current heat system's bugs stem from maintaining multiple representations of a calculated value. **Option 1 (Pure Calculation)** eliminates this by treating heat as a pure function of task properties and stored adjustments, never caching the result.
+The current heat system uses a **hybrid calculate-and-cache pattern** that balances performance and accuracy:
 
-This is a cleaner architecture that:
-- Guarantees consistency (no staleness)
-- Minimizes data transfer (IDs only)
-- Simplifies maintenance (single source of truth)
-- Enables accurate optimistic updates (deterministic calculation)
+### Architecture Decision
 
-The migration is straightforward and the performance impact is negligible. This approach addresses all identified bugs and prevents similar issues in the future.
+**Chosen:** Hybrid approach (cache in DB, recalculate on client)
+**Not Chosen:** Pure calculation (Option 1 from analysis above)
+
+### Why Hybrid Works Well
+
+The hybrid approach provides:
+- ✅ **Fast initial page load** - Database sorts using indexed `heat` column
+- ✅ **Accurate display** - Client recalculates fresh values for current time/timezone
+- ✅ **Scales to 1000+ tasks** - Database sorting is efficient
+- ✅ **Simple to maintain** - Clear separation: DB for sorting, client for display
+
+### Accepted Tradeoffs
+
+- ⚠️ **Staleness** - Stored values are stale between mutations (acceptable because client immediately recalculates)
+- ⚠️ **Data duplication** - Same calculation stored and computed (acceptable for performance)
+- ⚠️ **Two sources of truth** - Stored vs calculated (mitigated by clear usage: DB for ORDER BY, client for display)
+
+### When to Reconsider
+
+Consider migrating to pure calculation if:
+- Task counts regularly exceed 5000+ items
+- In-memory sorting performance improves significantly
+- Staleness becomes a user-visible problem
+- Performance profiling shows calculation overhead is negligible
+
+For now, the hybrid approach is the right balance for typical usage patterns (100-1000 tasks per user).

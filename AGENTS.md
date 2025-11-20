@@ -4,6 +4,7 @@ This file provides guidance to AI agents working with this codebase.
 
 ## General Rules
 
+- Do not add to git without my permission
 - Clean up temporary or backup files after they are no longer necessary. Double check for cleanup after finishing any task
 - Be verbose as you carry out tasks. Provide output describing your understanding of the current task and how you are approaching it.
 - **CRITICAL**: Always use `bd` (beads) commands for task tracking and progress management. NEVER use TodoWrite or other task tracking tools. Use `bd create`, `bd update`, `bd close` etc. See [AGENTS.md](AGENTS.md) for full workflow.

@@ -58,15 +58,16 @@ export const tasks = pgTable("tasks", {
   repeatRule: text("repeat_rule"), // JSON-serialized RecurrenceConfig (only for "custom" type)
 
   // Heat model fields - See docs/current-heat-algorithm.md
-  heat: real("heat").notNull().default(0.5), // DEPRECATED: Heat is now calculated, not stored (kept for migration)
-  heatCalculatedAt: timestamp("heat_calculated_at", { mode: "date", withTimezone: true }), // DEPRECATED
+  // HYBRID APPROACH: Values are cached in DB for sorting performance, recalculated fresh on client for accuracy
+  heat: real("heat").notNull().default(0.5), // Cached heat value for database-level sorting; client recalculates fresh values on render
+  heatCalculatedAt: timestamp("heat_calculated_at", { mode: "date", withTimezone: true }), // Timestamp when heat was last calculated and stored
   heatAdjustment: real("heat_adjustment").notNull().default(0), // Direct adjustment (-45 to +45 points)
   lastHeatTouchedAt: timestamp("last_heat_touched_at", { mode: "date", withTimezone: true }),
   lastTouchedAt: timestamp("last_touched_at", { mode: "date", withTimezone: true }),
   touchCount: integer("touch_count").notNull().default(0), // Still used - incremented on touch
 
   // Calculated fields
-  importanceV1: integer("importance_v1").notNull().default(0),
+  importanceV1: integer("importance_v1").notNull().default(0), // Cached importance for performance; client recalculates fresh values on render
 
   // Notes metadata (populated by API, not stored in DB)
   // These are added in memory when fetching tasks

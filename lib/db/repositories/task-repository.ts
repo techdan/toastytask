@@ -324,6 +324,30 @@ export class TaskRepository implements ITaskRepository {
       .where(and(inArray(tasks.id, ids), eq(tasks.userId, userId)));
   }
 
+  /**
+   * Updates the cached heat value for a task in the database.
+   *
+   * HYBRID PATTERN: This method caches calculated heat in the database for performance.
+   * The cached value is used for database-level sorting (ORDER BY heat) to enable efficient
+   * queries on large task lists (1000+ tasks). The client will recalculate fresh heat values
+   * on every render for accurate display.
+   *
+   * Data Flow:
+   * 1. Server calculates fresh heat during mutations
+   * 2. This method writes calculated heat to database
+   * 3. Database uses cached heat for ORDER BY operations with index support
+   * 4. Client fetches tasks with cached heat values
+   * 5. Client immediately recalculates _freshHeat for display
+   *
+   * Tradeoff: Cached values become stale between mutations, but this is acceptable because:
+   * - Enables fast database-level sorting without calculating all tasks
+   * - Client recalculates fresh values ensuring accurate display
+   * - Staleness is minimal (only occurs between user actions)
+   *
+   * @param id - Task ID
+   * @param heat - Calculated heat value to cache (0-145)
+   * @param userId - User ID for authorization
+   */
   async updateHeat(id: number, heat: number, userId: string): Promise<void> {
     const now = new Date();
     await this.db
