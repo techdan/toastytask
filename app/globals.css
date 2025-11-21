@@ -386,6 +386,81 @@
   height: 0.75rem;
 }
 
+/* Select-as-text: Make closed Select triggers look like text buttons */
+.select-as-text[data-slot="select-trigger"] {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  height: 1.5rem !important;
+  min-height: 1.5rem !important;
+  justify-content: flex-start !important;
+  gap: 0 !important;
+  width: 100% !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  transition: none !important;
+  cursor: pointer !important;
+}
+
+.select-as-text[data-slot="select-trigger"]:hover span {
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+}
+
+.select-as-text[data-slot="select-trigger"]:hover {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.select-as-text[data-slot="select-trigger"]:focus-visible {
+  ring: 0 !important;
+  ring-offset: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+  border: none !important;
+}
+
+.select-as-text[data-slot="select-trigger"]:focus {
+  ring: 0 !important;
+  ring-offset: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+  border: none !important;
+}
+
+/* Hide the dropdown chevron when styled as text */
+.select-as-text > svg {
+  display: none !important;
+}
+
+.select-as-text > span[data-slot="select-icon"],
+.select-as-text [data-radix-select-icon] {
+  display: none !important;
+}
+
+/* Date trigger as text - similar styling for consistency */
+.date-trigger-as-text {
+  transition: opacity 0.2s;
+}
+
+.date-trigger-as-text:hover {
+  opacity: 0.7;
+}
+
+.date-trigger-as-text:hover .calendar-icon,
+.date-trigger-as-text:hover span {
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+}
+
+/* Disable all popover animations for instant open/close */
+[data-slot="popover-content"][data-state="open"],
+[data-slot="popover-content"][data-state="closed"] {
+  animation: none !important;
+  transition: none !important;
+}
+
 /* Heat V3: Heat button glow states */
 .heat-button {
   position: relative;

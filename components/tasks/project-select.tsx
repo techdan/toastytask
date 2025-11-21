@@ -46,33 +46,7 @@ export function TaskProjectSelect({
     setIsOpen(false);
   };
 
-  if (!isOpen) {
-    return (
-      <button
-        className={cn(
-          "flex h-6 w-full items-center gap-1 text-left text-xs transition-colors hover:underline",
-          "cursor-pointer px-0",
-          value === null && "text-muted-foreground/70",
-          disabled && "opacity-50 cursor-not-allowed hover:no-underline"
-        )}
-        onClick={() => !disabled && setIsOpen(true)}
-        disabled={disabled}
-        type="button"
-      >
-        <span className="flex min-w-0 items-center gap-1">
-          {value !== null && (
-            <span
-              className="h-2 w-2 shrink-0 rounded-full border border-border"
-              style={{ backgroundColor: display.color }}
-              aria-hidden="true"
-            />
-          )}
-          <span className="truncate">{display.name}</span>
-        </span>
-      </button>
-    );
-  }
-
+  // Always render Select component - no conditional rendering to prevent layout shift
   return (
     <Select
       value={selectValue}
@@ -81,9 +55,17 @@ export function TaskProjectSelect({
       onOpenChange={setIsOpen}
       disabled={disabled}
     >
-      <SelectTrigger className="project-trigger">
+      <SelectTrigger
+        className={cn(
+          "project-trigger",
+          !isOpen && "select-as-text" // Style as text button when closed
+        )}
+      >
         <SelectValue>
-          <div className="flex items-center gap-1.5">
+          <div className={cn(
+            "flex items-center gap-1.5",
+            value === null && "text-muted-foreground/70"
+          )}>
             {value !== null && (
               <span
                 className="h-2.5 w-2.5 rounded-full border border-border"

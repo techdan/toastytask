@@ -128,72 +128,7 @@ export function RecurrenceSelect({ value, repeatRule, onValueChange, disabled }:
     setCustomConfig(null);
   };
 
-  const handleButtonClick = (event: React.MouseEvent<HTMLButtonElement>) => {
-    // Prevent row click from firing
-    event.stopPropagation();
-    event.preventDefault();
-    if (!disabled) {
-      setIsOpen(true);
-    }
-  };
-
-  // If not open, show as text button
-  if (!isOpen) {
-    return (
-      <>
-        <button
-          className={cn(
-            "flex h-6 w-full items-center gap-1 text-left text-xs transition-colors hover:underline",
-            "cursor-pointer px-0",
-            !showIcon && "text-muted-foreground/60",
-            disabled && "opacity-50 cursor-not-allowed hover:no-underline"
-          )}
-          onClick={handleButtonClick}
-          disabled={disabled}
-          type="button"
-        >
-          {showIcon && (
-            <>
-              <Repeat className="h-3 w-3" />
-              <span>{currentLabel}</span>
-            </>
-          )}
-        </button>
-
-        {/* Custom recurrence builder modal */}
-        <Dialog open={isCustomModalOpen} onOpenChange={setIsCustomModalOpen}>
-          <DialogContent
-            className="max-w-2xl"
-            onClick={(e) => {
-              // Prevent clicks inside the modal from bubbling to the row
-              e.stopPropagation();
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>Custom Recurrence</DialogTitle>
-              <DialogDescription>
-                Create a custom recurrence pattern for this task
-              </DialogDescription>
-            </DialogHeader>
-            <RecurrenceBuilder
-              value={customConfig}
-              onValueChange={setCustomConfig}
-            />
-            <DialogFooter>
-              <Button variant="outline" onClick={handleCustomCancel}>
-                Cancel
-              </Button>
-              <Button onClick={handleCustomConfirm} disabled={!customConfig}>
-                Apply
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </>
-    );
-  }
-
-  // When open, show as dropdown
+  // Always render Select component - no conditional rendering to prevent layout shift
   return (
     <>
       <Select
@@ -203,9 +138,17 @@ export function RecurrenceSelect({ value, repeatRule, onValueChange, disabled }:
         onOpenChange={handleOpenChange}
         disabled={disabled}
       >
-        <SelectTrigger className="recurrence-trigger">
+        <SelectTrigger
+          className={cn(
+            "recurrence-trigger",
+            !isOpen && "select-as-text" // Style as text button when closed
+          )}
+        >
           <SelectValue>
-            <div className="flex items-center gap-1">
+            <div className={cn(
+              "flex items-center gap-1",
+              !showIcon && "text-muted-foreground/60"
+            )}>
               {showIcon && <Repeat className="h-3 w-3" />}
               <span>{currentLabel}</span>
             </div>

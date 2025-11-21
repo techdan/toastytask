@@ -43,29 +43,10 @@ export function PrioritySelect({ value, onValueChange, disabled, isCompleted = f
     setIsOpen(false);
   };
 
-  // If not open, show as text button
   const completedPriorityClass = "line-through text-muted-foreground";
   const activePriorityClass = isCompleted ? completedPriorityClass : priorityStyles[value];
 
-  if (!isOpen) {
-    return (
-      <button
-        className={cn(
-          "flex h-6 w-full items-center text-left text-xs transition-colors hover:underline",
-          "cursor-pointer px-0",
-          activePriorityClass,
-          disabled && "opacity-50 cursor-not-allowed hover:no-underline"
-        )}
-        onClick={() => !disabled && setIsOpen(true)}
-        disabled={disabled}
-        type="button"
-      >
-        {priorityLabels[value]}
-      </button>
-    );
-  }
-
-  // When open, show as dropdown
+  // Always render Select component - no conditional rendering to prevent layout shift
   return (
     <Select
       value={value}
@@ -74,7 +55,12 @@ export function PrioritySelect({ value, onValueChange, disabled, isCompleted = f
       onOpenChange={setIsOpen}
       disabled={disabled}
     >
-      <SelectTrigger className="priority-trigger">
+      <SelectTrigger
+        className={cn(
+          "priority-trigger",
+          !isOpen && "select-as-text" // Style as text button when closed
+        )}
+      >
         <SelectValue>
           <span className={activePriorityClass}>{priorityLabels[value]}</span>
         </SelectValue>

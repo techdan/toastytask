@@ -75,14 +75,14 @@ function addYears(date: Date, years: number): Date {
 export const RECURRENCE_REGISTRY: Record<RepeatType, RecurrenceRuleDef> = {
   none: {
     id: "none",
-    label: "Does not repeat",
+    label: "No Repeat",
     description: "Task does not recur",
     sortOrder: 0,
     group: "common",
     calculateNext: (_dueDate) => {
       throw new Error("Cannot calculate next due date for non-recurring task");
     },
-    getDisplayText: () => "Does not repeat",
+    getDisplayText: () => "No Repeat",
   },
 
   daily: {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { Calendar as CalendarIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,43 +17,83 @@ interface DueDateDisplayProps {
 
 export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted }: DueDateDisplayProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [pendingDate, setPendingDate] = useState<Date | null>(null);
+  const [hasPendingChange, setHasPendingChange] = useState(false);
+
   const dueDate = useMemo(() => {
     if (!dueAt) return null;
     return typeof dueAt === "number" ? new Date(dueAt * 1000) : new Date(dueAt);
   }, [dueAt]);
+
+  // Use pending date for display if there's a pending change, otherwise use prop
+  const displayDate = hasPendingChange ? pendingDate : dueDate;
+
+  // Clear pending state when prop matches the expected value (optimistic clearing)
+  // Also includes a safety timeout to handle server errors or slow responses
+  useEffect(() => {
+    if (!hasPendingChange) return;
+
+    // Check if prop now matches pending state (clear immediately on match)
+    if (pendingDate === null) {
+      // We're waiting for the date to be cleared
+      if (dueDate === null) {
+        setHasPendingChange(false);
+        return;
+      }
+    } else {
+      // We're waiting for a specific date
+      if (
+        dueDate &&
+        dueDate.getFullYear() === pendingDate.getFullYear() &&
+        dueDate.getMonth() === pendingDate.getMonth() &&
+        dueDate.getDate() === pendingDate.getDate()
+      ) {
+        setHasPendingChange(false);
+        setPendingDate(null);
+        return;
+      }
+    }
+
+    // Safety timeout: clear pending state after 3 seconds even if prop doesn't match
+    // This handles server errors, timeouts, or other edge cases
+    const timeoutId = setTimeout(() => {
+      setHasPendingChange(false);
+      setPendingDate(null);
+    }, 3000);
+
+    return () => clearTimeout(timeoutId);
+  }, [dueDate, hasPendingChange, pendingDate]);
 
   const getDisplayText = (): {
     text: string;
     textClassName: string;
     wrapperClassName?: string;
   } => {
-    if (!dueAt) {
+    if (!displayDate) {
       return {
         text: "No Due Date",
         textClassName: "text-muted-foreground/50",
       };
     }
 
-    const dueDate = typeof dueAt === "number" ? new Date(dueAt * 1000) : new Date(dueAt);
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
     const today = new Date();
     const currentYear = today.getFullYear();
-    const dueYear = dueDate.getFullYear();
-    const isDifferentYear = dueYear !== currentYear;
 
     // Helper to format date with optional year
     const formatDate = (date: Date) => {
       const month = monthNames[date.getMonth()];
       const day = date.getDate();
-      const shortYear = `'${String(dueYear).slice(-2)}`;
-      return isDifferentYear ? `${month} ${day} ${shortYear}` : `${month} ${day}`;
+      const yearToCheck = date.getFullYear();
+      const shortYear = `'${String(yearToCheck).slice(-2)}`;
+      return yearToCheck !== currentYear ? `${month} ${day} ${shortYear}` : `${month} ${day}`;
     };
 
     // If completed, just show the date without any special formatting
     if (isCompleted) {
       return {
-        text: formatDate(dueDate),
+        text: formatDate(displayDate),
         textClassName: "",
       };
     }
@@ -64,7 +104,7 @@ export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted }: D
     // Reset hours for date comparison
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const tomorrowStart = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate());
-    const dueStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+    const dueStart = new Date(displayDate.getFullYear(), displayDate.getMonth(), displayDate.getDate());
 
     const isPastDue = dueStart < todayStart;
     const isToday = dueStart.getTime() === todayStart.getTime();
@@ -72,7 +112,7 @@ export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted }: D
 
     if (isPastDue) {
       return {
-        text: formatDate(dueDate),
+        text: formatDate(displayDate),
         textClassName: "text-white font-medium",
         wrapperClassName: "rounded bg-red-500 px-2 py-0.5",
       };
@@ -88,7 +128,7 @@ export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted }: D
 
     // Future date
     return {
-      text: formatDate(dueDate),
+      text: formatDate(displayDate),
       textClassName: "text-foreground",
     };
   };
@@ -101,14 +141,18 @@ export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted }: D
       return;
     }
     const selectedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    onDateChange(selectedDate);
+    setHasPendingChange(true);
+    setPendingDate(selectedDate);
     setIsOpen(false);
+    onDateChange(selectedDate);
   };
 
   const handleClear = () => {
     if (disabled) return;
-    onDateChange(null);
+    setHasPendingChange(true);
+    setPendingDate(null);
     setIsOpen(false);
+    onDateChange(null);
   };
 
   return (
@@ -118,8 +162,9 @@ export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted }: D
           type="button"
           disabled={disabled}
           className={cn(
-            "flex h-6 w-full min-w-[5.75rem] items-center gap-1 text-left text-xs transition-opacity hover:opacity-70",
+            "flex h-6 w-full min-w-[5.75rem] items-center gap-1 text-left text-xs",
             "cursor-pointer px-0",
+            !isOpen && "date-trigger-as-text", // Style as text when closed
             disabled && "cursor-not-allowed opacity-50"
           )}
         >
@@ -129,13 +174,16 @@ export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted }: D
           </span>
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-[15rem] p-0" align="start">
+      <PopoverContent
+        className="w-[15rem] p-0 data-[state=open]:animate-none data-[state=closed]:animate-none"
+        align="start"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <Calendar
           mode="single"
-          selected={dueDate ?? undefined}
-          defaultMonth={dueDate ?? new Date()}
+          selected={displayDate ?? undefined}
+          defaultMonth={displayDate ?? new Date()}
           onSelect={handleSelect}
-          initialFocus
           className="calendar-compact"
           style={
             {
@@ -157,7 +205,7 @@ export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted }: D
             size="sm"
             className="h-6 flex-1 px-2 text-[0.65rem]"
             onClick={handleClear}
-            disabled={!dueDate}
+            disabled={!displayDate}
           >
             <X className="mr-2 h-3 w-3" />
             Clear date
