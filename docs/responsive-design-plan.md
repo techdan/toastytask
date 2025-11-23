@@ -4,9 +4,15 @@
 
 This document outlines the comprehensive plan to make Toasty Task responsive across mobile, tablet, and desktop devices. The current implementation uses a fixed-width table layout that doesn't adapt to smaller screen sizes, resulting in poor mobile UX with excessive empty space and cramped content.
 
+## Status notes (2025-11-22)
+
+- Phase 1 and Phase 2 are largely implemented.
+- The mobile task list now uses a condensed table (not card rows); specs below are updated to reflect the table-first mobile design.
+- Task detail refinements remain in progress and tracked separately.
+
 ## Breakpoint Strategy
 
-- **Mobile (`< sm`):** < 640px (card layout, full-screen modals, hamburger nav)
+- **Mobile (`< sm`):** < 640px (condensed table layout, full-screen modals, hamburger nav)
 - **Tablet (`sm` / `md`):** 640px - 1023px (simplified table, centered modals)
 - **Desktop (`lg+`):** ≥ 1024px (full table, inline editing, expanded sidebar; `lg` and `xl` share the same layout)
 
@@ -80,27 +86,14 @@ This document outlines the comprehensive plan to make Toasty Task responsive acr
 
 All controls (sort, density, show completed) moved to the ... options menu.
 
-### 2.2 Task Row Layout
+### 2.2 Task Row Layout (mobile table update)
 **File:** [components/tasks/task-row.tsx](../components/tasks/task-row.tsx)
 
-#### Compact Mode
-- **Heat color strip:** 4px vertical border-left (uses heat/importance badge color)
-- **Checkbox:** Functional, toggles completion
-- **Star button:** Functional, cycles 0-3 levels
-- **Notes indicator:** Icon shown if task has notes
-- **Task title:** Clickable, opens task detail screen
-- **No separate heat badge** component
-
-#### Comfortable Mode
-- **Primary row:** Same as compact
-- **Secondary row:** Small, muted text
-  - Format: "Due: Tomorrow • Priority: High • Project: Work • Repeats: Weekly"
-  - Bullet-separated
-  - Compact display
-
-**Heights:**
-- Compact: 56px
-- Comfortable: 76px (56px + 20px secondary row)
+- **Structure:** Condensed table rows (mobile/tablet share the simplified table; cards are no longer used).
+- **Primary cells:** heat strip + checkbox + star + notes indicator + title (single line; no separate heat badge component). Keep a trailing actions cell for destructive/overflow on focus/hover.
+- **Density:** Compact and comfortable spacing still supported with target heights of ~56px (compact) and ~76px (comfortable).
+- **Secondary metadata:** In comfortable mode, show a muted subline under the title with due / priority / project / repeat, bullet-separated; hide this line in compact mode.
+- **Touch targets:** 44px minimum for interactive controls; swipe gestures still apply on the row background (not on controls).
 
 ### 2.3 Swipe Gestures
 **Library:** react-swipeable (gesture detection) + CSS transforms for animation (mobile only; disabled on tablet and desktop)
@@ -117,8 +110,8 @@ All controls (sort, density, show completed) moved to the ... options menu.
 
 #### Gesture Precedence & Fallbacks
 - Vertical scrolling takes priority: if `abs(deltaY) > abs(deltaX)` (initial movement mostly vertical), treat the interaction as scroll, not a swipe
-- Swipes start only when the gesture begins on the card background; starting on interactive controls (checkbox, star, notes icon) performs that control's primary action and does not initiate a swipe
-- On non-touch/pointer-only devices (mouse/trackpad) and on tablet/desktop breakpoints, swipe gestures are disabled; heat/cool actions remain accessible via explicit buttons in the card and task detail screen
+- Swipes start only when the gesture begins on the row background; starting on interactive controls (checkbox, star, notes icon) performs that control's primary action and does not initiate a swipe
+- On non-touch/pointer-only devices (mouse/trackpad) and on tablet/desktop breakpoints, swipe gestures are disabled; heat/cool actions remain accessible via explicit buttons in the row and task detail screen
 - On platforms without `navigator.vibrate` or similar APIs, haptic feedback calls are no-ops while keeping all interactions functional
 
 ### 2.4 Task Detail Screen
@@ -248,8 +241,8 @@ All controls (sort, density, show completed) moved to the ... options menu.
 
 #### Mobile
 - Remove `<TaskListHeader>` completely
-- Card-based layout (no table element)
-- Stack cards vertically with gap
+- Use condensed simplified table (shared with tablet) instead of cards; keep touch-friendly spacing
+- Maintain vertical rhythm/gap via table row padding rather than card margins
 
 #### Tablet
 - Simplified table (3 columns)
@@ -264,19 +257,12 @@ All controls (sort, density, show completed) moved to the ... options menu.
 
 ## Phase 6: New Components to Create
 
-### 1. Mobile Task Card
-**Path:** components/tasks/mobile-task-card.tsx
+### 1. Mobile Task Row (table)
+**Path:** components/tasks/task-row.tsx (shared)
 
-**Purpose:** Card-style task row for mobile devices
+**Purpose:** Condensed table row for mobile/tablet (cards retired)
 
-**Props:**
-- task: TaskWithFreshValues
-- onComplete: (id: number) => void
-- onStar: (id: number) => void
-- onHeat: (id: number) => void
-- onCool: (id: number) => void
-- onClick: () => void (opens detail screen)
-- density: "compact" | "comfortable"
+**Notes:** Reuse the simplified table structure with touch-friendly spacing; no separate card component needed unless a future mobile-only variant is reintroduced.
 
 ### 2. Task Detail Screen
 **Path:** components/tasks/task-detail-screen.tsx
@@ -346,29 +332,29 @@ if (breakpoint === "mobile") {
 ## Phase 7: Implementation Order
 
 ### 1. Setup & Infrastructure
-- [ ] Create breakpoint hook (`use-breakpoint.ts`)
-- [ ] Add swipe gesture library (react-swipeable)
+- [x] Create breakpoint hook (`use-breakpoint.ts`)
+- [x] Add swipe gesture library (react-swipeable)
 - [ ] Setup responsive utilities
 
 ### 2. Mobile Header & Navigation
-- [ ] Build mobile header component
-- [ ] Create options menu (... icon)
-- [ ] Build search modal
-- [ ] Update hamburger to show projects only (remove theme/account)
-- [ ] Create settings page route
+- [x] Build mobile header component
+- [x] Create options menu (... icon)
+- [x] Build search modal
+- [x] Update hamburger to show projects only (remove theme/account)
+- [x] Create settings page route
 
 ### 3. Task Detail Screen
-- [ ] Build full-screen task editor component
+- [x] Build full-screen task editor component (initial)
 - [ ] Add swipe-to-dismiss gesture
-- [ ] Implement auto-save on blur
-- [ ] Add heat/importance toggle in header
+- [x] Implement auto-save on blur (initial; save-status polish pending)
+- [x] Add heat/importance toggle in header
 - [ ] Test on mobile devices
 
 ### 4. Mobile Task List
-- [ ] Remove TaskListHeader on mobile breakpoint
-- [ ] Create mobile task card component
-- [ ] Add heat color strip (4px border-left)
-- [ ] Implement swipe gestures for heat/cool
+- [x] Remove TaskListHeader on mobile breakpoint
+- [x] Use condensed simplified table (shared with tablet) instead of cards
+- [x] Keep heat color strip (4px border-left)
+- [x] Implement swipe gestures for heat/cool
 - [ ] Add haptic feedback
 
 ### 5. Tablet Optimizations
@@ -451,7 +437,7 @@ if (breakpoint === "mobile") {
 - [components/search/search-bar.tsx](../components/search/search-bar.tsx) - Convert to modal trigger on mobile
 
 ### New Files to Create
-- components/tasks/mobile-task-card.tsx
+- Mobile table row (reuse components/tasks/task-row.tsx; cards retired)
 - components/tasks/task-detail-screen.tsx
 - components/search/search-modal.tsx
 - components/tasks/mobile-options-menu.tsx
@@ -491,7 +477,7 @@ if (breakpoint === "mobile") {
 - Ensure haptic feedback calls degrade gracefully: skip `navigator.vibrate` where unsupported without errors
 
 ### Edge Cases
-- Handle landscape orientation on mobile: keep header visible, adjust card widths, and ensure FAB and modals reposition correctly
+- Handle landscape orientation on mobile: keep header visible, adjust table column widths, and ensure FAB and modals reposition correctly
 - Very small screens (< 360px): slightly reduce horizontal padding, allow task titles to wrap, and avoid horizontal scrolling
 - Large tablets in landscape (width >= 1024px): treat as desktop (`lg+`) layout; in portrait, keep tablet (`sm`/`md`) layout
 - Keyboard open on mobile (viewport resize): anchor FAB and bottom elements using safe-area insets (`env(safe-area-inset-bottom)`) and account for dynamic viewport height
