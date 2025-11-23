@@ -15,9 +15,9 @@ import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { UserAccountDropdown } from "@/components/auth/user-account-dropdown";
 import { SearchBar } from "@/components/search/search-bar";
 import { SearchDropdown } from "@/components/search/search-dropdown";
-import { SearchModal } from "@/components/search/search-modal";
 import { Logo } from "@/components/ui/logo";
 import { Button } from "@/components/ui/button";
+import { MobileQuickAdd } from "@/components/tasks/mobile-quick-add";
 import {
   Dialog,
   DialogContent,
@@ -278,9 +278,9 @@ function TasksPageContent() {
   const [committedSearchQuery, setCommittedSearchQuery] = useState(searchQuery);
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
-  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [isMobileSearchActive, setIsMobileSearchActive] = useState(false);
   const [isMobileOptionsOpen, setIsMobileOptionsOpen] = useState(false);
-  const searchButtonRef = useRef<HTMLButtonElement | null>(null);
+  const mobileSearchInputRef = useRef<HTMLInputElement | null>(null);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const isClientMobile = isMounted && breakpoint === "mobile";
   const queryClient = useQueryClient();
@@ -310,6 +310,17 @@ function TasksPageContent() {
       setIsTouchDevice(touchCapable);
     }
   }, []);
+
+  // Focus the inline mobile search input when activated
+  useEffect(() => {
+    if (!isClientMobile || !isMobileSearchActive) {
+      return;
+    }
+    const id = window.requestAnimationFrame(() => {
+      mobileSearchInputRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [isClientMobile, isMobileSearchActive]);
 
   // Sync search input + committed query with URL when it changes.
   // Keep prior committed query if router temporarily drops ?q while still in search mode.
@@ -342,7 +353,7 @@ function TasksPageContent() {
   useEffect(() => {
     if (!isClientMobile) {
       setIsMobileNavOpen(false);
-      setIsSearchModalOpen(false);
+      setIsMobileSearchActive(false);
       setIsMobileOptionsOpen(false);
       return;
     }
@@ -1288,15 +1299,54 @@ function TasksPageContent() {
     }
   }, []);
 
-  const handleSearchFromModal = useCallback((query: string) => {
-    setSearchInputValue(query);
-    handleSearchEnter(query);
+  const closeMobileSearch = useCallback(() => {
+    setIsMobileSearchActive(false);
+    setIsSearchDropdownOpen(false);
+    setIsMobileOptionsOpen(false);
+    mobileSearchInputRef.current?.blur();
+  }, []);
+
+  const openMobileSearch = useCallback(() => {
+    setIsSearchDropdownOpen(false);
+    setIsMobileSearchActive(true);
+  }, []);
+
+  const handleToggleMobileSearch = useCallback(() => {
+    if (isMobileSearchActive) {
+      closeMobileSearch();
+    } else {
+      openMobileSearch();
+    }
+  }, [closeMobileSearch, isMobileSearchActive, openMobileSearch]);
+
+  const handleMobileSearchChange = useCallback((value: string) => {
+    setSearchInputValue(value);
+    const hasQuery = value.trim().length > 0;
+    setIsSearchDropdownOpen(hasQuery);
+  }, []);
+
+  const handleMobileSearchSubmit = useCallback((value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setIsMobileSearchActive(false);
+      return;
+    }
+    setSearchInputValue(trimmed);
+    handleSearchEnter(trimmed);
+    setIsMobileSearchActive(false);
   }, [handleSearchEnter]);
 
-  const handleOpenSearchModal = useCallback(() => {
-    setIsSearchDropdownOpen(false);
-    setIsSearchModalOpen(true);
+  const handleMobileSearchBlur = useCallback(() => {
+    setIsMobileSearchActive(false);
   }, []);
+
+  const handleClearSearch = useCallback(() => {
+    setSearchInputValue("");
+    setCommittedSearchQuery("");
+    setIsSearchDropdownOpen(false);
+    setIsMobileSearchActive(false);
+    router.push("/tasks");
+  }, [router]);
 
   // Compute search results
   const projectsMap = useMemo(() => {
@@ -1361,7 +1411,25 @@ function TasksPageContent() {
         .map((taskId) => displayedTaskMap.get(taskId) || enrichedTaskMap.get(taskId))
         .filter((task): task is TaskWithFreshValues => Boolean(task));
 
-      return orderedTasks;
+      const getHeatScore = (task: TaskWithFreshValues) => {
+        const now = new Date();
+        const importance = task._freshImportance ?? calculateImportanceV1(task, now);
+        return task._freshHeat ?? calculateHeat(task, now, importance);
+      };
+
+      const activeTasksSorted = orderedTasks
+        .filter((task) => !task.completedAt)
+        .sort((a, b) => {
+          const heatDiff = getHeatScore(b) - getHeatScore(a);
+          if (heatDiff !== 0) return heatDiff;
+          return toMilliseconds(b.createdAt) - toMilliseconds(a.createdAt);
+        });
+
+      const completedTasksSorted = orderedTasks
+        .filter((task) => task.completedAt)
+        .sort((a, b) => toMilliseconds(b.completedAt) - toMilliseconds(a.completedAt));
+
+      return [...activeTasksSorted, ...completedTasksSorted];
     }
 
     return displayedTasks;
@@ -1389,6 +1457,9 @@ function TasksPageContent() {
   }, [router]);
 
   const isLoading = isLoadingTasks;
+  const contentContainerClasses = isClientMobile
+    ? "w-full min-w-0 p-0 m-0"
+    : "mx-auto w-full min-w-0 px-4 py-8 lg:px-[40px]";
 
   return (
     <>
@@ -1403,14 +1474,6 @@ function TasksPageContent() {
         onUpdateProject={handleUpdateProject}
         onDeleteProject={handleDeleteProject}
         onNavigateSettings={handleNavigateToSettings}
-      />
-
-      <SearchModal
-        isOpen={isSearchModalOpen}
-        onClose={() => setIsSearchModalOpen(false)}
-        onSearch={handleSearchFromModal}
-        initialQuery={searchInputValue}
-        returnFocusRef={searchButtonRef}
       />
 
       <div className="flex h-screen">
@@ -1444,7 +1507,7 @@ function TasksPageContent() {
           {isClientMobile && (
             <MobileHeader
               onOpenProjects={() => setIsMobileNavOpen(true)}
-              onOpenSearch={handleOpenSearchModal}
+              onToggleSearch={handleToggleMobileSearch}
               optionsTrigger={(
                 <MobileOptionsMenu
                   sortMode={sortMode}
@@ -1459,11 +1522,16 @@ function TasksPageContent() {
                   onOpenChange={setIsMobileOptionsOpen}
                 />
               )}
-              searchButtonRef={searchButtonRef}
+              isSearchActive={isMobileSearchActive}
+              searchValue={searchInputValue}
+              onSearchChange={handleMobileSearchChange}
+              onSearchSubmit={handleMobileSearchSubmit}
+              onSearchBlur={handleMobileSearchBlur}
+              searchInputRef={mobileSearchInputRef}
             />
           )}
           <div className="flex-1 overflow-y-auto">
-            <div className="w-full min-w-0 p-0 m-0">
+            <div className={contentContainerClasses}>
               {!isClientMobile && (
                 <div className="mb-8 flex items-start justify-between">
                   <div>
@@ -1505,10 +1573,12 @@ function TasksPageContent() {
               {/* Quick Add - Hidden in search mode */}
               {!isSearchMode && (
                 <div className="mb-6">
-                  <QuickAdd
-                    onAdd={handleAddTask}
-                    currentProjectId={selectedProjectId === "all" ? null : selectedProjectId}
-                  />
+                  {!isClientMobile ? (
+                    <QuickAdd
+                      onAdd={handleAddTask}
+                      currentProjectId={selectedProjectId === "all" ? null : selectedProjectId}
+                    />
+                  ) : null}
                 </div>
               )}
 
@@ -1520,8 +1590,18 @@ function TasksPageContent() {
               ) : (
                 <>
                   {isSearchMode && canonicalSearchQuery && (
-                    <div className="mb-4 text-sm text-muted-foreground">
-                      {finalDisplayedTasks.length} {finalDisplayedTasks.length === 1 ? 'result' : 'results'} for &ldquo;{committedSearchQuery || searchQuery}&rdquo;
+                    <div className="mb-4 flex items-center justify-between rounded-lg border bg-muted/40 px-4 py-3">
+                      <div>
+                        <div className="text-sm font-medium">
+                          {finalDisplayedTasks.length} {finalDisplayedTasks.length === 1 ? "result" : "results"}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          for “{committedSearchQuery || searchQuery}”
+                        </div>
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={handleClearSearch}>
+                        Back
+                      </Button>
                     </div>
                   )}
                   <TaskList
@@ -1556,6 +1636,12 @@ function TasksPageContent() {
             </div>
           </div>
         </div>
+        {isClientMobile && !isSearchMode ? (
+          <MobileQuickAdd
+            onAdd={handleAddTask}
+            currentProjectId={selectedProjectId === "all" ? null : selectedProjectId}
+          />
+        ) : null}
       </div>
 
       <Dialog

@@ -224,10 +224,11 @@ All controls (sort, density, show completed) moved to the ... options menu.
 ## Phase 5: Component Updates
 
 ### 5.1 Quick Add
-**File:** [components/tasks/quick-add.tsx](../components/tasks/quick-add.tsx)
+**File:** [components/tasks/quick-add.tsx](../components/tasks/quick-add.tsx) (inline) + `components/tasks/mobile-quick-add.tsx` (FAB)
 
 #### Mobile
-- Keep the inline quick add row at the top of the list (current behavior); no FAB
+- Replace inline quick add with a floating action button (FAB) bottom-right (56px square, respects safe areas).
+- FAB opens a modal with a single input; enter/add submits and closes; cancel closes without changes.
 
 #### Tablet/Desktop
 - Keep current inline quick add row with full "Add Task" button at the top of the list

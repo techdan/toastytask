@@ -52,6 +52,7 @@ export function MobileTaskTable({
   const cardRef = useRef<HTMLDivElement>(null);
 
   const isCompleted = Boolean(task.completedAt);
+  const isNew = task.lastTouchedAt === null && task.lastHeatTouchedAt === null;
   const isCompact = density === "compact";
 
   const projectName = useMemo(() => {
@@ -226,6 +227,7 @@ export function MobileTaskTable({
               <div
                 className={cn(
                   "text-base font-medium leading-tight",
+                  !isCompleted && isNew && "font-semibold text-green-600 dark:text-green-400",
                   isCompleted && "line-through text-muted-foreground"
                 )}
               >
