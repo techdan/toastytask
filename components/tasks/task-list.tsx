@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 import { TaskRow } from "./task-row";
 import { TaskListHeader } from "./task-list-header";
-import { MobileTaskCard } from "./mobile-task-card";
+import { MobileTaskTable } from "./mobile-task-table";
 import { cn } from "@/lib/utils";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
 import { calculateHeat } from "@/lib/scoring/heat-v3";
@@ -126,7 +126,7 @@ export function TaskList({
     return (
       <div className="divide-y divide-border">
         {tasks.map((task) => (
-          <MobileTaskCard
+          <MobileTaskTable
             key={task.id}
             task={task}
             projectMap={projectMap}

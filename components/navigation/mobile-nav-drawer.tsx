@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Folder, Menu, Plus, Settings } from "lucide-react";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/ui/logo";
@@ -73,6 +73,7 @@ export function MobileNavDrawer({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="left" className="w-[92vw] max-w-sm p-0 sm:max-w-sm">
+        <SheetTitle className="sr-only">Navigation</SheetTitle>
         <div className="flex h-full flex-col">
           <div className="flex items-center justify-between border-b px-4 py-3">
             <div className="flex items-center gap-2">

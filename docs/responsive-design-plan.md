@@ -7,7 +7,7 @@ This document outlines the comprehensive plan to make Toasty Task responsive acr
 ## Status notes (2025-11-22)
 
 - Phase 1 and Phase 2 are largely implemented.
-- The mobile task list now uses a condensed table (not card rows); specs below are updated to reflect the table-first mobile design.
+- The current mobile list/table UI shown in compact and comfortable mode (reference screenshots) is the target design; keep that UX unchanged.
 - Task detail refinements remain in progress and tracked separately.
 
 ## Breakpoint Strategy
@@ -86,14 +86,13 @@ This document outlines the comprehensive plan to make Toasty Task responsive acr
 
 All controls (sort, density, show completed) moved to the ... options menu.
 
-### 2.2 Task Row Layout (mobile table update)
-**File:** [components/tasks/task-row.tsx](../components/tasks/task-row.tsx)
+### 2.2 Task Row Layout (current mobile/table design)
+**File:** [components/tasks/task-row.tsx](../components/tasks/task-row.tsx) (shared table) / mobile rendering path
 
-- **Structure:** Condensed table rows (mobile/tablet share the simplified table; cards are no longer used).
-- **Primary cells:** heat strip + checkbox + star + notes indicator + title (single line; no separate heat badge component). Keep a trailing actions cell for destructive/overflow on focus/hover.
-- **Density:** Compact and comfortable spacing still supported with target heights of ~56px (compact) and ~76px (comfortable).
-- **Secondary metadata:** In comfortable mode, show a muted subline under the title with due / priority / project / repeat, bullet-separated; hide this line in compact mode.
-- **Touch targets:** 44px minimum for interactive controls; swipe gestures still apply on the row background (not on controls).
+- **Structure:** Condensed table-style rows with a left heat badge/strip showing the score, title inline, optional notes indicator, and star on the right. No separate heat/cool buttons in the row.
+- **Compact mode:** Single-line title, left heat badge, optional notes indicator, star on the right.
+- **Comfortable mode:** Adds a muted secondary line beneath the title with date, priority, project, and recurrence (bullet-separated); primary row remains the same as compact.
+- **Touch targets:** 44px minimum for interactive controls; swipe gestures for heat/cool remain on the row background (controls are non-swipe).
 
 ### 2.3 Swipe Gestures
 **Library:** react-swipeable (gesture detection) + CSS transforms for animation (mobile only; disabled on tablet and desktop)
@@ -101,12 +100,12 @@ All controls (sort, density, show completed) moved to the ... options menu.
 #### Swipe Right (Heat)
 - Orange/flame background reveals at ~30% swipe
 - Action triggers at ~60%+ swipe
-- Haptic feedback on trigger
+- Haptic feedback on trigger (if supported)
 
 #### Swipe Left (Cool)
 - Blue/snowflake background reveals at ~30% swipe
 - Action triggers at ~60%+ swipe
-- Haptic feedback on trigger
+- Haptic feedback on trigger (if supported)
 
 #### Gesture Precedence & Fallbacks
 - Vertical scrolling takes priority: if `abs(deltaY) > abs(deltaX)` (initial movement mostly vertical), treat the interaction as scroll, not a swipe
@@ -228,10 +227,7 @@ All controls (sort, density, show completed) moved to the ... options menu.
 **File:** [components/tasks/quick-add.tsx](../components/tasks/quick-add.tsx)
 
 #### Mobile
-- Replace the inline quick add row at the top of the list with a floating action button (FAB)
-- **FAB:** circular 56px × 56px button with "+" icon, positioned in the lower-right corner above the safe area inset
-- Tapping the FAB opens a Quick Add modal
-- **Quick Add modal:** minimal fields (single task text input only), autofocus text input, Enter or primary button adds the task and closes the modal; when invoked from a project view, the new task is created in that project by default (matching current behavior), otherwise it is created with no project or the default context
+- Keep the inline quick add row at the top of the list (current behavior); no FAB
 
 #### Tablet/Desktop
 - Keep current inline quick add row with full "Add Task" button at the top of the list
@@ -241,8 +237,8 @@ All controls (sort, density, show completed) moved to the ... options menu.
 
 #### Mobile
 - Remove `<TaskListHeader>` completely
-- Use condensed simplified table (shared with tablet) instead of cards; keep touch-friendly spacing
-- Maintain vertical rhythm/gap via table row padding rather than card margins
+- Use the condensed table-style rows shown in the reference screenshots; keep touch-friendly spacing and swipe gestures
+- Maintain vertical rhythm/gap via row padding rather than card margins
 
 #### Tablet
 - Simplified table (3 columns)
@@ -257,14 +253,7 @@ All controls (sort, density, show completed) moved to the ... options menu.
 
 ## Phase 6: New Components to Create
 
-### 1. Mobile Task Row (table)
-**Path:** components/tasks/task-row.tsx (shared)
-
-**Purpose:** Condensed table row for mobile/tablet (cards retired)
-
-**Notes:** Reuse the simplified table structure with touch-friendly spacing; no separate card component needed unless a future mobile-only variant is reintroduced.
-
-### 2. Task Detail Screen
+### 1. Task Detail Screen
 **Path:** components/tasks/task-detail-screen.tsx
 
 **Purpose:** Full-screen task editor (mobile) / modal (tablet)
@@ -274,7 +263,7 @@ All controls (sort, density, show completed) moved to the ... options menu.
 - onClose: () => void
 - mode: "fullscreen" | "modal"
 
-### 3. Search Modal
+### 2. Search Modal
 **Path:** components/search/search-modal.tsx
 
 **Purpose:** Search interface as modal popup
@@ -284,7 +273,7 @@ All controls (sort, density, show completed) moved to the ... options menu.
 - onClose: () => void
 - onSearch: (query: string) => void
 
-### 4. Mobile Options Menu
+### 3. Mobile Options Menu
 **Path:** components/tasks/mobile-options-menu.tsx
 
 **Purpose:** ... menu for sort/density/completed controls
@@ -299,7 +288,7 @@ All controls (sort, density, show completed) moved to the ... options menu.
 - onDensityChange: (density: TaskDensity) => void
 - onToggleCompleted: () => void
 
-### 5. Mobile Header
+### 4. Mobile Header
 **Path:** components/navigation/mobile-header.tsx
 
 **Purpose:** Responsive header layout
@@ -309,7 +298,7 @@ All controls (sort, density, show completed) moved to the ... options menu.
 - onOpenSearch: () => void
 - onOpenOptions: () => void
 
-### 6. Breakpoint Hook
+### 5. Breakpoint Hook
 **Path:** lib/hooks/use-breakpoint.ts
 
 **Purpose:** Detect current breakpoint for behavioral decisions (gestures, modals, etc.) that are difficult to express purely with CSS breakpoints
@@ -321,13 +310,11 @@ All controls (sort, density, show completed) moved to the ... options menu.
 const breakpoint = useBreakpoint()
 
 if (breakpoint === "mobile") {
-  return <MobileTaskCard {...props} />
+  return <MobileTaskTable {...props} />
 } else {
   return <TaskRow {...props} />
 }
 ```
-
----
 
 ## Phase 7: Implementation Order
 

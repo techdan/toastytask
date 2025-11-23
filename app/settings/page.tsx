@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 import { useClerk, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import { LogOut, Palette, User } from "lucide-react";
+import { ArrowLeft, LogOut, Palette, User } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Button } from "@/components/ui/button";
 
@@ -29,14 +29,29 @@ export default function SettingsPage() {
     await signOut({ redirectUrl: "/" });
   }, [signOut]);
 
+  const handleBack = useCallback(() => {
+    router.back();
+  }, [router]);
+
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-8 lg:px-0">
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage appearance and account preferences for Toasty Task.
-          </p>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10"
+            onClick={handleBack}
+            aria-label="Go back"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+            <p className="text-sm text-muted-foreground">
+              Manage appearance and account preferences for Toasty Task.
+            </p>
+          </div>
         </div>
         <div className="hidden sm:inline-flex">
           <ThemeToggle />

@@ -87,8 +87,7 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
 
   const handleClose = useCallback(() => {
     onClose();
-    router.back();
-  }, [onClose, router]);
+  }, [onClose]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

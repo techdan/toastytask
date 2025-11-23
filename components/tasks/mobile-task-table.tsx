@@ -9,7 +9,7 @@ import type { Project, Task, TaskDensity, TaskWithFreshValues } from "@/types";
 import { cn } from "@/lib/utils";
 import { HeatBadge } from "./heat-badge";
 
-interface MobileTaskCardProps {
+interface MobileTaskTableProps {
   task: TaskWithFreshValues;
   projectMap: Map<number, Project>;
   density: TaskDensity;
@@ -34,7 +34,7 @@ const formatRepeat = (repeatType: Task["repeatType"]) => {
   return repeatType.replace(/_/g, " ");
 };
 
-export function MobileTaskCard({
+export function MobileTaskTable({
   task,
   projectMap,
   density,
@@ -45,7 +45,7 @@ export function MobileTaskCard({
   onCool,
   onClick,
   enableSwipe,
-}: MobileTaskCardProps) {
+}: MobileTaskTableProps) {
   const [dragX, setDragX] = useState(0);
   const [isVerticalGesture, setIsVerticalGesture] = useState(false);
   const swipeAllowedRef = useRef(true);
