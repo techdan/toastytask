@@ -26,6 +26,7 @@ interface ProjectItemProps {
   onDragStart?: () => void;
   onDragOver?: () => void;
   onDragEnd?: () => void;
+  forceActionsVisible?: boolean;
 }
 
 const colorOptions = [
@@ -61,6 +62,7 @@ export function ProjectItem({
   onDragStart,
   onDragOver,
   onDragEnd,
+  forceActionsVisible = false,
 }: ProjectItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState(project.name);
@@ -184,7 +186,10 @@ export function ProjectItem({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
-              className="opacity-0 transition-opacity group-hover:opacity-100"
+              className={cn(
+                "transition-opacity",
+                forceActionsVisible ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+              )}
               onClick={(e) => e.stopPropagation()}
             >
               <MoreVertical className="h-4 w-4 text-muted-foreground" />

@@ -16,6 +16,7 @@ interface PrioritySelectProps {
   onValueChange: (value: Priority) => void;
   disabled?: boolean;
   isCompleted?: boolean;
+  size?: "sm" | "lg";
 }
 
 const priorityLabels: Record<Priority, string> = {
@@ -35,7 +36,7 @@ const priorityStyles: Record<Priority, string> = {
 // Reverse order: Top → Low for quick access to high priorities
 const priorityOrder: Priority[] = ["top", "high", "medium", "low"];
 
-export function PrioritySelect({ value, onValueChange, disabled, isCompleted = false }: PrioritySelectProps) {
+export function PrioritySelect({ value, onValueChange, disabled, isCompleted = false, size = "sm" }: PrioritySelectProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const handleValueChange = (newValue: Priority) => {
@@ -57,20 +58,23 @@ export function PrioritySelect({ value, onValueChange, disabled, isCompleted = f
     >
       <SelectTrigger
         className={cn(
-          "priority-trigger",
+          "priority-trigger w-full",
+          size === "lg" && "h-12 text-lg px-3",
           !isOpen && "select-as-text" // Style as text button when closed
         )}
       >
         <SelectValue>
-          <span className={activePriorityClass}>{priorityLabels[value]}</span>
+          <span className={cn(activePriorityClass, size === "lg" && "text-lg")}>
+            {priorityLabels[value]}
+          </span>
         </SelectValue>
       </SelectTrigger>
-      <SelectContent className="text-xs">
+      <SelectContent className={cn("text-xs", size === "lg" && "text-base")}>
         {priorityOrder.map((priority) => (
           <SelectItem
             key={priority}
             value={priority}
-            className="text-xs py-1 pl-2 pr-6"
+            className={cn("text-xs py-1 pl-2 pr-6", size === "lg" && "text-base py-2")}
           >
             <span className={isCompleted ? completedPriorityClass : priorityStyles[priority]}>
               {priorityLabels[priority]}

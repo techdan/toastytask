@@ -4,13 +4,18 @@ import { useState, useMemo, useEffect, useRef, useCallback, Suspense } from "rea
 import { flushSync } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useBreakpoint } from "@/lib/hooks/use-breakpoint";
+import { MobileHeader } from "@/components/navigation/mobile-header";
+import { MobileNavDrawer } from "@/components/navigation/mobile-nav-drawer";
 import { QuickAdd } from "@/components/tasks/quick-add";
 import { TaskList } from "@/components/tasks/task-list";
+import { MobileOptionsMenu } from "@/components/tasks/mobile-options-menu";
 import { ProjectsSidebar } from "@/components/projects/projects-sidebar";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { UserAccountDropdown } from "@/components/auth/user-account-dropdown";
 import { SearchBar } from "@/components/search/search-bar";
 import { SearchDropdown } from "@/components/search/search-dropdown";
+import { SearchModal } from "@/components/search/search-modal";
 import { Logo } from "@/components/ui/logo";
 import { Button } from "@/components/ui/button";
 import {
@@ -229,6 +234,7 @@ function TasksPageContent() {
   const searchParams = useSearchParams();
   const searchQuery = searchParams?.get("q") || "";
   const isSearchMode = searchParams?.get("mode") === "search";
+  const breakpoint = useBreakpoint();
 
   // Read project from URL params, with fallback to "all"
   const projectParam = searchParams?.get("project");
@@ -271,6 +277,12 @@ function TasksPageContent() {
   const [searchInputValue, setSearchInputValue] = useState(searchQuery);
   const [committedSearchQuery, setCommittedSearchQuery] = useState(searchQuery);
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [isMobileOptionsOpen, setIsMobileOptionsOpen] = useState(false);
+  const searchButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const isClientMobile = isMounted && breakpoint === "mobile";
   const queryClient = useQueryClient();
 
   // Track pending completion mutations to prevent refetch races
@@ -291,6 +303,11 @@ function TasksPageContent() {
     const saved = localStorage.getItem("toodle:sidebarCollapsed");
     if (saved === "true") {
       setIsSidebarCollapsed(true);
+    }
+    if (typeof window !== "undefined") {
+      const coarse = window.matchMedia?.("(pointer: coarse)")?.matches;
+      const touchCapable = coarse || "ontouchstart" in window;
+      setIsTouchDevice(touchCapable);
     }
   }, []);
 
@@ -320,6 +337,17 @@ function TasksPageContent() {
       setSelectedProjectId(urlProjectId);
     }
   }, [searchParams, selectedProjectId]);
+
+  // Reset mobile-only overlays when switching breakpoints
+  useEffect(() => {
+    if (!isClientMobile) {
+      setIsMobileNavOpen(false);
+      setIsSearchModalOpen(false);
+      setIsMobileOptionsOpen(false);
+      return;
+    }
+    setIsSearchDropdownOpen(false);
+  }, [isClientMobile]);
 
   // Query hooks - TanStack Query handles caching and state
   // Fetch ALL tasks once and filter client-side for instant project switching
@@ -1260,6 +1288,16 @@ function TasksPageContent() {
     }
   }, []);
 
+  const handleSearchFromModal = useCallback((query: string) => {
+    setSearchInputValue(query);
+    handleSearchEnter(query);
+  }, [handleSearchEnter]);
+
+  const handleOpenSearchModal = useCallback(() => {
+    setIsSearchDropdownOpen(false);
+    setIsSearchModalOpen(true);
+  }, []);
+
   // Compute search results
   const projectsMap = useMemo(() => {
     const map = new Map<number, string>();
@@ -1342,13 +1380,42 @@ function TasksPageContent() {
     return counts;
   }, [allTasks]);
 
+  const handleNavigateToSettings = useCallback(() => {
+    router.push("/settings");
+  }, [router]);
+
+  const handleOpenTaskDetail = useCallback((taskId: number) => {
+    router.push(`/tasks/${taskId}`);
+  }, [router]);
+
   const isLoading = isLoadingTasks;
 
   return (
     <>
+      <MobileNavDrawer
+        open={isMobileNavOpen}
+        onOpenChange={setIsMobileNavOpen}
+        projects={projects}
+        selectedProjectId={selectedProjectId}
+        taskCounts={taskCounts}
+        onSelectProject={handleSelectProject}
+        onCreateProject={handleCreateProject}
+        onUpdateProject={handleUpdateProject}
+        onDeleteProject={handleDeleteProject}
+        onNavigateSettings={handleNavigateToSettings}
+      />
+
+      <SearchModal
+        isOpen={isSearchModalOpen}
+        onClose={() => setIsSearchModalOpen(false)}
+        onSearch={handleSearchFromModal}
+        initialQuery={searchInputValue}
+        returnFocusRef={searchButtonRef}
+      />
+
       <div className="flex h-screen">
         {/* Projects Sidebar */}
-        {isMounted && (
+        {isMounted && !isClientMobile && (
           <ProjectsSidebar
             projects={projects}
             selectedProjectId={selectedProjectId}
@@ -1373,92 +1440,120 @@ function TasksPageContent() {
         )}
 
         {/* Main Content */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full min-w-0 px-4 py-8 lg:px-[40px]">
-            <div className="mb-8 flex items-start justify-between">
-              <div>
-                <h1 className="mb-2 flex items-center gap-3 text-3xl font-bold">
-                  <button
-                    onClick={() => handleSelectProject("all")}
-                    className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
-                    aria-label="Go to all tasks"
-                  >
-                    <Logo width={40} height={40} className="h-10 w-10" />
-                    <span className="font-fraunces text-4xl font-bold tracking-tight logo-text">
-                      <span className="logo-word-toasty">Toasty</span>
-                      <span className="logo-word-task">Task</span>
-                    </span>
-                  </button>
-                </h1>
-              </div>
-              <div className="flex items-center gap-3">
-                {/* Search Bar */}
-                <div className="relative w-80">
-                  <SearchBar
-                    onSearch={handleSearch}
-                    onEnter={handleSearchEnter}
-                    initialValue={searchInputValue}
-                  />
-                  <SearchDropdown
-                    results={dropdownSearchResults}
-                    isOpen={isSearchDropdownOpen}
-                    onClose={() => setIsSearchDropdownOpen(false)}
-                    onSelectResult={handleSelectSearchResult}
-                  />
-                </div>
-                <ThemeToggle />
-                <UserAccountDropdown />
-              </div>
-            </div>
-
-            {/* Quick Add - Hidden in search mode */}
-            {!isSearchMode && (
-              <div className="mb-6">
-                <QuickAdd
-                  onAdd={handleAddTask}
-                  currentProjectId={selectedProjectId === "all" ? null : selectedProjectId}
-                />
-              </div>
-            )}
-
-            {/* Task List */}
-            {isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <p className="text-muted-foreground">Loading tasks...</p>
-              </div>
-            ) : (
-              <>
-                {isSearchMode && canonicalSearchQuery && (
-                  <div className="mb-4 text-sm text-muted-foreground">
-                    {finalDisplayedTasks.length} {finalDisplayedTasks.length === 1 ? 'result' : 'results'} for &ldquo;{committedSearchQuery || searchQuery}&rdquo;
-                  </div>
-                )}
-                <TaskList
-                  tasks={finalDisplayedTasks}
-                  projects={projects}
-                  showCompleted={showCompleted}
-                  onToggleCompleted={handleToggleCompleted}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {isClientMobile && (
+            <MobileHeader
+              onOpenProjects={() => setIsMobileNavOpen(true)}
+              onOpenSearch={handleOpenSearchModal}
+              optionsTrigger={(
+                <MobileOptionsMenu
                   sortMode={sortMode}
                   sortDirection={sortDirection}
+                  density={taskDensity}
+                  showCompleted={showCompleted}
                   onSortModeChange={handleSortModeChange}
                   onToggleSortDirection={handleToggleSortDirection}
-                  onRefreshOrder={handleRefreshOrder}
-                  isRefreshingOrder={isRefreshingOrder}
-                  density={taskDensity}
                   onDensityChange={handleDensityChange}
-                  onUpdate={handleUpdateTask}
-                  onStar={handleStarTask}
-                  onDelete={handleDeleteTask}
-                  onComplete={handleCompleteTask}
-                  onUncomplete={handleUncompleteTask}
-                  onHeat={handleHeatRequest}
-                  onCool={handleCoolRequest}
-                  onTouch={handleTouchTask}
-                  highlightedTask={highlightedTask}
-                  recurringCompletionSignals={recurringCompletionSignals}
+                  onToggleCompleted={handleToggleCompleted}
+                  open={isMobileOptionsOpen}
+                  onOpenChange={setIsMobileOptionsOpen}
                 />
-              </>
-            )}
+              )}
+              searchButtonRef={searchButtonRef}
+            />
+          )}
+          <div className="flex-1 overflow-y-auto">
+            <div className="w-full min-w-0 p-0 m-0">
+              {!isClientMobile && (
+                <div className="mb-8 flex items-start justify-between">
+                  <div>
+                    <h1 className="mb-2 flex items-center gap-3 text-3xl font-bold">
+                      <button
+                        onClick={() => handleSelectProject("all")}
+                        className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
+                        aria-label="Go to all tasks"
+                      >
+                        <Logo width={40} height={40} className="h-10 w-10" />
+                        <span className="font-fraunces text-4xl font-bold tracking-tight logo-text">
+                          <span className="logo-word-toasty">Toasty</span>
+                          <span className="logo-word-task">Task</span>
+                        </span>
+                      </button>
+                    </h1>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {/* Search Bar */}
+                    <div className="relative w-80">
+                      <SearchBar
+                        onSearch={handleSearch}
+                        onEnter={handleSearchEnter}
+                        initialValue={searchInputValue}
+                      />
+                      <SearchDropdown
+                        results={dropdownSearchResults}
+                        isOpen={isSearchDropdownOpen}
+                        onClose={() => setIsSearchDropdownOpen(false)}
+                        onSelectResult={handleSelectSearchResult}
+                      />
+                    </div>
+                    <ThemeToggle />
+                    <UserAccountDropdown />
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Add - Hidden in search mode */}
+              {!isSearchMode && (
+                <div className="mb-6">
+                  <QuickAdd
+                    onAdd={handleAddTask}
+                    currentProjectId={selectedProjectId === "all" ? null : selectedProjectId}
+                  />
+                </div>
+              )}
+
+              {/* Task List */}
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <p className="text-muted-foreground">Loading tasks...</p>
+                </div>
+              ) : (
+                <>
+                  {isSearchMode && canonicalSearchQuery && (
+                    <div className="mb-4 text-sm text-muted-foreground">
+                      {finalDisplayedTasks.length} {finalDisplayedTasks.length === 1 ? 'result' : 'results'} for &ldquo;{committedSearchQuery || searchQuery}&rdquo;
+                    </div>
+                  )}
+                  <TaskList
+                    tasks={finalDisplayedTasks}
+                    projects={projects}
+                    showCompleted={showCompleted}
+                    onToggleCompleted={handleToggleCompleted}
+                    sortMode={sortMode}
+                    sortDirection={sortDirection}
+                    onSortModeChange={handleSortModeChange}
+                    onToggleSortDirection={handleToggleSortDirection}
+                    onRefreshOrder={handleRefreshOrder}
+                    isRefreshingOrder={isRefreshingOrder}
+                    density={taskDensity}
+                    onDensityChange={handleDensityChange}
+                    onUpdate={handleUpdateTask}
+                    onStar={handleStarTask}
+                    onDelete={handleDeleteTask}
+                    onComplete={handleCompleteTask}
+                    onUncomplete={handleUncompleteTask}
+                    onHeat={handleHeatRequest}
+                    onCool={handleCoolRequest}
+                    onTouch={handleTouchTask}
+                    highlightedTask={highlightedTask}
+                    recurringCompletionSignals={recurringCompletionSignals}
+                    isMobile={isClientMobile}
+                    enableSwipeGestures={isClientMobile && isTouchDevice}
+                    onTaskPress={handleOpenTaskDetail}
+                  />
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -16,6 +16,7 @@ interface TaskProjectSelectProps {
   value: number | null;
   onValueChange: (projectId: number | null) => void;
   disabled?: boolean;
+  size?: "sm" | "lg";
 }
 
 const getProjectDisplay = (project: Project | undefined) => ({
@@ -28,6 +29,7 @@ export function TaskProjectSelect({
   value,
   onValueChange,
   disabled,
+  size = "sm",
 }: TaskProjectSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const selectedProject = value === null ? undefined : projects.find((p) => p.id === value);
@@ -57,7 +59,8 @@ export function TaskProjectSelect({
     >
       <SelectTrigger
         className={cn(
-          "project-trigger",
+          "project-trigger w-full",
+          size === "lg" && "h-12 text-lg px-3",
           !isOpen && "select-as-text" // Style as text button when closed
         )}
       >
@@ -73,14 +76,16 @@ export function TaskProjectSelect({
                 aria-hidden="true"
               />
             )}
-            <span className="truncate">{display.name}</span>
+            <span className={cn("truncate", size === "lg" && "text-lg")}>{display.name}</span>
           </div>
         </SelectValue>
       </SelectTrigger>
-      <SelectContent className="max-h-60 text-xs">
-        <SelectItem value="none">No Project</SelectItem>
+      <SelectContent className={cn("max-h-60 text-xs", size === "lg" && "text-base")}>
+        <SelectItem value="none" className={cn(size === "lg" && "text-base py-2")}>
+          No Project
+        </SelectItem>
         {showFallbackOption && (
-          <SelectItem value={String(value)}>
+          <SelectItem value={String(value)} className={cn(size === "lg" && "text-base py-2")}>
             <div className="flex items-center gap-2">
               <span
                 className="h-2.5 w-2.5 rounded-full border border-border"
@@ -95,7 +100,11 @@ export function TaskProjectSelect({
           <>
             <div className="my-1 h-px bg-border" />
             {projects.map((project) => (
-              <SelectItem key={project.id} value={String(project.id)}>
+              <SelectItem
+                key={project.id}
+                value={String(project.id)}
+                className={cn(size === "lg" && "text-base py-2")}
+              >
                 <div className="flex items-center gap-2">
                   <span
                     className="h-2.5 w-2.5 rounded-full border border-border"

@@ -13,9 +13,10 @@ interface DueDateDisplayProps {
   onDateChange: (date: Date | null) => void;
   disabled?: boolean;
   isCompleted?: boolean;
+  size?: "sm" | "lg";
 }
 
-export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted }: DueDateDisplayProps) {
+export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted, size = "sm" }: DueDateDisplayProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [pendingDate, setPendingDate] = useState<Date | null>(null);
   const [hasPendingChange, setHasPendingChange] = useState(false);
@@ -162,13 +163,14 @@ export function DueDateDisplay({ dueAt, onDateChange, disabled, isCompleted }: D
           type="button"
           disabled={disabled}
           className={cn(
-            "flex h-6 w-full min-w-[5.75rem] items-center gap-1 text-left text-xs",
+            "flex w-full min-w-[5.75rem] items-center gap-2 text-left",
+            size === "lg" ? "h-12 text-lg" : "h-6 text-xs",
             "cursor-pointer px-0",
             !isOpen && "date-trigger-as-text", // Style as text when closed
             disabled && "cursor-not-allowed opacity-50"
           )}
         >
-          <CalendarIcon className="h-3 w-3" />
+          <CalendarIcon className={size === "lg" ? "h-5 w-5" : "h-3 w-3"} />
           <span className={cn("whitespace-nowrap", wrapperClassName)}>
             <span className={textClassName}>{text}</span>
           </span>

@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { User, Settings, LogOut, Menu } from "lucide-react";
+import { User, Settings, LogOut, Menu, SlidersHorizontal } from "lucide-react";
 import { SettingsDrawer } from "@/components/settings/settings-drawer";
 import { useSettingsQuery } from "@/lib/queries/use-settings-query";
 
@@ -64,9 +64,13 @@ export function UserAccountDropdown() {
             <User className="mr-2 h-4 w-4" />
             <span>Profile</span>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setIsSettingsOpen(true)}>
+          <DropdownMenuItem onClick={() => router.push("/settings")}>
             <Settings className="mr-2 h-4 w-4" />
             <span>Settings</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setIsSettingsOpen(true)}>
+            <SlidersHorizontal className="mr-2 h-4 w-4" />
+            <span>Task defaults</span>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem

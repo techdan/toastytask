@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { TaskRow } from "./task-row";
 import { TaskListHeader } from "./task-list-header";
+import { MobileTaskCard } from "./mobile-task-card";
 import { cn } from "@/lib/utils";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
 import { calculateHeat } from "@/lib/scoring/heat-v3";
@@ -34,6 +35,9 @@ interface TaskListProps {
     mode: "heat" | "cool" | "due";
   } | null;
   recurringCompletionSignals: ReadonlyMap<number, number>;
+  isMobile?: boolean;
+  enableSwipeGestures?: boolean;
+  onTaskPress?: (taskId: number) => void;
 }
 
 export function TaskList({
@@ -59,6 +63,9 @@ export function TaskList({
   onTouch,
   highlightedTask,
   recurringCompletionSignals,
+  isMobile = false,
+  enableSwipeGestures = false,
+  onTaskPress,
 }: TaskListProps) {
   // Helper function to get all active tasks with client-calculated heats
   // CRITICAL FIX FOR TIMEZONE BUG: Client calculates heats using correct local timezone.
@@ -110,6 +117,29 @@ export function TaskList({
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <p className="text-muted-foreground">No tasks yet. Add one to get started!</p>
+      </div>
+    );
+  }
+
+  if (isMobile) {
+    const projectMap = new Map(projects.map((project) => [project.id, project]));
+    return (
+      <div className="divide-y divide-border">
+        {tasks.map((task) => (
+          <MobileTaskCard
+            key={task.id}
+            task={task}
+            projectMap={projectMap}
+            density={density}
+            onComplete={onComplete}
+            onUncomplete={onUncomplete}
+            onStar={onStar}
+            onHeat={handleHeat}
+            onCool={handleCool}
+            enableSwipe={enableSwipeGestures}
+            onClick={() => onTaskPress?.(task.id)}
+          />
+        ))}
       </div>
     );
   }

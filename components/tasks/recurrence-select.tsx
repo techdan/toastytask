@@ -31,9 +31,10 @@ interface RecurrenceSelectProps {
   repeatRule?: Task["repeatRule"];
   onValueChange: (value: Task["repeatType"], repeatRule?: string | null) => void;
   disabled?: boolean;
+  size?: "sm" | "lg";
 }
 
-export function RecurrenceSelect({ value, repeatRule, onValueChange, disabled }: RecurrenceSelectProps) {
+export function RecurrenceSelect({ value, repeatRule, onValueChange, disabled, size = "sm" }: RecurrenceSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [customConfig, setCustomConfig] = useState<RecurrenceConfig | null>(null);
@@ -140,26 +141,29 @@ export function RecurrenceSelect({ value, repeatRule, onValueChange, disabled }:
       >
         <SelectTrigger
           className={cn(
-            "recurrence-trigger",
+            "recurrence-trigger w-full",
+            size === "lg" && "h-12 text-lg px-3",
             !isOpen && "select-as-text" // Style as text button when closed
           )}
         >
           <SelectValue>
-            <div className={cn(
-              "flex items-center gap-1",
-              !showIcon && "text-muted-foreground/60"
-            )}>
-              {showIcon && <Repeat className="h-3 w-3" />}
-              <span>{currentLabel}</span>
+            <div
+              className={cn(
+                "flex items-center gap-1",
+                !showIcon && "text-muted-foreground/60"
+              )}
+            >
+              {showIcon && <Repeat className={size === "lg" ? "h-5 w-5" : "h-3 w-3"} />}
+              <span className={size === "lg" ? "text-lg" : undefined}>{currentLabel}</span>
             </div>
           </SelectValue>
         </SelectTrigger>
-        <SelectContent className="text-xs">
+        <SelectContent className={cn("text-xs", size === "lg" && "text-base")}>
           {allOptions.map((option) => (
             <SelectItem
               key={option.id}
               value={option.id}
-              className="text-xs py-1 pl-2 pr-6"
+              className={cn("text-xs py-1 pl-2 pr-6", size === "lg" && "text-base py-2")}
               onPointerDown={(e) => {
                 // If clicking Custom, always open the modal
                 if (option.id === RepeatType.CUSTOM) {
