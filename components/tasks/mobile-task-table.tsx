@@ -5,7 +5,7 @@ import { useSwipeable } from "react-swipeable";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Flame, Snowflake, Star, StickyNote } from "lucide-react";
 import { getImportanceColorFromConfig } from "@/lib/scoring/importance-colors";
-import type { Project, Task, TaskDensity, TaskWithFreshValues } from "@/types";
+import type { Project, SortMode, Task, TaskDensity, TaskWithFreshValues } from "@/types";
 import { cn } from "@/lib/utils";
 import { HeatBadge } from "./heat-badge";
 
@@ -20,6 +20,7 @@ interface MobileTaskTableProps {
   onCool: (id: number) => void;
   onClick: () => void;
   enableSwipe: boolean;
+  sortMode: SortMode;
 }
 
 const formatDue = (dueAt: Task["dueAt"]) => {
@@ -45,6 +46,7 @@ export function MobileTaskTable({
   onCool,
   onClick,
   enableSwipe,
+  sortMode,
 }: MobileTaskTableProps) {
   const [dragX, setDragX] = useState(0);
   const [isVerticalGesture, setIsVerticalGesture] = useState(false);
@@ -62,6 +64,7 @@ export function MobileTaskTable({
   }, [projectMap, task.projectId]);
 
   const stripColor = getImportanceColorFromConfig(task._freshImportance ?? 0);
+  const badgeMode: SortMode = sortMode === "importance" ? "importance" : "heat";
 
   const secondaryRow = useMemo(() => {
     if (isCompact) return null;
@@ -222,7 +225,7 @@ export function MobileTaskTable({
               className="h-5 w-5"
               data-no-swipe
             />
-            <HeatBadge task={task} mode="heat" isCompleted={isCompleted} />
+            <HeatBadge task={task} mode={badgeMode} isCompleted={isCompleted} />
             <div className="min-w-0 flex-1 space-y-1">
               <div
                 className={cn(

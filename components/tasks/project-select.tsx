@@ -65,19 +65,12 @@ export function TaskProjectSelect({
         )}
       >
         <SelectValue>
-          <div className={cn(
-            "flex items-center gap-1.5",
-            value === null && "text-muted-foreground/70"
+          <span className={cn(
+            value === null && "text-muted-foreground/70",
+            size === "lg" && "text-lg"
           )}>
-            {value !== null && (
-              <span
-                className="h-2.5 w-2.5 rounded-full border border-border"
-                style={{ backgroundColor: display.color }}
-                aria-hidden="true"
-              />
-            )}
-            <span className={cn("truncate", size === "lg" && "text-lg")}>{display.name}</span>
-          </div>
+            {display.name}
+          </span>
         </SelectValue>
       </SelectTrigger>
       <SelectContent className={cn("max-h-60 text-xs", size === "lg" && "text-base")}>

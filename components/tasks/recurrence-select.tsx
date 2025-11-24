@@ -141,21 +141,18 @@ export function RecurrenceSelect({ value, repeatRule, onValueChange, disabled, s
       >
         <SelectTrigger
           className={cn(
-            "recurrence-trigger w-full",
+            "recurrence-trigger w-full text-left justify-start",
             size === "lg" && "h-12 text-lg px-3",
-            !isOpen && "select-as-text" // Style as text button when closed
+            !isOpen && "select-as-text"
           )}
         >
           <SelectValue>
-            <div
-              className={cn(
-                "flex items-center gap-1",
-                !showIcon && "text-muted-foreground/60"
-              )}
-            >
-              {showIcon && <Repeat className={size === "lg" ? "h-5 w-5" : "h-3 w-3"} />}
-              <span className={size === "lg" ? "text-lg" : undefined}>{currentLabel}</span>
-            </div>
+            <span className={cn(
+              !showIcon && "text-muted-foreground/60",
+              size === "lg" && "text-lg"
+            )}>
+              {currentLabel}
+            </span>
           </SelectValue>
         </SelectTrigger>
         <SelectContent className={cn("text-xs", size === "lg" && "text-base")}>

@@ -72,7 +72,11 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
       : ""
   );
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [highlightDueDate, setHighlightDueDate] = useState(false);
+  const [highlightRecurrence, setHighlightRecurrence] = useState(false);
+  const [showCompletedCheckmark, setShowCompletedCheckmark] = useState(false);
 
   useEffect(() => {
     if (task) {
@@ -136,10 +140,27 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
 
   const handleCompleteToggle = useCallback(async () => {
     try {
-      if (task?.completedAt) {
+      const isRecurring = task?.repeatType && task.repeatType !== "none";
+      const wasCompleted = Boolean(task?.completedAt);
+
+      if (wasCompleted) {
         await uncompleteTaskMutation.mutateAsync(taskId);
       } else {
         await completeTaskMutation.mutateAsync(taskId);
+
+        // Highlight due date and recurrence for recurring tasks when completing
+        if (isRecurring) {
+          setHighlightDueDate(true);
+          setHighlightRecurrence(true);
+          setShowCompletedCheckmark(true);
+          window.setTimeout(() => {
+            setHighlightDueDate(false);
+            setHighlightRecurrence(false);
+          }, 2000);
+          window.setTimeout(() => {
+            setShowCompletedCheckmark(false);
+          }, 1200);
+        }
       }
       setSaveState("saved");
       window.setTimeout(() => setSaveState("idle"), 800);
@@ -147,7 +168,7 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
       setSaveState("error");
       setSaveError(error instanceof Error ? error.message : "Save failed");
     }
-  }, [completeTaskMutation, task?.completedAt, taskId, uncompleteTaskMutation]);
+  }, [completeTaskMutation, task?.completedAt, task?.repeatType, taskId, uncompleteTaskMutation]);
 
   const handleHeat = useCallback(async () => {
     if (!task) return;
@@ -210,31 +231,29 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
           )}
           onClick={(event) => event.stopPropagation()}
         >
-          <header className="flex items-center justify-between border-b px-4 py-4 h-20">
+          <header className="flex items-center justify-between border-b px-4 py-2 h-20">
             <Button
               variant="ghost"
-              size="icon"
-              className="h-16 w-16"
+              className="h-10 w-10 shrink-0 p-0 flex items-center justify-center"
               onClick={handleClose}
               aria-label="Back"
             >
-              <ArrowLeft className="h-8 w-8" />
+              <ArrowLeft className="h-10 w-10" />
             </Button>
             {enrichedTask ? (
-              <div className="flex flex-1 items-center justify-center gap-5">
+              <div className="flex flex-1 items-center justify-center gap-2">
                 <button
                   type="button"
                   onClick={() => setBadgeMode((prev) => (prev === "heat" ? "importance" : "heat"))}
-                  className="flex h-16 items-center rounded-md px-3 py-3"
+                  className="flex h-10 w-10 items-center justify-center rounded-md"
                   aria-label="Toggle heat/importance badge"
                 >
                   <HeatBadge task={enrichedTask} mode={badgeMode} isCompleted={Boolean(task.completedAt)} />
                 </button>
                 <Button
                   variant="ghost"
-                  size="icon"
                   className={cn(
-                  "h-16 w-16",
+                  "h-10 w-10 shrink-0 p-0 flex items-center justify-center",
                   task.starLevel === 1 && "text-sky-500",
                   task.starLevel === 2 && "text-amber-400",
                   task.starLevel === 3 && "text-orange-500",
@@ -245,75 +264,86 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
                 >
                   <Star
                     className={cn(
-                    "h-8 w-8",
+                    "h-10 w-10",
                     (task.starLevel ?? 0) > 0 && "fill-current"
                   )}
                 />
               </Button>
-              <Button variant="ghost" size="icon" className="h-16 w-16" onClick={handleHeat} aria-label="Heat task">
-                <Flame className="h-8 w-8 text-orange-500" />
+              <Button variant="ghost" className="h-10 w-10 shrink-0 p-0 flex items-center justify-center" onClick={handleHeat} aria-label="Heat task">
+                <Flame className="h-10 w-10 text-orange-500" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-16 w-16" onClick={handleCool} aria-label="Cool task">
-                <Snowflake className="h-8 w-8 text-sky-500" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-16 w-16"
-                onClick={() => setIsDeleteOpen(true)}
-                aria-label="Delete task"
-              >
-                <Trash2 className="h-8 w-8 text-destructive" />
+              <Button variant="ghost" className="h-10 w-10 shrink-0 p-0 flex items-center justify-center" onClick={handleCool} aria-label="Cool task">
+                <Snowflake className="h-10 w-10 text-sky-500" />
               </Button>
             </div>
           ) : (
             <div className="flex-1" />
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-16 w-16"
-            onClick={handleClose}
-            aria-label="Close"
-          >
-            <X className="h-8 w-8" />
-          </Button>
+          {task ? (
+            <div className="flex flex-col items-end justify-center text-[10px] text-muted-foreground leading-tight whitespace-nowrap pr-4">
+              <div>Created: {new Date(task.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}</div>
+              <div>Modified: {new Date(task.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}</div>
+            </div>
+          ) : (
+            <div className="w-10" />
+          )}
         </header>
 
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
             <div className="flex items-center gap-3">
               <Checkbox
-                checked={Boolean(task.completedAt)}
-                onCheckedChange={() => handleCompleteToggle()}
-                className="h-6 w-6"
+                checked={Boolean(task.completedAt) || showCompletedCheckmark}
+                onCheckedChange={handleCompleteToggle}
+                className={cn(
+                  "h-6 w-6",
+                  showCompletedCheckmark && "transition-opacity duration-1000 opacity-0"
+                )}
                 aria-label="Mark task complete"
               />
               <Input
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 onBlur={handleTitleBlur}
-              className="h-12 text-lg"
+                className={cn(
+                  "h-12 text-lg",
+                  task.completedAt && "line-through text-muted-foreground italic"
+                )}
                 autoFocus
                 placeholder="Task title"
               />
             </div>
 
-            <div className="space-y-4 text-lg">
+            <div className={cn(
+              "space-y-4 text-lg",
+              task.completedAt && "text-muted-foreground italic"
+            )}>
               <div className="flex items-center gap-4">
                 <div className="w-28 text-lg font-semibold text-muted-foreground">Due date</div>
-                <div className="flex-1">
-                  <DueDateDisplay
-                    dueAt={task.dueAt}
-                    onDateChange={(date) => runSave({ dueAt: date })}
-                    disabled={Boolean(task.completedAt)}
-                    isCompleted={Boolean(task.completedAt)}
-                    size="lg"
-                  />
+                <div className={cn("flex-1", task.completedAt && "line-through")}>
+                  {highlightDueDate ? (
+                    <span className="due-date-highlight">
+                      <DueDateDisplay
+                        dueAt={task.dueAt}
+                        onDateChange={(date) => runSave({ dueAt: date })}
+                        disabled={Boolean(task.completedAt)}
+                        isCompleted={Boolean(task.completedAt)}
+                        size="lg"
+                      />
+                    </span>
+                  ) : (
+                    <DueDateDisplay
+                      dueAt={task.dueAt}
+                      onDateChange={(date) => runSave({ dueAt: date })}
+                      disabled={Boolean(task.completedAt)}
+                      isCompleted={Boolean(task.completedAt)}
+                      size="lg"
+                    />
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-4">
                 <div className="w-28 text-lg font-semibold text-muted-foreground">Priority</div>
-                <div className="flex-1">
+                <div className={cn("flex-1", task.completedAt && "line-through")}>
                   <PrioritySelect
                     value={task.priority}
                     onValueChange={(priority) => runSave({ priority })}
@@ -325,7 +355,7 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
               </div>
               <div className="flex items-center gap-4">
                 <div className="w-28 text-lg font-semibold text-muted-foreground">Project</div>
-                <div className="flex-1">
+                <div className={cn("flex-1", task.completedAt && "line-through")}>
                   <TaskProjectSelect
                     projects={projects}
                     value={task.projectId ?? null}
@@ -337,7 +367,11 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
               </div>
               <div className="flex items-center gap-4">
                 <div className="w-28 text-lg font-semibold text-muted-foreground">Recurrence</div>
-                <div className="flex-1">
+                <div className={cn(
+                  "flex-1",
+                  highlightRecurrence && "due-date-highlight",
+                  task.completedAt && "line-through"
+                )}>
                   <RecurrenceSelect
                     value={task.repeatType}
                     repeatRule={task.repeatRule}
@@ -350,13 +384,17 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
             </div>
 
             <div className="space-y-2">
-              <div className="text-xs font-semibold text-muted-foreground">Notes</div>
+              <div className="text-lg font-semibold text-muted-foreground">Notes</div>
               <Textarea
                 value={notes}
                 onChange={(event) => setNotes(event.target.value)}
                 onBlur={handleNotesBlur}
                 rows={8}
                 placeholder="Notes"
+                className={cn(
+                  "text-lg resize-none [field-sizing:initial] !min-h-[15rem] h-auto",
+                  task.completedAt && "line-through text-muted-foreground italic"
+                )}
               />
             </div>
 

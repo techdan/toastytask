@@ -371,12 +371,14 @@
   gap: 0.25rem;
 }
 
-.project-trigger {
-  max-width: 5.5rem;
-}
-
-.recurrence-trigger {
-  max-width: 6rem;
+/* Large size triggers (task detail screen) */
+.priority-trigger.h-12,
+.recurrence-trigger.h-12,
+.project-trigger.h-12 {
+  height: 3rem;
+  min-height: 3rem;
+  font-size: 1.125rem;
+  line-height: 1.75rem;
 }
 
 .priority-trigger > svg,
@@ -437,6 +439,21 @@
 .select-as-text > span[data-slot="select-icon"],
 .select-as-text [data-radix-select-icon] {
   display: none !important;
+}
+
+/* Override height constraint for large select triggers */
+.select-as-text.h-12[data-slot="select-trigger"] {
+  height: 3rem !important;
+  min-height: 3rem !important;
+}
+
+/* Ensure recurrence text doesn't truncate */
+.recurrence-trigger span {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  max-width: none !important;
+  width: 100% !important;
 }
 
 /* Date trigger as text - similar styling for consistency */

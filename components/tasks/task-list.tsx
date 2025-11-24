@@ -138,6 +138,7 @@ export function TaskList({
             onCool={handleCool}
             enableSwipe={enableSwipeGestures}
             onClick={() => onTaskPress?.(task.id)}
+            sortMode={sortMode}
           />
         ))}
       </div>
