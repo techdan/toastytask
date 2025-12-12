@@ -20,6 +20,9 @@ const eslintConfig = [
       "next-env.d.ts",
       "lib/db/scripts/**",  // Migration scripts are Node.js scripts, not Next.js code
       "lib/db/migrations/**",  // Migration SQL files
+      "data/**",
+      "**/*.db",
+      "**/*.db-*",
     ],
   },
 ];

@@ -2,12 +2,11 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Configure for both webpack and turbopack
-  experimental: {
-    turbo: {
-      resolveAlias: {
-        // Ensure better-sqlite3 is resolved from node_modules
-        'better-sqlite3': 'better-sqlite3',
-      },
+  // Configure for both webpack and turbopack
+  turbopack: {
+    resolveAlias: {
+      // Ensure better-sqlite3 is resolved from node_modules
+      'better-sqlite3': 'better-sqlite3',
     },
   },
   webpack: (config, { isServer }) => {
