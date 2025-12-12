@@ -123,7 +123,7 @@ export function TaskListHeader({
         <th
           scope="col"
           className={cn(
-            "px-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[5.75rem]",
+            "px-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 w-[92px]",
             headerPadding
           )}
         >
@@ -132,7 +132,7 @@ export function TaskListHeader({
         <th
           scope="col"
           className={cn(
-            "px-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[5.25rem]",
+            "px-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 w-[84px]",
             headerPadding
           )}
         >
@@ -141,7 +141,7 @@ export function TaskListHeader({
         <th
           scope="col"
           className={cn(
-            "px-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[5.5rem]",
+            "px-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 w-[110px]",
             headerPadding
           )}
         >
@@ -150,7 +150,7 @@ export function TaskListHeader({
         <th
           scope="col"
           className={cn(
-            "px-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 min-w-[6rem]",
+            "px-2 text-xs font-medium text-muted-foreground text-left border-y border-r-0 w-[96px]",
             headerPadding
           )}
         >
@@ -159,7 +159,7 @@ export function TaskListHeader({
         <th
           scope="col"
           className={cn(
-            "px-2 text-xs font-medium text-muted-foreground text-left last:rounded-r border-y border-r",
+            "px-2 text-xs font-medium text-muted-foreground text-left last:rounded-r border-y border-r w-14",
             headerPadding
           )}
         >

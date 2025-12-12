@@ -161,7 +161,7 @@ export function TaskList({
           <col className="w-[84px]" />
           <col className="w-[110px]" />
           <col className="w-[96px]" />
-          <col className="w-10" />
+          <col className="w-14" />
         </colgroup>
         <TaskListHeader
           showCompleted={showCompleted}

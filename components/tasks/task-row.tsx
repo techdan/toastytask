@@ -199,7 +199,7 @@ export function TaskRow({
       <tr
         data-task-id={task.id}
         className={cn(
-          "group bg-card transition-colors hover:bg-accent/30",
+          "bg-card transition-colors hover:bg-accent/30",
           rowHighlightClass,
           rowRecurringCueClass,
           isCompleted && "text-muted-foreground italic"
@@ -390,19 +390,25 @@ export function TaskRow({
         </td>
         <td
           className={cn(
-            "px-2 align-middle border-y border-r text-right",
+            "px-2 align-middle border-y border-r overflow-visible",
             cellPaddingClass,
             notesExpanded && "border-b-0",
             !isCompact && (notesExpanded ? "rounded-tr" : "last:rounded-r")
           )}
         >
-          <button
-            className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-            onClick={() => onDelete(task.id)}
-            aria-label="Delete task"
-          >
-            <Trash2 className="h-3.5 w-3.5 text-destructive" />
-          </button>
+          <div className="flex items-center justify-end">
+            <button
+              className="task-delete-button relative z-20 flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-0 transition-opacity duration-200 hover:bg-red-100/50 dark:hover:bg-red-900/30 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500/40"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(task.id);
+              }}
+              aria-label="Delete task"
+              title="Delete task"
+            >
+              <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
+            </button>
+          </div>
         </td>
       </tr>
 

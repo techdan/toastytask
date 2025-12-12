@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { Notebook, NotebookText, NotebookPen } from "lucide-react";
@@ -62,14 +62,14 @@ export function TaskNotes({ taskId, isExpanded, onToggle, notesCount = 0, notesL
     ? notesLastModified instanceof Date
       ? notesLastModified
       : new Date(notesLastModified)
-      : null;
+    : null;
 
   // If cache has notes, prefer the latest updatedAt from cache for hover text
   const cachedLastModified = hasLocalNotes
     ? cachedNotes.reduce<Date | null>((acc, n) => {
-        const d = n.updatedAt instanceof Date ? n.updatedAt : new Date(n.updatedAt);
-        return !acc || d > acc ? d : acc;
-      }, null)
+      const d = n.updatedAt instanceof Date ? n.updatedAt : new Date(n.updatedAt);
+      return !acc || d > acc ? d : acc;
+    }, null)
     : null;
 
   return (
@@ -84,12 +84,12 @@ export function TaskNotes({ taskId, isExpanded, onToggle, notesCount = 0, notesL
           "transition-colors cursor-pointer",
           isExpanded ? "text-primary" :
             hasContent ? "text-foreground/70 hover:text-foreground" :
-            "text-muted-foreground/40 hover:text-muted-foreground"
+              "text-muted-foreground/40 hover:text-muted-foreground"
         )}
         title={hasContent
           ? ((cachedLastModified || lastModifiedDate)
-              ? `Notes (${formatNoteRelativeTime(cachedLastModified || (lastModifiedDate as Date))})`
-              : "Notes")
+            ? `Notes (${formatNoteRelativeTime(cachedLastModified || (lastModifiedDate as Date))})`
+            : "Notes")
           : "Add notes"}
       >
         {isExpanded ? (
@@ -124,8 +124,19 @@ export function TaskNotesPanel({
   const [isEditing, setIsEditing] = useState(false);
   const [notesText, setNotesText] = useState("");
   const [hoveredLineIndex, setHoveredLineIndex] = useState<number | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const searchParams = useSearchParams();
   const showDebug = (searchParams.get("DEBUG") || "").toLowerCase() === "true";
+
+  // Auto-resize textarea based on content (JS fallback for field-sizing: content)
+  const autoResize = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    // Reset height to auto to get accurate scrollHeight
+    textarea.style.height = "auto";
+    // Set height to scrollHeight (content height)
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, []);
 
   // Use query hook for fetching notes with caching
   // If initialNotes are provided (from task cache), use them for instant display
@@ -141,6 +152,14 @@ export function TaskNotesPanel({
       setNotesText(text);
     }
   }, [noteRows, isEditing]);
+
+  // Auto-resize when entering edit mode or when text changes
+  useEffect(() => {
+    if (isEditing) {
+      // Use requestAnimationFrame to ensure DOM has updated
+      requestAnimationFrame(autoResize);
+    }
+  }, [isEditing, notesText, autoResize]);
 
   const handleSave = () => {
     // Optimistically exit edit mode immediately for snappy UX
@@ -227,10 +246,14 @@ export function TaskNotesPanel({
         <p className="text-sm text-muted-foreground">Loading notes...</p>
       ) : isEditing ? (
         <Textarea
+          ref={textareaRef}
           value={notesText}
-          onChange={(e) => setNotesText(e.target.value)}
+          onChange={(e) => {
+            setNotesText(e.target.value);
+            autoResize();
+          }}
           onBlur={handleBlur}
-          className="min-h-[100px] resize-y bg-transparent text-sm leading-5 border-0 focus-visible:ring-0 text-gray-800 dark:text-gray-200"
+          className="min-h-[100px] resize-none overflow-hidden bg-transparent text-sm leading-5 border-0 focus-visible:ring-0 text-gray-800 dark:text-gray-200"
           placeholder="Add notes here..."
           autoFocus
         />

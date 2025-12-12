@@ -150,11 +150,19 @@ export function MobileTaskTable({
   const thresholdPercent = 60;
   const showThresholdLine = revealDirection !== null && revealMagnitude > 0.2;
 
+  /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
+  const { ref: swipeRef, ...swipeRest } = swipeHandlers;
+
   return (
     <div
-      ref={cardRef}
+      ref={(node) => {
+        // Handle cardRef
+        if (cardRef) (cardRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+        // Handle swipeHandlers ref
+        if (enableSwipe && swipeHandlers.ref) swipeHandlers.ref(node);
+      }}
       className="relative overflow-hidden bg-card"
-      {...(enableSwipe ? swipeHandlers : {})}
+      {...(enableSwipe ? swipeRest : {})}
       onClick={() => {
         if (Math.abs(dragX) > 6) return;
         onClick();

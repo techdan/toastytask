@@ -42,6 +42,16 @@ export async function PATCH(
         ? new Date(updates.completedAt as string | number)
         : null;
     }
+    if (updates.lastTouchedAt !== undefined) {
+      updates.lastTouchedAt = updates.lastTouchedAt && (typeof updates.lastTouchedAt === 'string' || typeof updates.lastTouchedAt === 'number')
+        ? new Date(updates.lastTouchedAt as string | number)
+        : null;
+    }
+    if (updates.lastHeatTouchedAt !== undefined) {
+      updates.lastHeatTouchedAt = updates.lastHeatTouchedAt && (typeof updates.lastHeatTouchedAt === 'string' || typeof updates.lastHeatTouchedAt === 'number')
+        ? new Date(updates.lastHeatTouchedAt as string | number)
+        : null;
+    }
 
     // Note: We no longer persist importanceV1 (pure calculation architecture)
     // Importance will be calculated on the client side from base properties

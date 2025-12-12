@@ -138,6 +138,7 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
@@ -147,15 +148,21 @@
 .star-button[data-level="0"] {
   filter: grayscale(100%) opacity(30%);
 }
+
 .star-button[data-level="1"] {
-  color: #60a5fa; /* blue-400 */
+  color: #60a5fa;
+  /* blue-400 */
 }
+
 .star-button[data-level="2"] {
-  color: #facc15; /* yellow-400 - default star color */
+  color: #facc15;
+  /* yellow-400 - default star color */
 }
+
 .star-button[data-level="3"] {
   filter: hue-rotate(-20deg) saturate(1.3);
-  color: #fb923c; /* orange-400 */
+  color: #fb923c;
+  /* orange-400 */
 }
 
 .rdp-root {
@@ -227,6 +234,7 @@
 .dark .rdp-button_next svg {
   stroke: oklch(0.95 0 0);
 }
+
 .rdp-day_button {
   display: inline-flex;
   align-items: center;
@@ -339,6 +347,7 @@
 .calendar-compact-actions button {
   min-width: 0;
 }
+
 .date-input {
   width: 5.75rem;
   max-width: 100%;
@@ -381,9 +390,9 @@
   line-height: 1.75rem;
 }
 
-.priority-trigger > svg,
-.recurrence-trigger > svg,
-.project-trigger > svg {
+.priority-trigger>svg,
+.recurrence-trigger>svg,
+.project-trigger>svg {
   width: 0.75rem;
   height: 0.75rem;
 }
@@ -432,11 +441,11 @@
 }
 
 /* Hide the dropdown chevron when styled as text */
-.select-as-text > svg {
+.select-as-text>svg {
   display: none !important;
 }
 
-.select-as-text > span[data-slot="select-icon"],
+.select-as-text>span[data-slot="select-icon"],
 .select-as-text [data-radix-select-icon] {
   display: none !important;
 }
@@ -485,35 +494,39 @@
   padding: 4px;
   transition: background 0.2s ease;
 }
+
 .heat-button[data-level="0"] {
   /* No indicator */
 }
+
 .heat-button[data-level="1"] {
   background: radial-gradient(circle,
-    rgba(251, 146, 60, 0.4) 0%,
-    rgba(251, 146, 60, 0.3) 20%,
-    rgba(251, 146, 60, 0.15) 40%,
-    rgba(251, 146, 60, 0.05) 60%,
-    rgba(251, 146, 60, 0.025) 80%,
-    transparent 100%);
+      rgba(251, 146, 60, 0.4) 0%,
+      rgba(251, 146, 60, 0.3) 20%,
+      rgba(251, 146, 60, 0.15) 40%,
+      rgba(251, 146, 60, 0.05) 60%,
+      rgba(251, 146, 60, 0.025) 80%,
+      transparent 100%);
 }
+
 .heat-button[data-level="2"] {
   background: radial-gradient(circle,
-    rgba(251, 146, 60, 0.6) 0%,
-    rgba(251, 146, 60, 0.4) 20%,
-    rgba(251, 146, 60, 0.2) 40%,
-    rgba(251, 146, 60, 0.1) 60%,
-    rgba(251, 146, 60, 0.05) 80%,
-    transparent 100%);
+      rgba(251, 146, 60, 0.6) 0%,
+      rgba(251, 146, 60, 0.4) 20%,
+      rgba(251, 146, 60, 0.2) 40%,
+      rgba(251, 146, 60, 0.1) 60%,
+      rgba(251, 146, 60, 0.05) 80%,
+      transparent 100%);
 }
+
 .heat-button[data-level="3"] {
   background: radial-gradient(circle,
-    rgba(251, 146, 60, 0.8) 0%,
-    rgba(251, 146, 60, 0.6) 20%,
-    rgba(251, 146, 60, 0.4) 40%,
-    rgba(251, 146, 60, 0.2) 60%,
-    rgba(251, 146, 60, 0.1) 80%,
-    transparent 100%);
+      rgba(251, 146, 60, 0.8) 0%,
+      rgba(251, 146, 60, 0.6) 20%,
+      rgba(251, 146, 60, 0.4) 40%,
+      rgba(251, 146, 60, 0.2) 60%,
+      rgba(251, 146, 60, 0.1) 80%,
+      transparent 100%);
 }
 
 /* Heat V3: Cool button glow states */
@@ -523,35 +536,39 @@
   padding: 4px;
   transition: background 0.2s ease;
 }
+
 .cool-button[data-level="0"] {
   /* No indicator */
 }
+
 .cool-button[data-level="1"] {
   background: radial-gradient(circle,
-    rgba(96, 165, 250, 0.4) 0%,
-    rgba(96, 165, 250, 0.3) 20%,
-    rgba(96, 165, 250, 0.15) 40%,
-    rgba(96, 165, 250, 0.05) 60%,
-    rgba(96, 165, 250, 0.025) 80%,
-    transparent 100%);
+      rgba(96, 165, 250, 0.4) 0%,
+      rgba(96, 165, 250, 0.3) 20%,
+      rgba(96, 165, 250, 0.15) 40%,
+      rgba(96, 165, 250, 0.05) 60%,
+      rgba(96, 165, 250, 0.025) 80%,
+      transparent 100%);
 }
+
 .cool-button[data-level="2"] {
   background: radial-gradient(circle,
-    rgba(96, 165, 250, 0.6) 0%,
-    rgba(96, 165, 250, 0.4) 20%,
-    rgba(96, 165, 250, 0.2) 40%,
-    rgba(96, 165, 250, 0.1) 60%,
-    rgba(96, 165, 250, 0.05) 80%,
-    transparent 100%);
+      rgba(96, 165, 250, 0.6) 0%,
+      rgba(96, 165, 250, 0.4) 20%,
+      rgba(96, 165, 250, 0.2) 40%,
+      rgba(96, 165, 250, 0.1) 60%,
+      rgba(96, 165, 250, 0.05) 80%,
+      transparent 100%);
 }
+
 .cool-button[data-level="3"] {
   background: radial-gradient(circle,
-    rgba(96, 165, 250, 0.8) 0%,
-    rgba(96, 165, 250, 0.6) 20%,
-    rgba(96, 165, 250, 0.4) 40%,
-    rgba(96, 165, 250, 0.2) 60%,
-    rgba(96, 165, 250, 0.1) 80%,
-    transparent 100%);
+      rgba(96, 165, 250, 0.8) 0%,
+      rgba(96, 165, 250, 0.6) 20%,
+      rgba(96, 165, 250, 0.4) 40%,
+      rgba(96, 165, 250, 0.2) 60%,
+      rgba(96, 165, 250, 0.1) 80%,
+      transparent 100%);
 }
 
 /* Task row highlight when heat/cool reorders */
@@ -619,12 +636,15 @@
   0% {
     opacity: 1;
   }
+
   20% {
     opacity: 0.35;
   }
+
   55% {
     opacity: 0.6;
   }
+
   100% {
     opacity: 1;
   }
@@ -666,12 +686,15 @@
   0% {
     background-color: transparent;
   }
+
   10% {
     background-color: rgba(251, 146, 60, 0.2);
   }
+
   50% {
     background-color: rgba(251, 146, 60, 0.15);
   }
+
   100% {
     background-color: transparent;
   }
@@ -731,4 +754,9 @@ svg.logo-svg .check {
 
 .logo-text .logo-word-task {
   color: var(--logo-title-task, #c4c9cc);
+}
+
+/* Task row delete button - show on hover */
+tr[data-task-id]:hover .task-delete-button {
+  opacity: 1 !important;
 }

@@ -268,6 +268,8 @@ function TasksPageContent() {
   const [lingeringCompletedIds, setLingeringCompletedIds] = useState<Set<number>>(() => new Set());
   // Track tasks that should appear active again before the server confirms uncompletion.
   const [optimisticActiveIds, setOptimisticActiveIds] = useState<Set<number>>(() => new Set());
+  // Track tasks that are deleted but mutation is still in flight (instant UI feedback)
+  const [optimisticDeletedIds, setOptimisticDeletedIds] = useState<Set<number>>(() => new Set());
   // Broadcast a short strike-through + fade cue when recurring tasks advance on completion.
   const [recurringCompletionSignals, setRecurringCompletionSignals] = useState<Map<number, number>>(
     () => new Map()
@@ -280,7 +282,7 @@ function TasksPageContent() {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isMobileSearchActive, setIsMobileSearchActive] = useState(false);
   const [isMobileOptionsOpen, setIsMobileOptionsOpen] = useState(false);
-  const mobileSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const mobileSearchInputRef = useRef<HTMLInputElement>(null);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const isClientMobile = isMounted && breakpoint === "mobile";
   const queryClient = useQueryClient();
@@ -292,6 +294,8 @@ function TasksPageContent() {
   const latestCompletionIntent = useRef(new Map<number, { shouldBeCompleted: boolean; timestamp: number }>());
   // Track corrections that need to be applied
   const [correctionsNeeded, setCorrectionsNeeded] = useState(new Map<number, boolean>());
+  const [taskToDelete, setTaskToDelete] = useState<number | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const pendingStarIntents = useRef(new Map<number, PendingStarIntent>());
   const pendingStarTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   const recurringCompletionTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
@@ -544,6 +548,21 @@ function TasksPageContent() {
       });
       return next.size === previous.size ? previous : next;
     });
+
+    setOptimisticDeletedIds((previous) => {
+      if (previous.size === 0) {
+        return previous;
+      }
+
+      const next = new Set<number>();
+      previous.forEach((id) => {
+        // Keep if server STILL has the task (it hasn't been deleted yet)
+        if (taskById.has(id)) {
+          next.add(id);
+        }
+      });
+      return next.size === previous.size ? previous : next;
+    });
   }, [allFetchedTasks, taskById]);
 
   // Mutation hooks with optimistic updates
@@ -596,6 +615,11 @@ function TasksPageContent() {
       const shouldLinger = !isOptimisticActive && isCompleted && lingeringCompletedIds.has(task.id);
       const isPending = pendingCompletionMutations.current.has(task.id);
 
+      // Skip if optimistically deleted
+      if (optimisticDeletedIds.has(task.id)) {
+        return;
+      }
+
       const freshImportance = calculateImportanceV1(task, now);
       const freshHeat = calculateHeat(task, now, freshImportance);
 
@@ -626,7 +650,7 @@ function TasksPageContent() {
     });
 
     return { activeTasks: actives, completedTasks: completeds, enrichedTaskMap: enrichedTasks };
-  }, [allFetchedTasks, showCompleted, lingeringCompletedIds, optimisticActiveIds]);
+  }, [allFetchedTasks, showCompleted, lingeringCompletedIds, optimisticActiveIds, optimisticDeletedIds]);
 
   const sortedActiveIds = useMemo(
     () => sortTasksByMode(activeTasks, sortMode, sortDirection).map((task) => task.id),
@@ -815,15 +839,60 @@ function TasksPageContent() {
   }, [applyOptimisticStarLevel, enrichedTaskMap, flushStarIntent, markOrderAsStale, queryClient]);
 
   const handleUpdateTask = async (id: number, updates: Partial<Task>) => {
-    updateTaskMutation.mutate({ id, updates });
-    if ("dueAt" in updates || "priority" in updates) {
+    // Check if we need to mark a green task as touched
+    let finalUpdates = updates;
+    const currentTask = enrichedTaskMap.get(id);
+
+    // Definition of a "green" (new) task: untouched by both regular means and heat
+    const isGreen = currentTask && !currentTask.lastTouchedAt && !currentTask.lastHeatTouchedAt;
+
+    if (isGreen) {
+      // Check if any of the trigger properties are being updated
+      const needsTouch =
+        "dueAt" in updates ||
+        "priority" in updates ||
+        "projectId" in updates ||
+        "repeatType" in updates ||
+        "repeatRule" in updates;
+
+      if (needsTouch) {
+        finalUpdates = {
+          ...updates,
+          lastTouchedAt: new Date(),
+        };
+      }
+    }
+
+    updateTaskMutation.mutate({ id, updates: finalUpdates });
+    if ("dueAt" in finalUpdates || "priority" in finalUpdates) {
       markOrderAsStale();
     }
   };
 
-  const handleDeleteTask = async (id: number) => {
-    deleteTaskMutation.mutate(id);
-  };
+  const handleDeleteTask = useCallback((id: number) => {
+    setTaskToDelete(id);
+    setIsDeleteModalOpen(true);
+  }, []);
+
+  const confirmDeleteTask = useCallback(() => {
+    if (taskToDelete) {
+      // 1. Instant UI update: Close modal and hide task immediately
+      flushSync(() => {
+        setIsDeleteModalOpen(false);
+        setOptimisticDeletedIds((prev) => {
+          const next = new Set(prev);
+          next.add(taskToDelete);
+          return next;
+        });
+      });
+
+      // 2. Perform mutation
+      deleteTaskMutation.mutate(taskToDelete);
+
+      // 3. Clear selection
+      setTaskToDelete(null);
+    }
+  }, [deleteTaskMutation, taskToDelete]);
 
   const triggerRecurringCompletionCue = useCallback((taskId: number) => {
     setRecurringCompletionSignals((previous) => {
@@ -1145,11 +1214,11 @@ function TasksPageContent() {
       const simulatedTasks = activeTasks.map((task) =>
         task.id === taskId
           ? {
-              ...task,
-              _freshHeat: targetHeat,
-              lastHeatTouchedAt: now,
-              lastTouchedAt: now,
-            }
+            ...task,
+            _freshHeat: targetHeat,
+            lastHeatTouchedAt: now,
+            lastTouchedAt: now,
+          }
           : task
       );
       const orderedIds = sortTasksByMode(simulatedTasks, sortMode, sortDirection).map((task) => task.id);
@@ -1527,7 +1596,7 @@ function TasksPageContent() {
               onSearchChange={handleMobileSearchChange}
               onSearchSubmit={handleMobileSearchSubmit}
               onSearchBlur={handleMobileSearchBlur}
-              searchInputRef={mobileSearchInputRef}
+              searchInputRef={mobileSearchInputRef as React.RefObject<HTMLInputElement>}
             />
           )}
           <div className="flex-1 overflow-y-auto">
@@ -1670,6 +1739,29 @@ function TasksPageContent() {
             </Button>
             <Button onClick={handleConfirmRefreshPrompt} disabled={isRefreshingOrder}>
               {isRefreshingOrder ? "Refreshing..." : "Refresh order"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Task</DialogTitle>
+            <DialogDescription>
+              You will permanently delete this task. Are you sure?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-6 flex flex-row justify-end gap-3 sm:flex-row">
+            <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDeleteTask}
+              autoFocus
+            >
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>

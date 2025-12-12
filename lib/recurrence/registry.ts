@@ -1,7 +1,6 @@
 // Recurrence Registry - Central source of truth for all recurrence patterns
 
 import type { RepeatType } from "@/types";
-import type { RecurrenceConfig } from "@/types/recurrence";
 import { parseRecurrenceConfig, describeRecurrenceRule } from "@/types/recurrence";
 import { calculateNextDueDate as calculateCustomDueDate } from "@/lib/recurrence/calculator";
 
@@ -79,7 +78,7 @@ export const RECURRENCE_REGISTRY: Record<RepeatType, RecurrenceRuleDef> = {
     description: "Task does not recur",
     sortOrder: 0,
     group: "common",
-    calculateNext: (_dueDate) => {
+    calculateNext: () => {
       throw new Error("Cannot calculate next due date for non-recurring task");
     },
     getDisplayText: () => "No Repeat",
@@ -229,7 +228,7 @@ export function getCustomRuleDisplayText(repeatRule: string): string {
   try {
     const config = parseRecurrenceConfig(repeatRule);
     return describeRecurrenceRule(config.rule);
-  } catch (error) {
+  } catch {
     return "Custom (invalid)";
   }
 }

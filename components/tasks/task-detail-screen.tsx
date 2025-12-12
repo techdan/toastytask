@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Flame, Snowflake, Star, Trash2, X } from "lucide-react";
+import { ArrowLeft, Flame, Snowflake, Star } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -72,8 +72,8 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
       : ""
   );
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
   const [highlightDueDate, setHighlightDueDate] = useState(false);
   const [highlightRecurrence, setHighlightRecurrence] = useState(false);
   const [showCompletedCheckmark, setShowCompletedCheckmark] = useState(false);
@@ -191,17 +191,22 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
     await starTaskMutation.mutateAsync({ taskId: task.id });
   }, [starTaskMutation, task]);
 
-  const handleConfirmDelete = useCallback(async () => {
+  const handleConfirmDelete = useCallback(() => {
     if (!task) return;
-    try {
-      setIsDeleting(true);
-      await deleteTaskMutation.mutateAsync(task.id);
+
+    // 1. Close modal immediately
+    setIsDeleteOpen(false);
+
+    // 2. Perform optimistic delete (fire and forget)
+    deleteTaskMutation.mutate(task.id);
+
+    // 3. Navigate away
+    if (mode === "modal") {
+      onClose();
+    } else {
       router.push("/tasks");
-    } finally {
-      setIsDeleting(false);
-      setIsDeleteOpen(false);
     }
-  }, [deleteTaskMutation, router, task]);
+  }, [deleteTaskMutation, mode, onClose, router, task]);
 
   if (isLoading || isNotesLoading || !task) {
     return (
@@ -253,41 +258,41 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
                 <Button
                   variant="ghost"
                   className={cn(
-                  "h-10 w-10 shrink-0 p-0 flex items-center justify-center",
-                  task.starLevel === 1 && "text-sky-500",
-                  task.starLevel === 2 && "text-amber-400",
-                  task.starLevel === 3 && "text-orange-500",
-                  (task.starLevel ?? 0) === 0 && "text-muted-foreground"
-                )}
+                    "h-10 w-10 shrink-0 p-0 flex items-center justify-center",
+                    task.starLevel === 1 && "text-sky-500",
+                    task.starLevel === 2 && "text-amber-400",
+                    task.starLevel === 3 && "text-orange-500",
+                    (task.starLevel ?? 0) === 0 && "text-muted-foreground"
+                  )}
                   onClick={handleStar}
                   aria-label="Star task"
                 >
                   <Star
                     className={cn(
-                    "h-10 w-10",
-                    (task.starLevel ?? 0) > 0 && "fill-current"
-                  )}
-                />
-              </Button>
-              <Button variant="ghost" className="h-10 w-10 shrink-0 p-0 flex items-center justify-center" onClick={handleHeat} aria-label="Heat task">
-                <Flame className="h-10 w-10 text-orange-500" />
-              </Button>
-              <Button variant="ghost" className="h-10 w-10 shrink-0 p-0 flex items-center justify-center" onClick={handleCool} aria-label="Cool task">
-                <Snowflake className="h-10 w-10 text-sky-500" />
-              </Button>
-            </div>
-          ) : (
-            <div className="flex-1" />
-          )}
-          {task ? (
-            <div className="flex flex-col items-end justify-center text-[10px] text-muted-foreground leading-tight whitespace-nowrap pr-4">
-              <div>Created: {new Date(task.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}</div>
-              <div>Modified: {new Date(task.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}</div>
-            </div>
-          ) : (
-            <div className="w-10" />
-          )}
-        </header>
+                      "h-10 w-10",
+                      (task.starLevel ?? 0) > 0 && "fill-current"
+                    )}
+                  />
+                </Button>
+                <Button variant="ghost" className="h-10 w-10 shrink-0 p-0 flex items-center justify-center" onClick={handleHeat} aria-label="Heat task">
+                  <Flame className="h-10 w-10 text-orange-500" />
+                </Button>
+                <Button variant="ghost" className="h-10 w-10 shrink-0 p-0 flex items-center justify-center" onClick={handleCool} aria-label="Cool task">
+                  <Snowflake className="h-10 w-10 text-sky-500" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex-1" />
+            )}
+            {task ? (
+              <div className="flex flex-col items-end justify-center text-[10px] text-muted-foreground leading-tight whitespace-nowrap pr-4">
+                <div>Created: {new Date(task.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}</div>
+                <div>Modified: {new Date(task.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}</div>
+              </div>
+            ) : (
+              <div className="w-10" />
+            )}
+          </header>
 
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
             <div className="flex items-center gap-3">
@@ -407,24 +412,24 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
         </div>
       </div>
 
-    <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Delete task?</DialogTitle>
-          <DialogDescription>
-            This cannot be undone. The task and its notes will be removed.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter className="gap-2 sm:gap-2">
-          <Button variant="ghost" onClick={() => setIsDeleteOpen(false)} disabled={isDeleting}>
-            Cancel
-          </Button>
-          <Button variant="destructive" onClick={handleConfirmDelete} disabled={isDeleting}>
-            {isDeleting ? "Deleting..." : "Delete"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete task?</DialogTitle>
+            <DialogDescription>
+              This cannot be undone. The task and its notes will be removed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="ghost" onClick={() => setIsDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmDelete}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

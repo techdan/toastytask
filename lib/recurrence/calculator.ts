@@ -211,16 +211,4 @@ function calculateSpecialPattern(
   return result;
 }
 
-/**
- * Helper: Get number of days in a month
- */
-function getDaysInMonth(year: number, month: number): number {
-  return new Date(year, month + 1, 0).getDate();
-}
 
-/**
- * Helper: Check if a year is a leap year
- */
-function isLeapYear(year: number): boolean {
-  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-}

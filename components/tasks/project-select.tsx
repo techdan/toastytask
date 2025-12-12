@@ -73,7 +73,7 @@ export function TaskProjectSelect({
           </span>
         </SelectValue>
       </SelectTrigger>
-      <SelectContent className={cn("max-h-60 text-xs", size === "lg" && "text-base")}>
+      <SelectContent className={cn("text-xs max-h-[400px]", size === "lg" && "text-base max-h-[500px]")}>
         <SelectItem value="none" className={cn(size === "lg" && "text-base py-2")}>
           No Project
         </SelectItem>

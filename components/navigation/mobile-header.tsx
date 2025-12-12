@@ -17,7 +17,7 @@ interface MobileHeaderProps {
   onSearchChange?: (value: string) => void;
   onSearchSubmit?: (value: string) => void;
   onSearchBlur?: () => void;
-  searchInputRef?: React.RefObject<HTMLInputElement>;
+  searchInputRef?: React.RefObject<HTMLInputElement | null>;
   className?: string;
 }
 
