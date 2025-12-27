@@ -2,6 +2,10 @@
 
 This file provides guidance to AI agents working with this codebase.
 
+## Project Overview
+
+Toasty Task is a task management application inspired by Toodledo, featuring automatic importance scoring and a heat model for intelligent task prioritization. See [docs/requirements.md](docs/requirements.md) for the original functional specifications.
+
 ## General Rules
 
 - Do not add to git without my permission
