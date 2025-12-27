@@ -30,6 +30,8 @@ interface TaskListProps {
   onHeat: (taskId: number, visibleTaskIds: Array<{ id: number; heat: number }>) => void;
   onCool: (taskId: number, visibleTaskIds: Array<{ id: number; heat: number }>) => void;
   onTouch: (taskId: number) => void;
+  onFocus: (taskId: number, enable?: boolean) => void;
+  onSnooze: (taskId: number) => void;
   highlightedTask?: {
     id: number;
     mode: "heat" | "cool" | "due";
@@ -61,6 +63,8 @@ export function TaskList({
   onHeat,
   onCool,
   onTouch,
+  onFocus,
+  onSnooze,
   highlightedTask,
   recurringCompletionSignals,
   isMobile = false,
@@ -197,6 +201,8 @@ export function TaskList({
                 onHeat={handleHeat}
                 onCool={handleCool}
                 onTouch={handleTouch}
+                onFocus={onFocus}
+                onSnooze={onSnooze}
                 highlightMode={highlightMode}
                 recurringCompletionSignal={recurringCompletionSignals.get(task.id)}
               />

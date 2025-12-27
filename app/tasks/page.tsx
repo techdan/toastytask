@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef, useCallback, Suspense } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, Suspense, useTransition } from "react";
 import { flushSync } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -43,7 +43,7 @@ import {
   useUpdateSettings,
   useTouchAllTasks,
 } from "@/lib/queries";
-import { useTouchTask, useCoolTask, useMarkTaskTouched } from "@/lib/queries/use-task-mutations";
+import { useTouchTask, useCoolTask, useMarkTaskTouched, useFocusTask, useSnoozeTask } from "@/lib/queries/use-task-mutations";
 import { PRIMARY_TASKS_QUERY_KEY } from "@/lib/queries/task-query-keys";
 import { applyStarLevelToTask, mergeTaskWithCachedNotes } from "@/lib/queries/task-cache-helpers";
 import { calculateHeat } from "@/lib/scoring/heat-v3";
@@ -238,9 +238,9 @@ function TasksPageContent() {
 
   // Read project from URL params, with fallback to "all"
   const projectParam = searchParams?.get("project");
-  const initialProjectId = projectParam === "null" ? null : projectParam === "all" ? "all" : projectParam ? parseInt(projectParam, 10) : "all";
+  const initialProjectId = projectParam === "null" ? null : projectParam === "all" ? "all" : projectParam === "focus" ? "focus" : projectParam ? parseInt(projectParam, 10) : "all";
 
-  const [selectedProjectId, setSelectedProjectId] = useState<number | null | "all">(initialProjectId);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null | "all" | "focus">(initialProjectId);
   const [showCompleted, setShowCompleted] = useState(() => {
     // Read from localStorage on initial load, default to false (hide completed)
     if (typeof window !== "undefined") {
@@ -284,6 +284,7 @@ function TasksPageContent() {
   const [isMobileOptionsOpen, setIsMobileOptionsOpen] = useState(false);
   const mobileSearchInputRef = useRef<HTMLInputElement>(null);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [, startTransition] = useTransition();
   const isClientMobile = isMounted && breakpoint === "mobile";
   const queryClient = useQueryClient();
 
@@ -346,7 +347,7 @@ function TasksPageContent() {
   // Sync selectedProjectId with URL params when they change
   useEffect(() => {
     const projectParam = searchParams?.get("project");
-    const urlProjectId = projectParam === "null" ? null : projectParam === "all" ? "all" : projectParam ? parseInt(projectParam, 10) : "all";
+    const urlProjectId = projectParam === "null" ? null : projectParam === "all" ? "all" : projectParam === "focus" ? "focus" : projectParam ? parseInt(projectParam, 10) : "all";
 
     if (urlProjectId !== selectedProjectId) {
       setSelectedProjectId(urlProjectId);
@@ -373,10 +374,16 @@ function TasksPageContent() {
     includeCompleted: true, // Fetch completed tasks too for accurate counts
   });
 
-  // Filter tasks client-side based on selected project for instant updates
+  // Filter tasks client-side based on selected project or focus for instant updates
   const allFetchedTasks = useMemo(() => {
     if (selectedProjectId === "all") {
       return allTasks;
+    }
+    if (selectedProjectId === "focus") {
+      return allTasks.filter(task => task.isFocused);
+    }
+    if (selectedProjectId === null) {
+      return allTasks.filter(task => !task.projectId);
     }
     return allTasks.filter(task => task.projectId === selectedProjectId);
   }, [allTasks, selectedProjectId]);
@@ -585,6 +592,8 @@ function TasksPageContent() {
   const touchTaskMutation = useTouchTask();
   const coolTaskMutation = useCoolTask();
   const markTaskTouchedMutation = useMarkTaskTouched();
+  const { mutate: focusTask } = useFocusTask();
+  const { mutate: snoozeTask } = useSnoozeTask();
   const markOrderAsStale = useCallback(() => {
     setIsOrderFresh(false);
   }, []);
@@ -595,7 +604,7 @@ function TasksPageContent() {
   const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
   const [pendingHeatAction, setPendingHeatAction] = useState<PendingHeatAction | null>(null);
   const [highlightedTask, setHighlightedTask] = useState<HighlightedTask>(null);
-  const contextRef = useRef<{ projectId: number | null | "all"; sortMode: SortMode; sortDirection: SortDirection } | null>(null);
+  const contextRef = useRef<{ projectId: number | null | "all" | "focus"; sortMode: SortMode; sortDirection: SortDirection } | null>(null);
   const prevActiveCountRef = useRef(0); // Detect first non-empty load per context for deterministic seeding
   const lastActiveIdsRef = useRef<number[]>([]);
 
@@ -671,9 +680,10 @@ function TasksPageContent() {
 
     if (shouldSeedFromSorted) {
       // Clear lingering completed tasks when context changes (project or sort mode)
+      // Only set state if not already empty to avoid infinite loops
       if (contextChanged) {
-        setLingeringCompletedIds(new Set());
-        setOptimisticActiveIds(new Set());
+        setLingeringCompletedIds(prev => prev.size > 0 ? new Set() : prev);
+        setOptimisticActiveIds(prev => prev.size > 0 ? new Set() : prev);
       }
       contextRef.current = { projectId: selectedProjectId, sortMode, sortDirection };
       setTaskOrder(sortedActiveIds);
@@ -1129,10 +1139,13 @@ function TasksPageContent() {
   }, [updateSettingsMutation]);
 
   // Handle project selection with URL update
-  const handleSelectProject = useCallback((projectId: number | null | "all") => {
-    setSelectedProjectId(projectId);
+  const handleSelectProject = useCallback((projectId: number | null | "all" | "focus") => {
+    // Use startTransition to keep UI responsive during heavy re-renders
+    startTransition(() => {
+      setSelectedProjectId(projectId);
+    });
 
-    // Clear search input when changing views
+    // Clear search input when changing views (immediate, not transitioned)
     setSearchInputValue("");
     setIsSearchDropdownOpen(false);
 
@@ -1140,6 +1153,8 @@ function TasksPageContent() {
     const params = new URLSearchParams();
     if (projectId === null) {
       params.set("project", "null");
+    } else if (projectId === "focus") {
+      params.set("project", "focus");
     } else if (projectId !== "all") {
       params.set("project", projectId.toString());
     }
@@ -1309,6 +1324,14 @@ function TasksPageContent() {
     },
     [markTaskTouchedMutation, setHighlightedTask]
   );
+
+  const handleFocus = useCallback((taskId: number, enable?: boolean) => {
+    focusTask({ taskId, enable });
+  }, [focusTask]);
+
+  const handleSnooze = useCallback((taskId: number) => {
+    snoozeTask(taskId);
+  }, [snoozeTask]);
 
   const handleCancelRefreshPrompt = useCallback(() => {
     setIsRefreshModalOpen(false);
@@ -1517,6 +1540,12 @@ function TasksPageContent() {
     return counts;
   }, [allTasks]);
 
+  // Calculate focused task count (exclude completed)
+  const focusedTaskCount = useMemo(
+    () => allTasks.filter((t) => t.isFocused && !t.completedAt && !t.deletedAt).length,
+    [allTasks]
+  );
+
   const handleNavigateToSettings = useCallback(() => {
     router.push("/settings");
   }, [router]);
@@ -1538,6 +1567,7 @@ function TasksPageContent() {
         projects={projects}
         selectedProjectId={selectedProjectId}
         taskCounts={taskCounts}
+        focusedTaskCount={focusedTaskCount}
         onSelectProject={handleSelectProject}
         onCreateProject={handleCreateProject}
         onUpdateProject={handleUpdateProject}
@@ -1557,6 +1587,7 @@ function TasksPageContent() {
             onDeleteProject={handleDeleteProject}
             onReorderProjects={handleReorderProjects}
             taskCounts={taskCounts}
+            focusedTaskCount={focusedTaskCount}
             isCollapsed={isSidebarCollapsed}
             onToggleCollapsed={() => {
               setIsSidebarCollapsed((prev) => {
@@ -1645,7 +1676,7 @@ function TasksPageContent() {
                   {!isClientMobile ? (
                     <QuickAdd
                       onAdd={handleAddTask}
-                      currentProjectId={selectedProjectId === "all" ? null : selectedProjectId}
+                      currentProjectId={selectedProjectId === "all" || selectedProjectId === "focus" ? null : selectedProjectId}
                     />
                   ) : null}
                 </div>
@@ -1694,6 +1725,8 @@ function TasksPageContent() {
                     onHeat={handleHeatRequest}
                     onCool={handleCoolRequest}
                     onTouch={handleTouchTask}
+                    onFocus={handleFocus}
+                    onSnooze={handleSnooze}
                     highlightedTask={highlightedTask}
                     recurringCompletionSignals={recurringCompletionSignals}
                     isMobile={isClientMobile}
@@ -1708,7 +1741,7 @@ function TasksPageContent() {
         {isClientMobile && !isSearchMode ? (
           <MobileQuickAdd
             onAdd={handleAddTask}
-            currentProjectId={selectedProjectId === "all" ? null : selectedProjectId}
+            currentProjectId={selectedProjectId === "all" || selectedProjectId === "focus" ? null : selectedProjectId}
           />
         ) : null}
       </div>

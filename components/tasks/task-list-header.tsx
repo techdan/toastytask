@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, EyeOff, ChevronDown, ArrowDown, ArrowUp, RefreshCcw } from "lucide-react";
+import { SlidersHorizontal, ChevronDown, ArrowDown, ArrowUp, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -194,11 +194,7 @@ export function TaskListHeader({
                   )}
                   title="Task list options"
                 >
-                  {showCompleted ? (
-                    <Eye className="h-3.5 w-3.5" />
-                  ) : (
-                    <EyeOff className="h-3.5 w-3.5" />
-                  )}
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
                   <ChevronDown className="h-3 w-3" />
                 </Button>
               </DropdownMenuTrigger>

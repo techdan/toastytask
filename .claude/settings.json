@@ -22,7 +22,6 @@
       "Bash(echo:*)",
       "Bash(sqlite3:*)",
       "Bash(timeout:*)",
-      "Bash(bd list --json | python -c \"import :*)",
       "Read",
       "Write",
       "Edit",

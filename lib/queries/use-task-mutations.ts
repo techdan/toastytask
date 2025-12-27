@@ -215,6 +215,8 @@ export function useCreateTask() {
         notes: [],
         notesCount: 0,
         notesLastModified: null,
+        isFocused: false,
+        focusSnoozeUntil: null,
       };
 
       // Note: We no longer calculate importanceV1 optimistically
@@ -960,6 +962,71 @@ export function useCoolTask() {
       toast.success("Task cooled", {
         description: `Heat adjustment: ${response.adjustmentDelta >= 0 ? "+" : ""}${response.adjustmentDelta.toFixed(0)} pts`,
       });
+    },
+  });
+}
+
+/**
+ * Toggle or set focus state on a task
+ */
+async function focusTask(id: number, enable?: boolean): Promise<Task> {
+  const response = await fetch(`/api/tasks/${id}/focus`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enable }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to toggle focus");
+  }
+
+  const data = await response.json();
+  return data.task;
+}
+
+export function useFocusTask() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ taskId, enable }: { taskId: number; enable?: boolean }) =>
+      focusTask(taskId, enable),
+    onSuccess: (task) => {
+      queryClient.invalidateQueries({ queryKey: PRIMARY_TASKS_QUERY_KEY });
+      toast.success(task.isFocused ? "Task focused" : "Task unfocused");
+    },
+    onError: () => {
+      toast.error("Failed to toggle focus");
+    },
+  });
+}
+
+/**
+ * Snooze a focused task until tomorrow morning
+ */
+async function snoozeTask(id: number): Promise<Task> {
+  const response = await fetch(`/api/tasks/${id}/snooze`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to snooze task");
+  }
+
+  const data = await response.json();
+  return data.task;
+}
+
+export function useSnoozeTask() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (taskId: number) => snoozeTask(taskId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PRIMARY_TASKS_QUERY_KEY });
+      toast.success("Task snoozed until tomorrow");
+    },
+    onError: () => {
+      toast.error("Failed to snooze task");
     },
   });
 }

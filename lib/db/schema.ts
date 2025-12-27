@@ -79,6 +79,10 @@ export const tasks = pgTable("tasks", {
   archivedAt: timestamp("archived_at", { mode: "date", withTimezone: true }),
   deletedAt: timestamp("deleted_at", { mode: "date", withTimezone: true }),
 
+  // Focus model
+  isFocused: boolean("is_focused").notNull().default(false),
+  focusSnoozeUntil: timestamp("focus_snooze_until", { mode: "date", withTimezone: true }),
+
   // Timestamps
   createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
     .notNull()
@@ -103,6 +107,8 @@ export const tasks = pgTable("tasks", {
   activeImportanceIdx: index("tasks_active_importance_idx").on(table.deletedAt, table.importanceV1),
   // Heat sorting index (still used for database-level sorting)
   heatSortIdx: index("tasks_heat_sort_idx").on(table.heat, table.completedAt),
+  // Index for filtering focused tasks
+  isFocusedIdx: index("tasks_is_focused_idx").on(table.isFocused),
 }));
 
 // Settings table (single row for user preferences)

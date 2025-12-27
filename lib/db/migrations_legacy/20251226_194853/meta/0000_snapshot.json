@@ -1,5 +1,5 @@
 {
-  "id": "400416ea-8b1a-461a-8692-c301d6480c44",
+  "id": "51f43ef7-c4b3-40a7-98d2-eb1c2c2d1819",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -166,13 +166,6 @@
           "notNull": true,
           "default": "'#6b7280'"
         },
-        "sort_order": {
-          "name": "sort_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "archived": {
           "name": "archived",
           "type": "boolean",
@@ -180,65 +173,15 @@
           "notNull": true,
           "default": false
         },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "(NOW() AT TIME ZONE 'UTC')"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "(NOW() AT TIME ZONE 'UTC')"
         }
       },
-      "indexes": {
-        "projects_user_id_idx": {
-          "name": "projects_user_id_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "projects_user_sort_order_idx": {
-          "name": "projects_user_sort_order_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "sort_order",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
@@ -255,12 +198,6 @@
           "type": "serial",
           "primaryKey": true,
           "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "default_priority": {
           "name": "default_priority",
@@ -374,19 +311,33 @@
           "notNull": true,
           "default": 30
         },
+        "snooze_todo_days": {
+          "name": "snooze_todo_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "snooze_watch_days": {
+          "name": "snooze_watch_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 7
+        },
+        "snooze_later_days": {
+          "name": "snooze_later_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 30
+        },
         "grouping_mode": {
           "name": "grouping_mode",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "default": "'ungrouped'"
-        },
-        "sort_mode": {
-          "name": "sort_mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'heat'"
         },
         "updated_at": {
           "name": "updated_at",
@@ -396,23 +347,7 @@
           "default": "(NOW() AT TIME ZONE 'UTC')"
         }
       },
-      "indexes": {
-        "settings_user_id_idx": {
-          "name": "settings_user_id_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
@@ -442,12 +377,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "priority": {
           "name": "priority",
           "type": "text",
@@ -455,19 +384,12 @@
           "notNull": true,
           "default": "'medium'"
         },
-        "star_level": {
-          "name": "star_level",
-          "type": "integer",
+        "star": {
+          "name": "star",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": 0
-        },
-        "star_intent_version": {
-          "name": "star_intent_version",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "default": false
         },
         "due_at": {
           "name": "due_at",
@@ -489,43 +411,12 @@
           "notNull": true,
           "default": "'none'"
         },
-        "repeat_rule": {
-          "name": "repeat_rule",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "heat": {
           "name": "heat",
           "type": "real",
           "primaryKey": false,
           "notNull": true,
-          "default": 0.5
-        },
-        "heat_calculated_at": {
-          "name": "heat_calculated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "heat_adjustment": {
-          "name": "heat_adjustment",
-          "type": "real",
-          "primaryKey": false,
-          "notNull": true,
           "default": 0
-        },
-        "last_heat_touched_at": {
-          "name": "last_heat_touched_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_touched_at": {
-          "name": "last_touched_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
         },
         "touch_count": {
           "name": "touch_count",
@@ -533,6 +424,18 @@
           "primaryKey": false,
           "notNull": true,
           "default": 0
+        },
+        "last_touched_at": {
+          "name": "last_touched_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_surface_at": {
+          "name": "next_surface_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "importance_v1": {
           "name": "importance_v1",
@@ -559,19 +462,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "is_focused": {
-          "name": "is_focused",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "focus_snooze_until": {
-          "name": "focus_snooze_until",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -588,42 +478,6 @@
         }
       },
       "indexes": {
-        "tasks_user_id_idx": {
-          "name": "tasks_user_id_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "tasks_user_id_deleted_at_idx": {
-          "name": "tasks_user_id_deleted_at_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "deleted_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "tasks_project_id_deleted_at_idx": {
           "name": "tasks_project_id_deleted_at_idx",
           "columns": [
@@ -707,42 +561,6 @@
             },
             {
               "expression": "importance_v1",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "tasks_heat_sort_idx": {
-          "name": "tasks_heat_sort_idx",
-          "columns": [
-            {
-              "expression": "heat",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "completed_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "tasks_is_focused_idx": {
-          "name": "tasks_is_focused_idx",
-          "columns": [
-            {
-              "expression": "is_focused",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

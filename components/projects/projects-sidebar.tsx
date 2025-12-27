@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, ChevronDown, ChevronRight, ChevronLeft, Archive, Folder } from "lucide-react";
+import { Plus, ChevronDown, ChevronRight, ChevronLeft, Archive, Eye, Folder } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
@@ -16,13 +16,14 @@ import { ProjectItem } from "./project-item";
 
 interface ProjectsSidebarProps {
   projects: Project[];
-  selectedProjectId: number | null | "all";
-  onSelectProject: (projectId: number | null | "all") => void;
+  selectedProjectId: number | null | "all" | "focus";
+  onSelectProject: (projectId: number | null | "all" | "focus") => void;
   onCreateProject: (name: string, colorHex: string) => Promise<void>;
   onUpdateProject: (id: number, updates: Partial<Project>) => Promise<void>;
   onDeleteProject: (id: number) => Promise<void>;
   onReorderProjects: (projectIds: number[]) => Promise<void> | void;
   taskCounts: Record<number, number>;
+  focusedTaskCount: number;
   isCollapsed: boolean;
   onToggleCollapsed: () => void;
 }
@@ -36,6 +37,7 @@ export function ProjectsSidebar({
   onDeleteProject,
   onReorderProjects,
   taskCounts,
+  focusedTaskCount,
   isCollapsed,
   onToggleCollapsed,
 }: ProjectsSidebarProps) {
@@ -198,6 +200,25 @@ export function ProjectsSidebar({
               </TooltipContent>
             </TooltipPrimitive.Root>
 
+            {/* Focus Icon */}
+            <TooltipPrimitive.Root>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => onSelectProject("focus")}
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-medium transition-colors cursor-pointer",
+                    selectedProjectId === "focus" ? "bg-accent text-accent-foreground" : "bg-background hover:bg-accent"
+                  )}
+                  aria-label="Focus"
+                >
+                  <Eye className="h-4 w-4 text-green-500" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <p>Focus{focusedTaskCount > 0 ? ` (${focusedTaskCount})` : ""}</p>
+              </TooltipContent>
+            </TooltipPrimitive.Root>
+
             {/* Active Project Icons */}
             {orderedActiveProjects.map((project) => (
               <TooltipPrimitive.Root key={project.id}>
@@ -260,6 +281,28 @@ export function ProjectsSidebar({
         <div className="flex items-center gap-1">
           <span className="rounded bg-muted px-1.5 py-0.5 text-xs">{taskCounts[0] || 0}</span>
           {/* Spacer to align with individual project items that have a menu button */}
+          <div className="w-4" />
+        </div>
+      </button>
+
+      {/* Focus Filter */}
+      <button
+        onClick={() => onSelectProject("focus")}
+        className={cn(
+          "mb-4 flex w-full items-center justify-between rounded pl-3 pr-2 py-2 text-sm transition-colors hover:bg-accent cursor-pointer",
+          selectedProjectId === "focus" && "bg-accent font-medium"
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <Eye className="h-4 w-4 text-green-500" />
+          <span>Focus</span>
+        </div>
+        <div className="flex items-center gap-1">
+          {focusedTaskCount > 0 && (
+            <span className="rounded bg-muted px-1.5 py-0.5 text-xs">
+              {focusedTaskCount}
+            </span>
+          )}
           <div className="w-4" />
         </div>
       </button>

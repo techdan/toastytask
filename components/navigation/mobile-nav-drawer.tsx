@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Folder, Menu, Plus, Settings } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, Folder, Menu, Plus, Settings } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,9 +13,10 @@ interface MobileNavDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projects: Project[];
-  selectedProjectId: number | null | "all";
+  selectedProjectId: number | null | "all" | "focus";
   taskCounts: Record<number, number>;
-  onSelectProject: (projectId: number | null | "all") => void;
+  focusedTaskCount: number;
+  onSelectProject: (projectId: number | null | "all" | "focus") => void;
   onCreateProject: (name: string, colorHex: string) => Promise<void>;
   onUpdateProject: (id: number, updates: Partial<Project>) => Promise<void>;
   onDeleteProject: (id: number) => Promise<void>;
@@ -30,6 +31,7 @@ export function MobileNavDrawer({
   projects,
   selectedProjectId,
   taskCounts,
+  focusedTaskCount,
   onSelectProject,
   onCreateProject,
   onUpdateProject,
@@ -110,6 +112,22 @@ export function MobileNavDrawer({
                 <div className="flex flex-1 items-center justify-between">
                   <span>No Project</span>
                   <span className="rounded bg-muted px-1.5 py-0.5 text-xs">{taskCounts[0] || 0}</span>
+                </div>
+              </Button>
+              <Button
+                variant={selectedProjectId === "focus" ? "secondary" : "ghost"}
+                className="w-full justify-start gap-3"
+                onClick={() => {
+                  onSelectProject("focus");
+                  onOpenChange(false);
+                }}
+              >
+                <Eye className="h-4 w-4 text-green-500" />
+                <div className="flex flex-1 items-center justify-between">
+                  <span>Focus</span>
+                  {focusedTaskCount > 0 && (
+                    <span className="rounded bg-muted px-1.5 py-0.5 text-xs">{focusedTaskCount}</span>
+                  )}
                 </div>
               </Button>
             </div>

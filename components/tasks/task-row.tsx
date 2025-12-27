@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Star, Trash2, Flame, Snowflake } from "lucide-react";
+import { Star, Trash2, Flame, Snowflake, Eye, EyeOff, Moon } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { PrioritySelect } from "./priority-select";
@@ -41,6 +41,8 @@ interface TaskRowProps {
   onHeat: (taskId: number) => void;
   onCool: (taskId: number) => void;
   onTouch: (taskId: number) => void;
+  onFocus: (taskId: number, enable?: boolean) => void;
+  onSnooze: (taskId: number) => void;
   highlightMode?: "heat" | "cool" | "due" | null;
   recurringCompletionSignal?: number;
 }
@@ -58,6 +60,8 @@ export function TaskRow({
   onHeat,
   onCool,
   onTouch,
+  onFocus,
+  onSnooze,
   highlightMode,
   recurringCompletionSignal,
 }: TaskRowProps) {
@@ -69,6 +73,7 @@ export function TaskRow({
   const isCompleted = !!task.completedAt;
   const isNew = task.lastTouchedAt === null && task.lastHeatTouchedAt === null;
   const isCompact = density === "compact";
+  const isFocusSnoozed = task.focusSnoozeUntil && new Date() < new Date(task.focusSnoozeUntil);
   const cellPaddingClass = isCompact ? "py-1" : "py-1.5";
   const controlGroupGapClass = sortMode === "heat" ? "gap-1.5" : "gap-2";
   const rowHighlightClass =
@@ -199,7 +204,9 @@ export function TaskRow({
       <tr
         data-task-id={task.id}
         className={cn(
-          "bg-card transition-colors hover:bg-accent/30",
+          "group bg-card transition-colors hover:bg-accent/30",
+          task.isFocused && !isFocusSnoozed && "bg-green-500/5",
+          task.isFocused && isFocusSnoozed && "bg-green-500/[0.02] opacity-70",
           rowHighlightClass,
           rowRecurringCueClass,
           isCompleted && "text-muted-foreground italic"
@@ -275,6 +282,50 @@ export function TaskRow({
                   <Snowflake className="h-4 w-4" />
                 </button>
               </div>
+            )}
+            {/* Focus Button */}
+            <button
+              className={cn(
+                "flex h-6 w-6 shrink-0 items-center justify-center rounded transition-colors",
+                isCompleted
+                  ? "opacity-50 cursor-not-allowed"
+                  : task.isFocused
+                    ? "text-green-500 hover:text-green-400 cursor-pointer"
+                    : "text-green-500/30 hover:text-green-500/60 cursor-pointer"
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isCompleted) {
+                  onFocus(task.id);
+                }
+              }}
+              disabled={isCompleted}
+              aria-label={task.isFocused ? "Unfocus task" : "Focus task"}
+              title={task.isFocused ? "Remove from focus" : "Add to focus"}
+            >
+              {task.isFocused ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+            </button>
+            {/* Snooze Button - only for focused tasks */}
+            {task.isFocused && !isCompleted && (
+              <button
+                className={cn(
+                  "flex h-6 w-6 shrink-0 items-center justify-center rounded transition-colors opacity-0 group-hover:opacity-100",
+                  isFocusSnoozed
+                    ? "text-muted-foreground/60 cursor-not-allowed"
+                    : "text-muted-foreground/40 hover:text-muted-foreground cursor-pointer"
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!isFocusSnoozed) {
+                    onSnooze(task.id);
+                  }
+                }}
+                disabled={!!isFocusSnoozed}
+                aria-label="Snooze until tomorrow"
+                title={isFocusSnoozed ? "Already snoozed" : "Snooze until tomorrow"}
+              >
+                <Moon className="h-4 w-4" />
+              </button>
             )}
           </div>
         </td>

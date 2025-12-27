@@ -149,7 +149,7 @@ export function ProjectItem({
           }
           onSelect();
         }}
-        className="flex flex-1 items-center gap-2 overflow-hidden"
+        className="flex flex-1 cursor-pointer items-center gap-2 overflow-hidden"
       >
         <div
           className="h-3 w-3 shrink-0 rounded-full"

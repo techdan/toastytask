@@ -5,8 +5,7 @@ import {
   ArrowUp,
   Check,
   ChevronDown,
-  Eye,
-  EyeOff,
+  SlidersHorizontal,
   MoreVertical,
 } from "lucide-react";
 import {
@@ -137,11 +136,7 @@ export function MobileOptionsMenu({
             <span className="flex items-center gap-2">
               {showCompleted ? "Hide completed" : "Show completed"}
             </span>
-            {showCompleted ? (
-              <EyeOff className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <Eye className="h-4 w-4 text-muted-foreground" />
-            )}
+            <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
           </div>
         </DropdownMenuItem>
       </DropdownMenuContent>

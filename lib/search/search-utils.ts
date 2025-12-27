@@ -143,9 +143,9 @@ export function searchTasks(
  */
 export function filterResultsByProject(
   results: SearchResult[],
-  projectId: number | null | "all"
+  projectId: number | null | "all" | "focus"
 ): SearchResult[] {
-  if (projectId === "all") {
+  if (projectId === "all" || projectId === "focus") {
     return results;
   }
 

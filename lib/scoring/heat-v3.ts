@@ -74,6 +74,13 @@ export interface HeatV3Breakdown {
     decayedAdjustment: number; // After decay
     daysSinceHeatTouch: number;
   };
+
+  // Focus boost (new)
+  isFocused: boolean;
+  isFocusSnoozed: boolean;
+  focusBoostApplied: boolean;
+  preBoostHeat: number;      // Heat before focus boost
+  focusBoostAmount: number;  // How much the focus boost added
 }
 
 /**
@@ -97,6 +104,17 @@ export type GlowLevel = 0 | 1 | 2 | 3;
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+/**
+ * Check if a focused task is currently snoozed
+ */
+function isFocusSnoozed(focusSnoozeUntil: Date | null | undefined, now: Date): boolean {
+  if (!focusSnoozeUntil) return false;
+  const snoozeDate = focusSnoozeUntil instanceof Date
+    ? focusSnoozeUntil
+    : new Date(focusSnoozeUntil);
+  return now < snoozeDate;
+}
 
 /**
  * Clamp a value between min and max
@@ -228,7 +246,7 @@ export function calculateHeat(
     | "heatAdjustment"
     | "lastTouchedAt"
     | "lastHeatTouchedAt"
-  > & Partial<Pick<Task, "importanceV1">>,
+  > & Partial<Pick<Task, "importanceV1" | "isFocused" | "focusSnoozeUntil">>,
   now: Date = new Date(),
   importance?: number
 ): number {
@@ -264,9 +282,15 @@ export function calculateHeat(
   const adjustmentPoints = Math.round(clampHeatAdjustment(newAdjustment));
 
   // Calculate total heat (sum of rounded components = integer)
-  const heat = importancePoints + recencyPoints + adjustmentPoints;
+  let finalHeat = importancePoints + recencyPoints + adjustmentPoints;
 
-  return clamp(heat, HEAT_CONFIG.MIN_FINAL_SCORE, HEAT_CONFIG.MAX_FINAL_SCORE);
+  // Apply focus boost if active and not snoozed
+  if (task.isFocused && !isFocusSnoozed(task.focusSnoozeUntil, now)) {
+    const effectiveScore = Math.max(finalHeat, HEAT_CONFIG.FOCUS_FLOOR);
+    finalHeat = effectiveScore * HEAT_CONFIG.FOCUS_MULTIPLIER;
+  }
+
+  return clamp(finalHeat, HEAT_CONFIG.MIN_FINAL_SCORE, HEAT_CONFIG.MAX_FINAL_SCORE);
 }
 
 /**
@@ -285,7 +309,7 @@ export function calculateHeatWithBreakdown(
     | "heatAdjustment"
     | "lastTouchedAt"
     | "lastHeatTouchedAt"
-  > & Partial<Pick<Task, "importanceV1">>,
+  > & Partial<Pick<Task, "importanceV1" | "isFocused" | "focusSnoozeUntil">>,
   now: Date = new Date(),
   importance?: number
 ): HeatV3Breakdown {
@@ -326,6 +350,20 @@ export function calculateHeatWithBreakdown(
   const baseImportanceWeighted = HEAT_CONFIG.WEIGHT_BASE * baseImportanceNormalized;
   const recencyWeighted = HEAT_CONFIG.WEIGHT_RECENCY * recencyNormalized;
 
+  // Calculate pre-boost heat (before focus)
+  const preBoostHeat = importancePoints + recencyPoints + adjustmentPoints;
+
+  // Apply focus boost
+  let focusBoostAmount = 0;
+  const focusSnoozed = isFocusSnoozed(task.focusSnoozeUntil, now);
+  const focusBoostApplied = (task.isFocused ?? false) && !focusSnoozed;
+
+  if (focusBoostApplied) {
+    const effectiveScore = Math.max(preBoostHeat, HEAT_CONFIG.FOCUS_FLOOR);
+    const boostedHeat = effectiveScore * HEAT_CONFIG.FOCUS_MULTIPLIER;
+    focusBoostAmount = boostedHeat - preBoostHeat;
+  }
+
   // Calculate total heat (using the main function to ensure consistency)
   const totalHeat = calculateHeat(task, now, importanceValue);
 
@@ -359,6 +397,11 @@ export function calculateHeatWithBreakdown(
     daysSinceLastTouch,
     daysSinceHeatTouch,
     decayInfo,
+    isFocused: task.isFocused ?? false,
+    isFocusSnoozed: focusSnoozed,
+    focusBoostApplied,
+    preBoostHeat,
+    focusBoostAmount,
   };
 }
 

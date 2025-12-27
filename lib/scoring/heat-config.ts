@@ -60,6 +60,15 @@ export const HEAT_CONFIG = {
 
   // Heat staleness threshold
   HEAT_STALENESS_HOURS: 6,  // Recalculate if older than 6 hours
+
+  // ========================================
+  // Focus Boost Configuration
+  // ========================================
+
+  // Focus boost formula: max(baseScore, FOCUS_FLOOR) * FOCUS_MULTIPLIER
+  FOCUS_FLOOR: 30,           // Minimum effective score before multiplier
+  FOCUS_MULTIPLIER: 2,       // Multiplier applied after floor
+  SNOOZE_WAKE_HOUR: 4,       // 4:00 AM local time (snooze wake time)
 } as const;
 
 /**

@@ -104,7 +104,7 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
     const modifiedDisplay = formatDateTime(getModifiedTimestamp(task));
 
     return (
-      <TooltipProvider delayDuration={300} disableHoverableContent={false}>
+      <TooltipProvider delayDuration={300}>
         <Tooltip>
           <TooltipTrigger asChild>
             <div
@@ -159,7 +159,7 @@ export function HeatBadge({ task, mode, isCompleted = false }: HeatBadgeProps) {
   const stageLabel = getHeatLabelFromConfig(heat);
 
   return (
-    <TooltipProvider delayDuration={300} disableHoverableContent={false}>
+    <TooltipProvider delayDuration={300}>
       <Tooltip>
         <TooltipTrigger asChild>
           <div
@@ -355,6 +355,30 @@ function HeatBreakdownTooltip({
             </div>
           </div>
         </div>
+
+        {/* Focus Boost */}
+        {breakdown.isFocused && (
+          <div>
+            <div className="flex justify-between items-center gap-4">
+              <span className="text-muted-foreground">Focus Boost:</span>
+              <span className="font-mono tabular-nums">
+                {breakdown.focusBoostApplied
+                  ? `+${Math.round(breakdown.focusBoostAmount)} pts`
+                  : "(snoozed)"}
+              </span>
+            </div>
+            <div className="text-muted-foreground/80 text-[10px] ml-2 space-y-0.5">
+              {breakdown.focusBoostApplied ? (
+                <>
+                  <div>Base: {Math.round(breakdown.preBoostHeat)} pts</div>
+                  <div>Formula: max({Math.round(breakdown.preBoostHeat)}, 30) × 2</div>
+                </>
+              ) : (
+                <div>Snoozed until tomorrow 4 AM</div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Header with Task ID moved to bottom */}
