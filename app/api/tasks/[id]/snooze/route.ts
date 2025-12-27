@@ -54,9 +54,11 @@ export async function POST(
     );
   }
 
-  // Calculate snooze until time
   const now = new Date();
-  const snoozeUntil = getNextWakeTime(now);
+
+  // Toggle snooze: if already snoozed, unsnooze; otherwise snooze
+  const isSnoozed = task.focusSnoozeUntil && new Date(task.focusSnoozeUntil) > now;
+  const snoozeUntil = isSnoozed ? null : getNextWakeTime(now);
 
   // Update task
   const [updatedTask] = await db

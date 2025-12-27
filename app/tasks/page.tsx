@@ -608,9 +608,10 @@ function TasksPageContent() {
   const prevActiveCountRef = useRef(0); // Detect first non-empty load per context for deterministic seeding
   const lastActiveIdsRef = useRef<number[]>([]);
 
-  // Calculate fresh scoring data and split completed tasks (recent only) from actives
+  // Split tasks into active/completed and apply optimistic state overrides.
+  // PERFORMANCE: Heat/importance are pre-calculated in useTasksQuery, so this
+  // is now O(n) simple filtering - no expensive date math on project switch.
   const { activeTasks, completedTasks, enrichedTaskMap } = useMemo(() => {
-    const now = new Date();
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - COMPLETED_TASKS_VISIBLE_DAYS);
 
@@ -629,13 +630,10 @@ function TasksPageContent() {
         return;
       }
 
-      const freshImportance = calculateImportanceV1(task, now);
-      const freshHeat = calculateHeat(task, now, freshImportance);
-
+      // Task already has _freshHeat and _freshImportance from useTasksQuery enrichment.
+      // Only apply optimistic state overrides for completedAt.
       const enrichedTask: TaskWithFreshValues = {
         ...task,
-        _freshImportance: freshImportance,
-        _freshHeat: freshHeat,
         // Override completedAt based on our React state to prevent flicker during rapid mutations
         ...(isOptimisticActive ? { completedAt: null } : {}),
         ...(shouldLinger && !isCompleted ? { completedAt: new Date() } : {}),

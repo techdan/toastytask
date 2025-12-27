@@ -1021,12 +1021,16 @@ export function useSnoozeTask() {
 
   return useMutation({
     mutationFn: (taskId: number) => snoozeTask(taskId),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: PRIMARY_TASKS_QUERY_KEY });
-      toast.success("Task snoozed until tomorrow");
+      if (data.focusSnoozeUntil) {
+        toast.success("Task snoozed until tomorrow");
+      } else {
+        toast.success("Task unsnoozed");
+      }
     },
     onError: () => {
-      toast.error("Failed to snooze task");
+      toast.error("Failed to toggle snooze");
     },
   });
 }

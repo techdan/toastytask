@@ -309,13 +309,55 @@ useEffect(() => {
 
 ### Phase 1: Quick Wins (1-2 hours)
 1. ✅ **startTransition** - Already implemented
-2. **Option 2: Pre-compute heat/importance** - Highest impact for effort
+2. ✅ **Option 2: Pre-compute heat/importance** - Implemented 2025-12-26
 
 ### Phase 2: If Still Slow (2-4 hours)
-3. **Option 1 + 5: Memo + Normalize** - Requires both for effectiveness
+3. ✅ **Option 1: Memo TaskRow** - Implemented 2025-12-26 (works now that task refs are stable)
 
 ### Phase 3: For Large Task Counts (4-8 hours)
 4. **Option 3: Virtualization** - Only if users have 100+ active tasks
+
+---
+
+## Implementation Details (2025-12-26)
+
+### Changes Made
+
+**1. Enrich-on-Fetch in `useTasksQuery`** ([lib/queries/use-tasks-query.ts](../lib/queries/use-tasks-query.ts))
+
+Tasks are now enriched with `_freshHeat` and `_freshImportance` immediately when data arrives from the server:
+
+```typescript
+const enrichedData = useMemo(() => {
+  if (!query.data) return undefined;
+  return enrichTasksWithFreshValues(query.data);
+}, [query.data]);  // Only runs when server data changes
+```
+
+This means:
+- Project switching no longer triggers heat/importance recalculation
+- Enrichment only happens on: fetch, mutation, window focus
+- Time-based staleness is acceptable (5min max, decay half-life is 3-7 days)
+
+**2. Simplified page.tsx filtering** ([app/tasks/page.tsx](../app/tasks/page.tsx#L611-L660))
+
+The useMemo that splits active/completed tasks no longer calls `calculateImportanceV1` or `calculateHeat` - it just uses the pre-enriched values.
+
+**3. Memoized TaskRow** ([components/tasks/task-row.tsx](../components/tasks/task-row.tsx#L60))
+
+TaskRow is now wrapped in `React.memo()` to prevent re-renders when props haven't changed. This works effectively because task object references are now stable during project switching.
+
+### Why This Doesn't Cause Staleness
+
+| Event | What Happens |
+|-------|--------------|
+| Page load | Fresh fetch → enrichment runs |
+| Window focus | `refetchOnWindowFocus: true` → re-enrichment |
+| Any mutation | Optimistic update recalculates heat in mutation hooks |
+| Project switch | Uses cached enriched data - **no recalculation** |
+| 5+ min idle | Next interaction triggers refetch if stale |
+
+The heat decay half-life is 3-7 days, so 5-minute staleness causes <0.1% drift - imperceptible to users
 
 ---
 

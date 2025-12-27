@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { Star, Trash2, Flame, Snowflake, Eye, EyeOff, Moon } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -47,7 +47,17 @@ interface TaskRowProps {
   recurringCompletionSignal?: number;
 }
 
-export function TaskRow({
+/**
+ * TaskRow component wrapped in React.memo for performance.
+ *
+ * PERFORMANCE: This prevents re-renders when parent re-renders but task data
+ * hasn't changed. Combined with pre-enriched tasks from useTasksQuery, this
+ * makes project switching instant since unchanged rows skip rendering.
+ *
+ * Note: All callback props (onUpdate, onStar, etc.) should be wrapped in useCallback
+ * in the parent component for memo to be fully effective.
+ */
+export const TaskRow = memo(function TaskRow({
   task,
   projects,
   sortMode,
@@ -305,28 +315,6 @@ export function TaskRow({
             >
               {task.isFocused ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
             </button>
-            {/* Snooze Button - only for focused tasks */}
-            {task.isFocused && !isCompleted && (
-              <button
-                className={cn(
-                  "flex h-6 w-6 shrink-0 items-center justify-center rounded transition-colors opacity-0 group-hover:opacity-100",
-                  isFocusSnoozed
-                    ? "text-muted-foreground/60 cursor-not-allowed"
-                    : "text-muted-foreground/40 hover:text-muted-foreground cursor-pointer"
-                )}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!isFocusSnoozed) {
-                    onSnooze(task.id);
-                  }
-                }}
-                disabled={!!isFocusSnoozed}
-                aria-label="Snooze until tomorrow"
-                title={isFocusSnoozed ? "Already snoozed" : "Snooze until tomorrow"}
-              >
-                <Moon className="h-4 w-4" />
-              </button>
-            )}
           </div>
         </td>
         <td
@@ -447,7 +435,26 @@ export function TaskRow({
             !isCompact && (notesExpanded ? "rounded-tr" : "last:rounded-r")
           )}
         >
-          <div className="flex items-center justify-end">
+          <div className="flex items-center justify-end gap-1">
+            {/* Snooze Button - only for focused tasks */}
+            {task.isFocused && !isCompleted && (
+              <button
+                className={cn(
+                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 focus:opacity-100 focus:outline-none",
+                  isFocusSnoozed
+                    ? "text-muted-foreground hover:text-muted-foreground/60 hover:bg-accent/50 cursor-pointer"
+                    : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-accent/50 cursor-pointer"
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSnooze(task.id);
+                }}
+                aria-label={isFocusSnoozed ? "Unsnooze task" : "Snooze until tomorrow"}
+                title={isFocusSnoozed ? "Unsnooze task" : "Snooze until tomorrow"}
+              >
+                <Moon className="h-4 w-4" />
+              </button>
+            )}
             <button
               className="task-delete-button relative z-20 flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-0 transition-opacity duration-200 hover:bg-red-100/50 dark:hover:bg-red-900/30 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500/40"
               onClick={(e) => {
@@ -480,4 +487,4 @@ export function TaskRow({
       )}
     </>
   );
-}
+});
