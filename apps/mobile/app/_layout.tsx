@@ -7,6 +7,7 @@ import Constants from "expo-constants";
 import * as SplashScreen from "expo-splash-screen";
 import { tokenCache } from "@/lib/auth/token-cache";
 import { setClerkGetToken } from "@/lib/api";
+import { DatabaseProvider } from "@/lib/storage/DatabaseContext";
 
 // Prevent auto-hide of splash screen
 SplashScreen.preventAutoHideAsync();
@@ -47,34 +48,38 @@ export default function RootLayout() {
   // If no Clerk key, render without auth (for development)
   if (!publishableKey) {
     return (
-      <QueryClientProvider client={queryClient}>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="task/[id]"
-            options={{ title: "Task", presentation: "modal" }}
-          />
-        </Stack>
-        <StatusBar style="auto" />
-      </QueryClientProvider>
+      <DatabaseProvider>
+        <QueryClientProvider client={queryClient}>
+          <Stack>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen
+              name="task/[id]"
+              options={{ title: "Task", presentation: "modal" }}
+            />
+          </Stack>
+          <StatusBar style="auto" />
+        </QueryClientProvider>
+      </DatabaseProvider>
     );
   }
 
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
       <ClerkLoaded>
-        <QueryClientProvider client={queryClient}>
-          <AuthProvider>
-            <Stack>
-              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen
-                name="task/[id]"
-                options={{ title: "Task", presentation: "modal" }}
-              />
-            </Stack>
-          </AuthProvider>
-        </QueryClientProvider>
+        <DatabaseProvider>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <Stack>
+                <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen
+                  name="task/[id]"
+                  options={{ title: "Task", presentation: "modal" }}
+                />
+              </Stack>
+            </AuthProvider>
+          </QueryClientProvider>
+        </DatabaseProvider>
       </ClerkLoaded>
       <StatusBar style="auto" />
     </ClerkProvider>

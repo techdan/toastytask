@@ -348,4 +348,183 @@ export class LocalDatabase {
       this.upsertSettings(entityObj as unknown as SettingsDTO);
     }
   }
+
+  // ============================================================================
+  // Pending Tasks (for offline-first mutations)
+  // ============================================================================
+
+  /**
+   * Get tasks with pending sync status
+   */
+  getPendingTasks(): TaskDTO[] {
+    const rows = this.db.getAllSync<Record<string, unknown>>(
+      "SELECT * FROM tasks WHERE sync_status = 'pending' ORDER BY local_updated_at ASC"
+    );
+    return rows.map(this.rowToTaskDTO);
+  }
+
+  /**
+   * Get count of pending tasks
+   */
+  getPendingTaskCount(): number {
+    const result = this.db.getFirstSync<{ count: number }>(
+      "SELECT COUNT(*) as count FROM tasks WHERE sync_status = 'pending'"
+    );
+    return result?.count ?? 0;
+  }
+
+  /**
+   * Mark a task as synced (after successful push)
+   */
+  markTaskSynced(taskId: number): void {
+    const now = new Date().toISOString();
+    this.db.runSync(
+      "UPDATE tasks SET sync_status = 'synced', local_updated_at = ? WHERE id = ?",
+      [now, taskId]
+    );
+  }
+
+  /**
+   * Mark a task as having a sync conflict
+   */
+  markTaskConflict(taskId: number): void {
+    const now = new Date().toISOString();
+    this.db.runSync(
+      "UPDATE tasks SET sync_status = 'conflict', local_updated_at = ? WHERE id = ?",
+      [now, taskId]
+    );
+  }
+
+  /**
+   * Get tasks with conflicts for resolution
+   */
+  getConflictTasks(): TaskDTO[] {
+    const rows = this.db.getAllSync<Record<string, unknown>>(
+      "SELECT * FROM tasks WHERE sync_status = 'conflict' ORDER BY local_updated_at ASC"
+    );
+    return rows.map(this.rowToTaskDTO);
+  }
+
+  /**
+   * Get a task's sync status
+   */
+  getTaskSyncStatus(taskId: number): "synced" | "pending" | "conflict" | null {
+    const result = this.db.getFirstSync<{ sync_status: string }>(
+      "SELECT sync_status FROM tasks WHERE id = ?",
+      [taskId]
+    );
+    return result?.sync_status as "synced" | "pending" | "conflict" | null;
+  }
+
+  /**
+   * Get all local-only tasks (negative IDs, not yet synced to server)
+   */
+  getLocalOnlyTasks(): TaskDTO[] {
+    const rows = this.db.getAllSync<Record<string, unknown>>(
+      "SELECT * FROM tasks WHERE id < 0 ORDER BY created_at ASC"
+    );
+    return rows.map(this.rowToTaskDTO);
+  }
+
+  /**
+   * Replace a local task ID with a server-assigned ID after create sync
+   * Also updates any references (though tasks don't have FK references)
+   */
+  replaceLocalTaskId(localId: number, serverId: number): void {
+    this.db.runSync(
+      "UPDATE tasks SET id = ?, sync_status = 'synced' WHERE id = ?",
+      [serverId, localId]
+    );
+  }
+
+  /**
+   * Get completed tasks for a bucket
+   */
+  getCompletedTasks(bucket?: string): TaskDTO[] {
+    let query = `
+      SELECT * FROM tasks
+      WHERE completed_at IS NOT NULL AND deleted_at IS NULL
+    `;
+    const params: (string | number)[] = [];
+
+    if (bucket) {
+      query += " AND bucket = ?";
+      params.push(bucket);
+    }
+
+    query += " ORDER BY completed_at DESC";
+
+    const rows = this.db.getAllSync<Record<string, unknown>>(query, params);
+    return rows.map(this.rowToTaskDTO);
+  }
+
+  /**
+   * Get tasks by project
+   */
+  getTasksByProject(projectId: number | null): TaskDTO[] {
+    const query = projectId === null
+      ? "SELECT * FROM tasks WHERE project_id IS NULL AND deleted_at IS NULL ORDER BY heat DESC"
+      : "SELECT * FROM tasks WHERE project_id = ? AND deleted_at IS NULL ORDER BY heat DESC";
+
+    const params = projectId === null ? [] : [projectId];
+    const rows = this.db.getAllSync<Record<string, unknown>>(query, params);
+    return rows.map(this.rowToTaskDTO);
+  }
+
+  /**
+   * Clear all local data (for logout/reset)
+   */
+  clearAllData(): void {
+    this.db.runSync("DELETE FROM tasks");
+    this.db.runSync("DELETE FROM projects");
+    this.db.runSync("DELETE FROM notes");
+    this.db.runSync("DELETE FROM settings");
+    this.db.runSync("DELETE FROM outbox");
+    this.db.runSync("UPDATE sync_state SET pull_cursor = '', last_pull_at = NULL, last_push_at = NULL WHERE id = 1");
+  }
+
+  /**
+   * Get database statistics for debugging
+   */
+  getStats(): {
+    taskCount: number;
+    pendingTaskCount: number;
+    conflictTaskCount: number;
+    localOnlyTaskCount: number;
+    projectCount: number;
+    noteCount: number;
+  } {
+    const taskCount = this.db.getFirstSync<{ count: number }>(
+      "SELECT COUNT(*) as count FROM tasks WHERE deleted_at IS NULL"
+    )?.count ?? 0;
+
+    const pendingTaskCount = this.db.getFirstSync<{ count: number }>(
+      "SELECT COUNT(*) as count FROM tasks WHERE sync_status = 'pending'"
+    )?.count ?? 0;
+
+    const conflictTaskCount = this.db.getFirstSync<{ count: number }>(
+      "SELECT COUNT(*) as count FROM tasks WHERE sync_status = 'conflict'"
+    )?.count ?? 0;
+
+    const localOnlyTaskCount = this.db.getFirstSync<{ count: number }>(
+      "SELECT COUNT(*) as count FROM tasks WHERE id < 0"
+    )?.count ?? 0;
+
+    const projectCount = this.db.getFirstSync<{ count: number }>(
+      "SELECT COUNT(*) as count FROM projects WHERE deleted_at IS NULL"
+    )?.count ?? 0;
+
+    const noteCount = this.db.getFirstSync<{ count: number }>(
+      "SELECT COUNT(*) as count FROM notes"
+    )?.count ?? 0;
+
+    return {
+      taskCount,
+      pendingTaskCount,
+      conflictTaskCount,
+      localOnlyTaskCount,
+      projectCount,
+      noteCount,
+    };
+  }
 }
