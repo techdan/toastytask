@@ -1,0 +1,16 @@
+{
+  "name": "@toasty/domain",
+  "version": "0.0.1",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@toasty/contracts": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}
