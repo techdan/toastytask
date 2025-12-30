@@ -1,249 +1,426 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useTask } from "@/hooks/useTasks";
-import { Star, ArrowUp, ArrowDown } from "lucide-react-native";
+/**
+ * Task Detail Screen
+ *
+ * Full task editing screen with:
+ * - Header with badge, star, heat/cool buttons
+ * - Title input with auto-save
+ * - Field rows for due date, priority, project, recurrence
+ * - Notes editor
+ * - All pickers for editing fields
+ */
 
-const STAR_COLORS = ["#9ca3af", "#3b82f6", "#eab308", "#f97316"];
+import { useState, useCallback, useMemo } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import type { Priority, RepeatType } from "@toasty/contracts";
+import {
+  useTask,
+  useUpdateTask,
+  useCompleteTask,
+  useUncompleteTask,
+  useHeatTask,
+  useCoolTask,
+  useCycleStarTask,
+} from "@/hooks/useTasks";
+import { useLocalDatabase } from "@/hooks/useLocalDatabase";
+import { TaskDetailHeader } from "@/components/detail/TaskDetailHeader";
+import { FieldRow } from "@/components/detail/FieldRow";
+import { NotesEditor } from "@/components/detail/NotesEditor";
+import { PriorityPicker } from "@/components/detail/pickers/PriorityPicker";
+import { ProjectPicker } from "@/components/detail/pickers/ProjectPicker";
+import { DatePicker } from "@/components/detail/pickers/DatePicker";
+import { RecurrencePicker } from "@/components/detail/pickers/RecurrencePicker";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { DueDateDisplay } from "@/components/ui/DueDateDisplay";
+import { ColorDot, DEFAULT_PROJECT_COLOR } from "@/components/ui/ColorDot";
+import type { BadgeMode } from "@/components/ui/HeatBadge";
+import type { StarLevel } from "@/components/ui/StarButton";
+import { useThemeColors } from "@/constants/theme";
+import { spacing, borderRadius, shadows } from "@/constants/spacing";
+import { textStyles } from "@/constants/typography";
+
+type ActivePicker = "priority" | "project" | "date" | "recurrence" | null;
 
 export default function TaskDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const themeColors = useThemeColors();
   const taskId = parseInt(id || "0", 10);
-  const { task, isLoading, error } = useTask(taskId);
 
+  const { task, isLoading, error } = useTask(taskId);
+  const { database } = useLocalDatabase();
+  const updateTask = useUpdateTask();
+  const completeTask = useCompleteTask();
+  const uncompleteTask = useUncompleteTask();
+  const heatTask = useHeatTask();
+  const coolTask = useCoolTask();
+  const cycleStarTask = useCycleStarTask();
+
+  const [badgeMode, setBadgeMode] = useState<BadgeMode>("heat");
+  const [activePicker, setActivePicker] = useState<ActivePicker>(null);
+  const [localTitle, setLocalTitle] = useState<string | null>(null);
+
+  // Get all projects for the picker
+  const projects = useMemo(() => {
+    return database?.getProjects() ?? [];
+  }, [database]);
+
+  // Find the current project
+  const currentProject = useMemo(() => {
+    if (!task?.projectId) return null;
+    return projects.find((p) => p.id === task.projectId) ?? null;
+  }, [task?.projectId, projects]);
+
+  // Handlers
+  const handleBack = useCallback(() => {
+    router.back();
+  }, [router]);
+
+  const toggleBadgeMode = useCallback(() => {
+    setBadgeMode((current) => (current === "heat" ? "importance" : "heat"));
+  }, []);
+
+  const handleComplete = useCallback(() => {
+    if (!task) return;
+    if (task.completedAt) {
+      uncompleteTask.mutate(task.id);
+    } else {
+      completeTask.mutate(task.id);
+    }
+  }, [task, completeTask, uncompleteTask]);
+
+  const handleStarPress = useCallback(() => {
+    if (!task) return;
+    cycleStarTask.mutate(task.id);
+  }, [task, cycleStarTask]);
+
+  const handleHeatPress = useCallback(() => {
+    if (!task) return;
+    heatTask.mutate({ id: task.id });
+  }, [task, heatTask]);
+
+  const handleCoolPress = useCallback(() => {
+    if (!task) return;
+    coolTask.mutate({ id: task.id });
+  }, [task, coolTask]);
+
+  const handleTitleBlur = useCallback(() => {
+    if (!task || localTitle === null) return;
+    const trimmedTitle = localTitle.trim();
+    if (trimmedTitle && trimmedTitle !== task.title) {
+      updateTask.mutate({ taskId: task.id, data: { title: trimmedTitle } });
+    }
+    setLocalTitle(null);
+  }, [task, localTitle, updateTask]);
+
+  const handlePrioritySelect = useCallback(
+    (priority: Priority) => {
+      if (!task) return;
+      updateTask.mutate({ taskId: task.id, data: { priority } });
+    },
+    [task, updateTask]
+  );
+
+  const handleProjectSelect = useCallback(
+    (projectId: number | null) => {
+      if (!task) return;
+      updateTask.mutate({ taskId: task.id, data: { projectId } });
+    },
+    [task, updateTask]
+  );
+
+  const handleDateSelect = useCallback(
+    (date: Date | null) => {
+      if (!task) return;
+      updateTask.mutate({
+        taskId: task.id,
+        data: { dueAt: date?.toISOString() ?? null },
+      });
+    },
+    [task, updateTask]
+  );
+
+  const handleRecurrenceSelect = useCallback(
+    (repeatType: RepeatType) => {
+      if (!task) return;
+      updateTask.mutate({ taskId: task.id, data: { repeatType } });
+    },
+    [task, updateTask]
+  );
+
+  const handleNotesChange = useCallback(
+    (notes: string) => {
+      if (!task) return;
+      // For now, update the first note or create one
+      // This is a simplified implementation
+      updateTask.mutate({
+        taskId: task.id,
+        data: { notes: notes || null },
+      });
+    },
+    [task, updateTask]
+  );
+
+  // Format recurrence for display
+  const formatRecurrence = (repeatType: RepeatType | null | undefined): string => {
+    switch (repeatType) {
+      case "daily":
+        return "Daily";
+      case "weekly":
+        return "Weekly";
+      case "biweekly":
+        return "Every 2 Weeks";
+      case "monthly":
+        return "Monthly";
+      case "semiannual":
+        return "Every 6 Months";
+      case "annual":
+        return "Yearly";
+      default:
+        return "None";
+    }
+  };
+
+  // Loading state
   if (isLoading) {
     return (
-      <View style={styles.center}>
-        <Text>Loading...</Text>
+      <View style={[styles.center, { backgroundColor: themeColors.background }]}>
+        <Text style={[styles.loadingText, { color: themeColors.textSecondary }]}>
+          Loading...
+        </Text>
       </View>
     );
   }
 
+  // Error state
   if (error || !task) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>Task not found</Text>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backText}>Go Back</Text>
+      <View style={[styles.center, { backgroundColor: themeColors.background }]}>
+        <Text style={[styles.errorText, { color: themeColors.text }]}>
+          Task not found
+        </Text>
+        <TouchableOpacity
+          onPress={handleBack}
+          style={[styles.backButton, { backgroundColor: themeColors.muted }]}
+        >
+          <Text style={[styles.backText, { color: themeColors.text }]}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  const starColor = STAR_COLORS[task.starLevel] || STAR_COLORS[0];
+  const isCompleted = !!task.completedAt;
+  const heat = task._freshHeat ?? task.heat ?? 0;
+  const importance = task._freshImportance ?? task.importanceV1 ?? 5;
+  const currentNotes =
+    task.notes && task.notes.length > 0
+      ? task.notes.map((n) => n.currentText).join("\n")
+      : "";
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.titleRow}>
-          <Text style={styles.title}>{task.title}</Text>
-          <TouchableOpacity style={styles.starButton}>
-            <Star
-              size={24}
-              color={starColor}
-              fill={task.starLevel > 0 ? starColor : "transparent"}
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+        {/* Header */}
+        <TaskDetailHeader
+          heat={heat}
+          importance={importance}
+          badgeMode={badgeMode}
+          onBadgeModeToggle={toggleBadgeMode}
+          starLevel={(task.starLevel || 0) as StarLevel}
+          onStarPress={handleStarPress}
+          onHeatPress={handleHeatPress}
+          onCoolPress={handleCoolPress}
+          onBackPress={handleBack}
+          createdAt={task.createdAt}
+          updatedAt={task.updatedAt}
+          isCompleted={isCompleted}
+        />
+
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Title Section */}
+          <View style={[styles.titleSection, { backgroundColor: themeColors.card }]}>
+            <View style={styles.titleRow}>
+              <Checkbox checked={isCompleted} onToggle={handleComplete} />
+              <TextInput
+                style={[
+                  styles.titleInput,
+                  { color: themeColors.text },
+                  isCompleted && styles.titleCompleted,
+                ]}
+                value={localTitle ?? task.title}
+                onChangeText={setLocalTitle}
+                onBlur={handleTitleBlur}
+                placeholder="Task title"
+                placeholderTextColor={themeColors.textMuted}
+                editable={!isCompleted}
+                multiline
+              />
+            </View>
+          </View>
+
+          {/* Details Card */}
+          <View style={[styles.card, { backgroundColor: themeColors.card }]}>
+            <FieldRow
+              label="Due Date"
+              value={
+                <DueDateDisplay
+                  dueAt={task.dueAt}
+                  isCompleted={isCompleted}
+                  size="default"
+                />
+              }
+              onPress={() => setActivePicker("date")}
+              disabled={isCompleted}
             />
-          </TouchableOpacity>
-        </View>
+            <FieldRow
+              label="Priority"
+              value={task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+              onPress={() => setActivePicker("priority")}
+              disabled={isCompleted}
+            />
+            <FieldRow
+              label="Project"
+              value={
+                currentProject ? (
+                  <View style={styles.projectValue}>
+                    <ColorDot color={currentProject.colorHex || DEFAULT_PROJECT_COLOR} />
+                    <Text style={{ color: themeColors.text }}>{currentProject.name}</Text>
+                  </View>
+                ) : (
+                  <Text style={{ color: themeColors.textSecondary }}>None</Text>
+                )
+              }
+              onPress={() => setActivePicker("project")}
+              disabled={isCompleted}
+            />
+            <FieldRow
+              label="Repeat"
+              value={formatRecurrence(task.repeatType)}
+              onPress={() => setActivePicker("recurrence")}
+              disabled={isCompleted}
+            />
+          </View>
 
-        <View style={styles.badges}>
-          <View style={[styles.badge, styles.heatBadge]}>
-            <Text style={styles.badgeText}>Heat: {Math.round(task.heat)}</Text>
+          {/* Notes Section */}
+          <View style={[styles.card, { backgroundColor: themeColors.card }]}>
+            <NotesEditor
+              value={currentNotes}
+              onChange={handleNotesChange}
+              disabled={isCompleted}
+            />
           </View>
-          <View style={[styles.badge, styles.importanceBadge]}>
-            <Text style={styles.badgeText}>Imp: {task.importanceV1}</Text>
-          </View>
-        </View>
-      </View>
+        </ScrollView>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Details</Text>
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <Text style={styles.label}>Priority</Text>
-            <Text style={styles.value}>{task.priority}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Bucket</Text>
-            <Text style={styles.value}>{task.bucket}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Due Date</Text>
-            <Text style={styles.value}>
-              {task.dueAt ? new Date(task.dueAt).toLocaleDateString() : "None"}
-            </Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Repeat</Text>
-            <Text style={styles.value}>{task.repeatType}</Text>
-          </View>
-        </View>
-      </View>
+        {/* Pickers */}
+        <PriorityPicker
+          visible={activePicker === "priority"}
+          value={task.priority}
+          onSelect={handlePrioritySelect}
+          onClose={() => setActivePicker(null)}
+        />
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Heat Controls</Text>
-        <View style={styles.heatControls}>
-          <TouchableOpacity style={[styles.heatButton, styles.coolButton]}>
-            <ArrowDown size={24} color="#3b82f6" />
-            <Text style={styles.coolText}>Cool</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.heatButton, styles.heatUpButton]}>
-            <ArrowUp size={24} color="#f97316" />
-            <Text style={styles.heatUpText}>Heat</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+        <ProjectPicker
+          visible={activePicker === "project"}
+          value={task.projectId}
+          projects={projects}
+          onSelect={handleProjectSelect}
+          onClose={() => setActivePicker(null)}
+        />
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Notes</Text>
-        <View style={styles.card}>
-          <Text style={styles.notesText}>
-            {task.notes && task.notes.length > 0
-              ? task.notes.map((n) => n.currentText).join("\n")
-              : "No notes"}
-          </Text>
-        </View>
+        <DatePicker
+          visible={activePicker === "date"}
+          value={task.dueAt ? new Date(task.dueAt) : null}
+          onSelect={handleDateSelect}
+          onClose={() => setActivePicker(null)}
+        />
+
+        <RecurrencePicker
+          visible={activePicker === "recurrence"}
+          value={task.repeatType || "none"}
+          onSelect={handleRecurrenceSelect}
+          onClose={() => setActivePicker(null)}
+        />
       </View>
-    </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f9fafb",
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: spacing.lg,
+    gap: spacing.lg,
+    paddingBottom: spacing.xxl,
   },
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 24,
+    padding: spacing.xl,
+  },
+  loadingText: {
+    ...textStyles.body,
   },
   errorText: {
-    fontSize: 16,
-    color: "#dc2626",
-    marginBottom: 16,
+    ...textStyles.body,
+    marginBottom: spacing.lg,
   },
   backButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: "#f3f4f6",
-    borderRadius: 8,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
   },
   backText: {
-    color: "#1f2937",
-    fontWeight: "600",
+    ...textStyles.button,
   },
-  header: {
-    backgroundColor: "#fff",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+  titleSection: {
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    ...shadows.sm,
   },
   titleRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "flex-start",
+    gap: spacing.md,
   },
-  title: {
+  titleInput: {
     flex: 1,
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#1f2937",
-    marginRight: 16,
+    ...textStyles.screenTitle,
+    padding: 0,
   },
-  starButton: {
-    padding: 8,
-  },
-  badges: {
-    flexDirection: "row",
-    marginTop: 12,
-    gap: 8,
-  },
-  badge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 16,
-  },
-  heatBadge: {
-    backgroundColor: "#fef3c7",
-  },
-  importanceBadge: {
-    backgroundColor: "#dbeafe",
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#1f2937",
-  },
-  section: {
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#6b7280",
-    textTransform: "uppercase",
-    marginBottom: 8,
+  titleCompleted: {
+    textDecorationLine: "line-through",
+    opacity: 0.6,
   },
   card: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    borderRadius: borderRadius.lg,
+    overflow: "hidden",
+    ...shadows.sm,
   },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
-  },
-  label: {
-    fontSize: 16,
-    color: "#6b7280",
-  },
-  value: {
-    fontSize: 16,
-    color: "#1f2937",
-    textTransform: "capitalize",
-  },
-  heatControls: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  heatButton: {
-    flex: 1,
+  projectValue: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    borderRadius: 12,
-    gap: 8,
-  },
-  coolButton: {
-    backgroundColor: "#dbeafe",
-  },
-  coolText: {
-    color: "#3b82f6",
-    fontWeight: "600",
-    fontSize: 16,
-  },
-  heatUpButton: {
-    backgroundColor: "#ffedd5",
-  },
-  heatUpText: {
-    color: "#f97316",
-    fontWeight: "600",
-    fontSize: 16,
-  },
-  notesText: {
-    fontSize: 16,
-    color: "#1f2937",
-    lineHeight: 24,
+    gap: spacing.sm,
   },
 });

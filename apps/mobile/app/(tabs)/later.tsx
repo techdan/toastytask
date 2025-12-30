@@ -1,17 +1,74 @@
+/**
+ * Later Tab Screen
+ *
+ * Task list screen showing tasks in the "later" bucket.
+ * These are tasks deferred to work on at a future time.
+ * Features:
+ * - SwipeableTaskRow with heat/cool gestures
+ * - QuickAddFAB for adding new tasks
+ * - Pull-to-refresh
+ * - Empty state with helpful message
+ * - Badge mode toggle (heat/importance)
+ */
+
+import { useState, useCallback } from "react";
 import { View, Text, FlatList, StyleSheet, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
-import { useTasks } from "@/hooks/useTasks";
-import { TaskListItem } from "@/components/TaskListItem";
-import { QuickAddTask } from "@/components/QuickAddTask";
+import { Clock } from "lucide-react-native";
+import { useTasks, useHeatTask, useCoolTask } from "@/hooks/useTasks";
+import { SwipeableTaskRow } from "@/components/task/SwipeableTaskRow";
+import { QuickAddFAB } from "@/components/add/QuickAddFAB";
+import { QuickAddModal } from "@/components/add/QuickAddModal";
+import { useThemeColors } from "@/constants/theme";
+import { spacing, borderRadius } from "@/constants/spacing";
+import { textStyles } from "@/constants/typography";
+import { brand } from "@/constants/colors";
+import type { BadgeMode } from "@/components/ui/HeatBadge";
+import type { DensityMode } from "@/components/TaskListItem";
 
 export default function LaterScreen() {
   const router = useRouter();
+  const themeColors = useThemeColors();
   const { tasks, isLoading, error, refetch } = useTasks({ bucket: "later" });
+  const heatTask = useHeatTask();
+  const coolTask = useCoolTask();
+
+  const [isAddModalVisible, setIsAddModalVisible] = useState(false);
+  const [badgeMode, setBadgeMode] = useState<BadgeMode>("heat");
+  const [density] = useState<DensityMode>("comfortable");
+
+  const toggleBadgeMode = useCallback(() => {
+    setBadgeMode((current) => (current === "heat" ? "importance" : "heat"));
+  }, []);
+
+  const handleHeat = useCallback(
+    (taskId: number) => {
+      const visibleTasks = tasks.map((t) => ({
+        id: t.id,
+        heat: t._freshHeat,
+      }));
+      heatTask.mutate({ id: taskId, visibleTasks });
+    },
+    [tasks, heatTask]
+  );
+
+  const handleCool = useCallback(
+    (taskId: number) => {
+      const visibleTasks = tasks.map((t) => ({
+        id: t.id,
+        heat: t._freshHeat,
+      }));
+      coolTask.mutate({ id: taskId, visibleTasks });
+    },
+    [tasks, coolTask]
+  );
 
   if (error) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>Failed to load tasks</Text>
+      <View style={[styles.center, { backgroundColor: themeColors.background }]}>
+        <Text style={[styles.errorText, { color: themeColors.text }]}>
+          Failed to load tasks
+        </Text>
         <TouchableOpacity onPress={() => refetch()} style={styles.retryButton}>
           <Text style={styles.retryText}>Retry</Text>
         </TouchableOpacity>
@@ -20,27 +77,49 @@ export default function LaterScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <QuickAddTask bucket="later" />
+    <View style={[styles.container, { backgroundColor: themeColors.background }]}>
       <FlatList
         data={tasks}
         keyExtractor={(item) => String(item.id)}
         renderItem={({ item }) => (
-          <TaskListItem
+          <SwipeableTaskRow
             task={item}
             onPress={() => router.push(`/task/${item.id}`)}
+            onHeat={() => handleHeat(item.id)}
+            onCool={() => handleCool(item.id)}
+            badgeMode={badgeMode}
+            onBadgeModeToggle={toggleBadgeMode}
+            density={density}
+            enableSwipe={!item.completedAt}
           />
         )}
         contentContainerStyle={styles.listContent}
         refreshing={isLoading}
         onRefresh={refetch}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>
+            <Clock
+              size={64}
+              color={themeColors.textMuted}
+              strokeWidth={1.5}
+            />
+            <Text style={[styles.emptyTitle, { color: themeColors.text }]}>
               {isLoading ? "Loading..." : "No tasks for later"}
+            </Text>
+            <Text style={[styles.emptySubtitle, { color: themeColors.textSecondary }]}>
+              {!isLoading && "Tasks you've deferred will appear here"}
             </Text>
           </View>
         }
+      />
+
+      <QuickAddFAB onPress={() => setIsAddModalVisible(true)} />
+
+      <QuickAddModal
+        visible={isAddModalVisible}
+        onClose={() => setIsAddModalVisible(false)}
+        bucket="later"
       />
     </View>
   );
@@ -49,28 +128,29 @@ export default function LaterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f9fafb",
   },
   listContent: {
-    padding: 16,
+    padding: spacing.lg,
     flexGrow: 1,
+  },
+  separator: {
+    height: spacing.sm,
   },
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 24,
+    padding: spacing.xl,
   },
   errorText: {
-    fontSize: 16,
-    color: "#dc2626",
-    marginBottom: 16,
+    ...textStyles.body,
+    marginBottom: spacing.lg,
   },
   retryButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: "#f24c05",
-    borderRadius: 8,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    backgroundColor: brand.primary,
+    borderRadius: borderRadius.md,
   },
   retryText: {
     color: "#fff",
@@ -80,10 +160,15 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 48,
+    paddingVertical: spacing.xxl,
+    gap: spacing.md,
   },
-  emptyText: {
-    fontSize: 16,
-    color: "#6b7280",
+  emptyTitle: {
+    ...textStyles.screenTitle,
+    marginTop: spacing.lg,
+  },
+  emptySubtitle: {
+    ...textStyles.body,
+    textAlign: "center",
   },
 });

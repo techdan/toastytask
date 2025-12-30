@@ -1,67 +1,153 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
+/**
+ * Settings Tab Screen
+ *
+ * User preferences and account settings.
+ * Features:
+ * - Account section with user email and sign out
+ * - Sync status with last sync time and pending changes
+ * - Force sync button
+ * - App version info
+ */
+
+import { View, StyleSheet, ScrollView, TouchableOpacity, Text, ActivityIndicator } from "react-native";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useRouter } from "expo-router";
+import { RefreshCw } from "lucide-react-native";
+import { SettingsSection } from "@/components/settings/SettingsSection";
+import { SettingRow } from "@/components/settings/SettingRow";
+import { useSyncStatus } from "@/hooks/useSyncStatus";
+import { useSync } from "@/hooks/useSync";
+import { useThemeColors } from "@/constants/theme";
+import { spacing, borderRadius } from "@/constants/spacing";
+import { textStyles } from "@/constants/typography";
+import { semantic } from "@/constants/colors";
+
+function formatLastSync(isoDate: string | null): string {
+  if (!isoDate) return "Never";
+
+  const date = new Date(isoDate);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMinutes < 1) return "Just now";
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+
+  return date.toLocaleDateString();
+}
 
 export default function SettingsScreen() {
   const { signOut, isSignedIn } = useAuth();
   const { user } = useUser();
   const router = useRouter();
+  const themeColors = useThemeColors();
+  const syncStatus = useSyncStatus();
+  const { sync, isSyncing, isOffline } = useSync();
 
   const handleSignOut = async () => {
     await signOut();
     router.replace("/(auth)/sign-in");
   };
 
-  return (
-    <ScrollView style={styles.container}>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Account</Text>
-        {isSignedIn && user ? (
-          <View style={styles.card}>
-            <Text style={styles.email}>{user.emailAddresses[0]?.emailAddress}</Text>
-            <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
-              <Text style={styles.signOutText}>Sign Out</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.card}>
-            <Text style={styles.notSignedIn}>Not signed in</Text>
-            <TouchableOpacity
-              onPress={() => router.push("/(auth)/sign-in")}
-              style={styles.signInButton}
-            >
-              <Text style={styles.signInText}>Sign In</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
+  const handleSync = async () => {
+    await sync();
+    syncStatus.refresh();
+  };
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Sync Status</Text>
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <Text style={styles.label}>Last synced</Text>
-            <Text style={styles.value}>Not synced</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Pending changes</Text>
-            <Text style={styles.value}>0</Text>
-          </View>
-          <TouchableOpacity style={styles.syncButton}>
-            <Text style={styles.syncText}>Sync Now</Text>
+  return (
+    <ScrollView
+      style={[styles.container, { backgroundColor: themeColors.background }]}
+      contentContainerStyle={styles.content}
+    >
+      {/* Account Section */}
+      <SettingsSection title="Account">
+        {isSignedIn && user ? (
+          <>
+            <SettingRow
+              label="Email"
+              value={user.emailAddresses[0]?.emailAddress}
+              showChevron={false}
+            />
+            <SettingRow
+              label="Sign Out"
+              onPress={handleSignOut}
+              valueColor={semantic.error}
+              isLast
+            />
+          </>
+        ) : (
+          <SettingRow
+            label="Sign In"
+            onPress={() => router.push("/(auth)/sign-in")}
+            isLast
+          />
+        )}
+      </SettingsSection>
+
+      {/* Sync Section */}
+      <SettingsSection title="Sync">
+        <SettingRow
+          label="Last synced"
+          value={formatLastSync(syncStatus.lastPullAt)}
+          showChevron={false}
+        />
+        <SettingRow
+          label="Pending changes"
+          value={String(syncStatus.pendingCount)}
+          showChevron={false}
+        />
+        <SettingRow
+          label="Status"
+          value={isOffline ? "Offline" : "Online"}
+          valueColor={isOffline ? semantic.warning : semantic.success}
+          showChevron={false}
+        />
+        <View style={styles.syncButtonContainer}>
+          <TouchableOpacity
+            style={[
+              styles.syncButton,
+              { backgroundColor: themeColors.muted },
+              isSyncing && styles.syncButtonDisabled,
+            ]}
+            onPress={handleSync}
+            disabled={isSyncing || isOffline}
+          >
+            {isSyncing ? (
+              <ActivityIndicator size="small" color={themeColors.text} />
+            ) : (
+              <>
+                <RefreshCw size={18} color={themeColors.text} />
+                <Text style={[styles.syncButtonText, { color: themeColors.text }]}>
+                  Sync Now
+                </Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
-      </View>
+      </SettingsSection>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>About</Text>
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <Text style={styles.label}>Version</Text>
-            <Text style={styles.value}>1.0.0</Text>
-          </View>
+      {/* About Section */}
+      <SettingsSection title="About">
+        <SettingRow
+          label="Version"
+          value="1.0.0"
+          showChevron={false}
+          isLast
+        />
+      </SettingsSection>
+
+      {/* Sync Warning */}
+      {syncStatus.isVeryStale && (
+        <View style={[styles.warningCard, { backgroundColor: "#fef3c7" }]}>
+          <Text style={styles.warningText}>
+            Your data hasn't synced in over 24 hours. Connect to the internet and sync to avoid losing changes.
+          </Text>
         </View>
-      </View>
+      )}
     </ScrollView>
   );
 }
@@ -69,82 +155,37 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f9fafb",
   },
-  section: {
-    padding: 16,
+  content: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xxl,
   },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#6b7280",
-    textTransform: "uppercase",
-    marginBottom: 8,
-  },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  email: {
-    fontSize: 16,
-    color: "#1f2937",
-    marginBottom: 16,
-  },
-  notSignedIn: {
-    fontSize: 16,
-    color: "#6b7280",
-    marginBottom: 16,
-  },
-  signOutButton: {
-    backgroundColor: "#fee2e2",
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  signOutText: {
-    color: "#dc2626",
-    fontWeight: "600",
-  },
-  signInButton: {
-    backgroundColor: "#f24c05",
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  signInText: {
-    color: "#fff",
-    fontWeight: "600",
-  },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
-  },
-  label: {
-    fontSize: 16,
-    color: "#6b7280",
-  },
-  value: {
-    fontSize: 16,
-    color: "#1f2937",
+  syncButtonContainer: {
+    padding: spacing.lg,
+    paddingTop: spacing.md,
   },
   syncButton: {
-    backgroundColor: "#f3f4f6",
-    paddingVertical: 12,
-    borderRadius: 8,
+    flexDirection: "row",
     alignItems: "center",
-    marginTop: 16,
+    justifyContent: "center",
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    gap: spacing.sm,
   },
-  syncText: {
-    color: "#1f2937",
+  syncButtonDisabled: {
+    opacity: 0.6,
+  },
+  syncButtonText: {
+    ...textStyles.body,
     fontWeight: "600",
+  },
+  warningCard: {
+    padding: spacing.lg,
+    borderRadius: borderRadius.lg,
+    marginTop: spacing.md,
+  },
+  warningText: {
+    ...textStyles.body,
+    color: "#92400e",
   },
 });

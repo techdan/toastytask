@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.10.0",
+    "@react-native-community/datetimepicker": "8.4.4",
     "@react-native-community/netinfo": "^11.4.1",
     "@tanstack/react-query": "^5.90.5",
     "@toasty/api-client": "*",
@@ -19,6 +20,7 @@
     "@toasty/domain": "*",
     "expo": "~54.0.30",
     "expo-constants": "~18.0.5",
+    "expo-haptics": "~15.0.8",
     "expo-linking": "~7.0.5",
     "expo-router": "~5.0.6",
     "expo-secure-store": "~15.0.2",

@@ -1,13 +1,16 @@
 import { useEffect } from "react";
+import { useColorScheme } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { ClerkProvider, ClerkLoaded, useAuth } from "@clerk/clerk-expo";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import Constants from "expo-constants";
 import * as SplashScreen from "expo-splash-screen";
 import { tokenCache } from "@/lib/auth/token-cache";
 import { setClerkGetToken } from "@/lib/api";
 import { DatabaseProvider } from "@/lib/storage/DatabaseContext";
+import { ThemeProvider, themes, type ColorScheme } from "@/constants/theme";
 
 // Prevent auto-hide of splash screen
 SplashScreen.preventAutoHideAsync();
@@ -34,6 +37,9 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export default function RootLayout() {
   const publishableKey = Constants.expoConfig?.extra?.clerkPublishableKey;
+  const systemColorScheme = useColorScheme();
+  const colorScheme: ColorScheme = systemColorScheme ?? "light";
+  const theme = themes[colorScheme];
 
   useEffect(() => {
     // Hide splash screen after layout is ready
@@ -48,40 +54,48 @@ export default function RootLayout() {
   // If no Clerk key, render without auth (for development)
   if (!publishableKey) {
     return (
-      <DatabaseProvider>
-        <QueryClientProvider client={queryClient}>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen
-              name="task/[id]"
-              options={{ title: "Task", presentation: "modal" }}
-            />
-          </Stack>
-          <StatusBar style="auto" />
-        </QueryClientProvider>
-      </DatabaseProvider>
-    );
-  }
-
-  return (
-    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-      <ClerkLoaded>
-        <DatabaseProvider>
-          <QueryClientProvider client={queryClient}>
-            <AuthProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <ThemeProvider value={theme}>
+          <DatabaseProvider>
+            <QueryClientProvider client={queryClient}>
               <Stack>
-                <Stack.Screen name="(auth)" options={{ headerShown: false }} />
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                 <Stack.Screen
                   name="task/[id]"
                   options={{ title: "Task", presentation: "modal" }}
                 />
               </Stack>
-            </AuthProvider>
-          </QueryClientProvider>
-        </DatabaseProvider>
-      </ClerkLoaded>
-      <StatusBar style="auto" />
-    </ClerkProvider>
+              <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+            </QueryClientProvider>
+          </DatabaseProvider>
+        </ThemeProvider>
+      </GestureHandlerRootView>
+    );
+  }
+
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider value={theme}>
+        <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+          <ClerkLoaded>
+            <DatabaseProvider>
+              <QueryClientProvider client={queryClient}>
+                <AuthProvider>
+                  <Stack>
+                    <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+                    <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                    <Stack.Screen
+                      name="task/[id]"
+                      options={{ title: "Task", presentation: "modal" }}
+                    />
+                  </Stack>
+                </AuthProvider>
+              </QueryClientProvider>
+            </DatabaseProvider>
+          </ClerkLoaded>
+          <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+        </ClerkProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

@@ -1,47 +1,94 @@
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
-import { Star, Check } from "lucide-react-native";
-import type { TaskDTO } from "@toasty/contracts";
-import { useCompleteTask, useUncompleteTask, useCycleStarTask } from "@/hooks/useTasks";
+/**
+ * TaskListItem Component
+ *
+ * A task row component displaying:
+ * - Left color strip (heat indicator)
+ * - Checkbox for completion
+ * - Heat/Importance badge
+ * - Title with priority styling
+ * - Meta row (due date, priority, project) in comfortable mode
+ * - Star button
+ * - Notes indicator
+ */
 
-interface TaskWithFresh extends TaskDTO {
+import { View, Text, StyleSheet, Pressable } from "react-native";
+import { StickyNote } from "lucide-react-native";
+import type { TaskDTO, ProjectDTO } from "@toasty/contracts";
+import {
+  useCompleteTask,
+  useUncompleteTask,
+  useCycleStarTask,
+} from "@/hooks/useTasks";
+import { HeatBadge, type BadgeMode } from "@/components/ui/HeatBadge";
+import { StarButton, type StarLevel } from "@/components/ui/StarButton";
+import { DueDateDisplay } from "@/components/ui/DueDateDisplay";
+import { PriorityText } from "@/components/ui/PriorityText";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { ColorDot, DEFAULT_PROJECT_COLOR } from "@/components/ui/ColorDot";
+import {
+  getHeatColor,
+  state as stateColors,
+} from "@/constants/colors";
+import {
+  spacing,
+  borderRadius,
+  componentSize,
+  layout,
+  shadows,
+} from "@/constants/spacing";
+import { textStyles } from "@/constants/typography";
+import { useThemeColors } from "@/constants/theme";
+
+// Extended task type with fresh calculated values
+export interface TaskWithFresh extends TaskDTO {
   _freshHeat?: number;
   _freshImportance?: number;
 }
 
+export type DensityMode = "compact" | "comfortable";
+
 interface TaskListItemProps {
+  /** The task to display */
   task: TaskWithFresh;
+  /** Callback when the task row is pressed */
   onPress: () => void;
+  /** Associated project (optional) */
+  project?: ProjectDTO | null;
+  /** Display mode for badge (heat or importance) */
+  badgeMode?: BadgeMode;
+  /** Callback when badge is tapped to toggle mode */
+  onBadgeModeToggle?: () => void;
+  /** Density mode affects padding and meta row visibility */
+  density?: DensityMode;
+  /** Whether the task is currently focused */
+  isFocused?: boolean;
 }
 
-const STAR_COLORS = ["#9ca3af", "#3b82f6", "#eab308", "#f97316"];
-
-const PRIORITY_STYLES = {
-  top: { fontWeight: "700" as const, color: "#990000" },
-  high: { fontWeight: "700" as const, color: "#344C63" },
-  medium: { fontWeight: "400" as const, color: "#1f2937" },
-  low: { fontWeight: "300" as const, color: "#6b7280" },
-};
-
-function getHeatColor(heat: number): string {
-  if (heat <= 8) return "#60A5FA"; // Blue
-  if (heat <= 24) return "#4ADE80"; // Green
-  if (heat <= 48) return "#FACC15"; // Yellow
-  if (heat <= 71) return "#FB923C"; // Orange
-  return "#F87171"; // Red
-}
-
-export function TaskListItem({ task, onPress }: TaskListItemProps) {
+export function TaskListItem({
+  task,
+  onPress,
+  project,
+  badgeMode = "heat",
+  onBadgeModeToggle,
+  density = "comfortable",
+  isFocused = false,
+}: TaskListItemProps) {
+  const themeColors = useThemeColors();
   const completeTask = useCompleteTask();
   const uncompleteTask = useUncompleteTask();
   const cycleStarTask = useCycleStarTask();
 
+  // Derived state
   const isCompleted = !!task.completedAt;
   const isUntouched = !task.lastTouchedAt && !task.lastHeatTouchedAt;
-  const starColor = STAR_COLORS[task.starLevel] || STAR_COLORS[0];
-  const priorityStyle = PRIORITY_STYLES[task.priority] || PRIORITY_STYLES.medium;
-  const heat = task._freshHeat ?? task.heat;
+  const hasNotes = task.notes && task.notes.length > 0;
+
+  // Use fresh calculated values or fall back to stored values
+  const heat = task._freshHeat ?? task.heat ?? 0;
+  const importance = task._freshImportance ?? task.importanceV1 ?? 5;
   const heatColor = getHeatColor(heat);
 
+  // Handlers
   const handleComplete = () => {
     if (isCompleted) {
       uncompleteTask.mutate(task.id);
@@ -54,56 +101,146 @@ export function TaskListItem({ task, onPress }: TaskListItemProps) {
     cycleStarTask.mutate(task.id);
   };
 
+  // Density-based padding
+  const containerPadding =
+    density === "compact"
+      ? layout.taskItemPaddingCompact
+      : layout.taskItemPaddingComfortable;
+
   return (
-    <TouchableOpacity
-      style={[styles.container, isCompleted && styles.completed]}
+    <Pressable
+      style={({ pressed }) => [
+        styles.container,
+        {
+          backgroundColor: themeColors.card,
+          paddingVertical: containerPadding,
+        },
+        isCompleted && styles.completed,
+        isFocused && styles.focused,
+        pressed && styles.pressed,
+      ]}
       onPress={onPress}
-      activeOpacity={0.7}
     >
-      <TouchableOpacity
-        style={[styles.checkbox, isCompleted && styles.checkboxChecked]}
-        onPress={handleComplete}
-      >
-        {isCompleted && <Check size={16} color="#fff" />}
-      </TouchableOpacity>
+      {/* Left color strip */}
+      <View
+        style={[
+          styles.colorStrip,
+          { backgroundColor: isCompleted ? themeColors.textMuted : heatColor },
+        ]}
+      />
 
-      <View style={styles.content}>
-        <Text
-          style={[
-            styles.title,
-            priorityStyle,
-            isUntouched && styles.untouchedTitle,
-            isCompleted && styles.completedTitle,
-          ]}
-          numberOfLines={2}
-        >
-          {task.title}
-        </Text>
-
-        <View style={styles.meta}>
-          <View style={[styles.heatBadge, { backgroundColor: heatColor }]}>
-            <Text style={styles.heatText}>{Math.round(heat)}</Text>
-          </View>
-
-          {task.dueAt && (
-            <Text style={styles.dueDate}>
-              {new Date(task.dueAt).toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              })}
-            </Text>
-          )}
-        </View>
+      {/* Checkbox */}
+      <View style={styles.checkboxContainer}>
+        <Checkbox checked={isCompleted} onToggle={handleComplete} />
       </View>
 
-      <TouchableOpacity style={styles.starButton} onPress={handleStar}>
-        <Star
-          size={20}
-          color={starColor}
-          fill={task.starLevel > 0 ? starColor : "transparent"}
+      {/* Heat/Importance Badge */}
+      <View style={styles.badgeContainer}>
+        <HeatBadge
+          heat={heat}
+          importance={importance}
+          mode={badgeMode}
+          isCompleted={isCompleted}
+          onPress={onBadgeModeToggle}
         />
-      </TouchableOpacity>
-    </TouchableOpacity>
+      </View>
+
+      {/* Content Area */}
+      <View style={styles.content}>
+        {/* Title */}
+        <PriorityText
+          priority={task.priority}
+          isNew={isUntouched}
+          isCompleted={isCompleted}
+          numberOfLines={density === "compact" ? 1 : 2}
+        >
+          {task.title}
+        </PriorityText>
+
+        {/* Meta row (comfortable mode only) */}
+        {density === "comfortable" && (
+          <View style={styles.metaRow}>
+            {/* Due Date */}
+            <DueDateDisplay dueAt={task.dueAt} isCompleted={isCompleted} size="small" />
+
+            {/* Priority label */}
+            {task.priority !== "medium" && (
+              <>
+                <Text style={[styles.metaSeparator, { color: themeColors.textMuted }]}>
+                  •
+                </Text>
+                <Text
+                  style={[
+                    styles.metaText,
+                    { color: themeColors.textSecondary },
+                  ]}
+                >
+                  {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+                </Text>
+              </>
+            )}
+
+            {/* Project */}
+            {project && (
+              <>
+                <Text style={[styles.metaSeparator, { color: themeColors.textMuted }]}>
+                  •
+                </Text>
+                <View style={styles.projectMeta}>
+                  <ColorDot
+                    color={project.colorHex || DEFAULT_PROJECT_COLOR}
+                    size={8}
+                  />
+                  <Text
+                    style={[
+                      styles.metaText,
+                      { color: themeColors.textSecondary },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {project.name}
+                  </Text>
+                </View>
+              </>
+            )}
+
+            {/* Recurrence indicator */}
+            {task.repeatType && task.repeatType !== "none" && (
+              <>
+                <Text style={[styles.metaSeparator, { color: themeColors.textMuted }]}>
+                  •
+                </Text>
+                <Text
+                  style={[
+                    styles.metaText,
+                    { color: themeColors.textSecondary },
+                  ]}
+                >
+                  🔁
+                </Text>
+              </>
+            )}
+          </View>
+        )}
+      </View>
+
+      {/* Star Button */}
+      <StarButton
+        level={(task.starLevel || 0) as StarLevel}
+        onPress={handleStar}
+        disabled={isCompleted}
+      />
+
+      {/* Notes Indicator */}
+      {hasNotes && (
+        <View style={styles.notesIndicator}>
+          <StickyNote
+            size={componentSize.notesIconSize}
+            color={themeColors.textMuted}
+          />
+        </View>
+      )}
+    </Pressable>
   );
 }
 
@@ -111,70 +248,56 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    borderRadius: layout.cardBorderRadius,
+    paddingRight: spacing.md,
+    marginBottom: layout.cardMarginBottom,
+    overflow: "hidden",
+    ...shadows.sm,
   },
   completed: {
     opacity: 0.6,
   },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: "#d1d5db",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
+  focused: {
+    backgroundColor: stateColors.focused,
   },
-  checkboxChecked: {
-    backgroundColor: "#10b981",
-    borderColor: "#10b981",
+  pressed: {
+    opacity: 0.8,
+  },
+  colorStrip: {
+    width: componentSize.colorStripWidth,
+    alignSelf: "stretch",
+  },
+  checkboxContainer: {
+    paddingLeft: spacing.md,
+    paddingRight: spacing.sm,
+  },
+  badgeContainer: {
+    paddingRight: spacing.sm,
   },
   content: {
     flex: 1,
+    paddingRight: spacing.sm,
   },
-  title: {
-    fontSize: 16,
-    lineHeight: 22,
-    marginBottom: 4,
-  },
-  untouchedTitle: {
-    fontWeight: "700",
-    color: "#4ADE80",
-  },
-  completedTitle: {
-    textDecorationLine: "line-through",
-    color: "#9ca3af",
-  },
-  meta: {
+  metaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    marginTop: spacing.xs,
+    flexWrap: "wrap",
   },
-  heatBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
+  metaSeparator: {
+    marginHorizontal: spacing.xs,
+    ...textStyles.caption,
   },
-  heatText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#fff",
+  metaText: {
+    ...textStyles.caption,
   },
-  dueDate: {
-    fontSize: 12,
-    color: "#6b7280",
+  projectMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
   },
-  starButton: {
-    padding: 8,
-    marginLeft: 8,
+  notesIndicator: {
+    paddingLeft: spacing.xs,
+    paddingRight: spacing.xs,
   },
 });
