@@ -18,6 +18,15 @@ export {
   useCoolTask,
   useCycleStarTask,
 } from "./useTasks";
+export type { ProjectFilter } from "./useTasks";
+
+// Project hooks - for v2 drawer navigation
+export { useProjects, useProject } from "./useProjects";
+export type { ProjectWithCount, UseProjectsResult } from "./useProjects";
+
+// Filter state hooks - for v2 project/search filtering
+export { useFilterState } from "./useFilterState";
+export type { FilterState } from "./useFilterState";
 
 // Local tasks hooks - alternative lower-level API
 export {

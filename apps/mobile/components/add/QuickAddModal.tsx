@@ -7,6 +7,7 @@
  * - Submit on keyboard "Done" or button press
  * - Uses default priority/due date from settings
  * - Shows loading state during creation
+ * - Optionally assigns to a project (v2 UI)
  */
 
 import { useState, useEffect, useRef } from "react";
@@ -23,7 +24,6 @@ import {
 } from "react-native";
 import { X, ArrowRight } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { Bucket } from "@toasty/contracts";
 import { useCreateTask } from "@/hooks/useTasks";
 import { brand } from "@/constants/colors";
 import { spacing, borderRadius, layout } from "@/constants/spacing";
@@ -35,11 +35,18 @@ interface QuickAddModalProps {
   visible: boolean;
   /** Callback to close the modal */
   onClose: () => void;
-  /** Which bucket to create the task in */
-  bucket: Bucket;
+  /** Project ID to assign to the new task (inherits from current filter) */
+  projectId?: number | null;
+  /** Project name for display (optional, shows which project task will be added to) */
+  projectName?: string;
 }
 
-export function QuickAddModal({ visible, onClose, bucket }: QuickAddModalProps) {
+export function QuickAddModal({
+  visible,
+  onClose,
+  projectId,
+  projectName,
+}: QuickAddModalProps) {
   const insets = useSafeAreaInsets();
   const themeColors = useThemeColors();
   const inputRef = useRef<TextInput>(null);
@@ -64,8 +71,10 @@ export function QuickAddModal({ visible, onClose, bucket }: QuickAddModalProps) 
     try {
       await createTask.mutateAsync({
         title: trimmedTitle,
-        bucket,
-        // Default values will be applied by the backend
+        // In v2, bucket is always "todo" - no longer used for navigation
+        bucket: "todo",
+        // Assign to project if filtering by a specific project
+        projectId: typeof projectId === "number" ? projectId : undefined,
       });
       setTitle("");
       onClose();
@@ -156,10 +165,12 @@ export function QuickAddModal({ visible, onClose, bucket }: QuickAddModalProps) 
             </Pressable>
           </View>
 
-          {/* Bucket indicator */}
-          <Text style={[styles.bucketHint, { color: themeColors.textMuted }]}>
-            Adding to: {bucket.charAt(0).toUpperCase() + bucket.slice(1)}
-          </Text>
+          {/* Project indicator (only show if adding to a specific project) */}
+          {projectName && (
+            <Text style={[styles.projectHint, { color: themeColors.textMuted }]}>
+              Adding to: {projectName}
+            </Text>
+          )}
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -216,7 +227,7 @@ const styles = StyleSheet.create({
   submitButtonDisabled: {
     backgroundColor: brand.primaryLight,
   },
-  bucketHint: {
+  projectHint: {
     ...textStyles.caption,
     marginTop: spacing.sm,
   },

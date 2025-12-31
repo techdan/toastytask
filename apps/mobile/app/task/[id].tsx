@@ -158,16 +158,13 @@ export default function TaskDetailScreen() {
   );
 
   const handleNotesChange = useCallback(
-    (notes: string) => {
+    (_notes: string) => {
+      // Notes update not yet implemented for mobile
+      // Notes require a separate API endpoint, not part of task update
+      // TODO: Implement notes sync when notes API is available in mobile
       if (!task) return;
-      // For now, update the first note or create one
-      // This is a simplified implementation
-      updateTask.mutate({
-        taskId: task.id,
-        data: { notes: notes || null },
-      });
     },
-    [task, updateTask]
+    [task]
   );
 
   // Format recurrence for display
@@ -282,7 +279,7 @@ export default function TaskDetailScreen() {
                 <DueDateDisplay
                   dueAt={task.dueAt}
                   isCompleted={isCompleted}
-                  size="default"
+                  size="normal"
                 />
               }
               onPress={() => setActivePicker("date")}

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import type {
   TaskDTO,
   Bucket,
@@ -11,11 +11,63 @@ import { calculateHeat, calculateImportanceV1 } from "@toasty/domain";
 import { useLocalDatabase } from "./useLocalDatabase";
 import { TaskMutations } from "../lib/mutations/task-mutations";
 import { useAuth } from "@clerk/clerk-expo";
+import {
+  sortTasksByMode,
+  type MobileSortMode,
+  type SortDirection,
+} from "../lib/sorting";
 
+/**
+ * Filter for project-based filtering in the v2 UI
+ * - number: specific project ID
+ * - null: "No Project" filter (tasks without a project)
+ * - 'all': show all tasks
+ * - 'focus': show only focused tasks
+ */
+export type ProjectFilter = number | null | "all" | "focus";
+
+/**
+ * Options for the useTasks hook
+ * Supports both legacy bucket-based filtering and new v2 project-based filtering
+ */
 interface UseTasksOptions {
+  /**
+   * @deprecated Use projectId filter with 'all' instead
+   * Legacy bucket filter - kept for backward compatibility during migration
+   */
   bucket?: Bucket;
-  projectId?: number | null;
+
+  /**
+   * Project filter for v2 UI
+   * - number: specific project ID
+   * - null: "No Project" filter
+   * - 'all': show all tasks (default)
+   * - 'focus': show only focused tasks
+   */
+  projectId?: ProjectFilter;
+
+  /**
+   * Sort mode for the task list
+   * @default 'importance'
+   */
+  sortMode?: MobileSortMode;
+
+  /**
+   * Sort direction
+   * @default 'desc'
+   */
+  sortDirection?: SortDirection;
+
+  /**
+   * Whether to include completed tasks
+   * @default false
+   */
   includeCompleted?: boolean;
+
+  /**
+   * Search query to filter tasks by title
+   */
+  searchQuery?: string;
 }
 
 /**
@@ -86,12 +138,29 @@ function processTasksWithFreshValues(
  * Hook for accessing tasks from local SQLite database
  * Reads from local storage for offline-first operation
  * Mutations write locally and queue to outbox for sync
+ *
+ * Supports both legacy bucket-based filtering (v1) and new project-based filtering (v2)
  */
 export function useTasks(options?: UseTasksOptions) {
   const { database, isReady } = useLocalDatabase();
   const queryClient = useQueryClient();
 
-  const queryKey = ["local-tasks", options?.bucket, options?.projectId, options?.includeCompleted];
+  // Extract options with defaults
+  const sortMode = options?.sortMode ?? "importance";
+  const sortDirection = options?.sortDirection ?? "desc";
+  const includeCompleted = options?.includeCompleted ?? false;
+  const searchQuery = options?.searchQuery ?? "";
+
+  // Build query key including all filter/sort params
+  const queryKey = [
+    "local-tasks",
+    options?.bucket,
+    options?.projectId,
+    sortMode,
+    sortDirection,
+    includeCompleted,
+    searchQuery,
+  ];
 
   const query = useQuery({
     queryKey,
@@ -101,19 +170,43 @@ export function useTasks(options?: UseTasksOptions) {
       }
 
       // Get tasks from local database
+      // Legacy bucket filtering still supported
       let localTasks = database.getTasks(options?.bucket);
 
-      // Filter by project if specified
-      if (options?.projectId !== undefined) {
-        localTasks = localTasks.filter((t) => t.projectId === options.projectId);
+      // v2 project-based filtering
+      if (options?.projectId !== undefined && options?.projectId !== "all") {
+        if (options.projectId === "focus") {
+          // Focus filter - show only focused tasks
+          localTasks = localTasks.filter((t) => t.isFocused);
+        } else if (options.projectId === null) {
+          // "No Project" filter - tasks without a project
+          localTasks = localTasks.filter((t) => t.projectId === null);
+        } else if (typeof options.projectId === "number") {
+          // Specific project filter
+          localTasks = localTasks.filter(
+            (t) => t.projectId === options.projectId
+          );
+        }
       }
 
       // Filter out completed unless requested
-      if (!options?.includeCompleted) {
+      if (!includeCompleted) {
         localTasks = localTasks.filter((t) => !t.completedAt);
       }
 
-      return processTasksWithFreshValues(localTasks);
+      // Search filter - filter by title (case-insensitive)
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase().trim();
+        localTasks = localTasks.filter((t) =>
+          t.title.toLowerCase().includes(query)
+        );
+      }
+
+      // Calculate fresh values for all tasks
+      const tasksWithFresh = localTasks.map(calculateFreshValues);
+
+      // Sort using the new sorting utilities
+      return sortTasksByMode(tasksWithFresh, sortMode, sortDirection);
     },
     enabled: isReady,
     // Recalculate fresh values frequently since heat decays over time
@@ -125,8 +218,22 @@ export function useTasks(options?: UseTasksOptions) {
     queryClient.invalidateQueries({ queryKey: ["local-tasks"] });
   }, [queryClient]);
 
+  // Separate completed and uncompleted tasks for v2 UI
+  const { uncompletedTasks, completedTasks } = useMemo(() => {
+    const tasks = query.data ?? [];
+    if (!includeCompleted) {
+      return { uncompletedTasks: tasks, completedTasks: [] };
+    }
+    return {
+      uncompletedTasks: tasks.filter((t) => !t.completedAt),
+      completedTasks: tasks.filter((t) => t.completedAt),
+    };
+  }, [query.data, includeCompleted]);
+
   return {
     tasks: query.data ?? [],
+    uncompletedTasks,
+    completedTasks,
     isLoading: query.isLoading || !isReady,
     error: query.error,
     refetch: query.refetch,

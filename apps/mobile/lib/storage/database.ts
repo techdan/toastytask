@@ -5,6 +5,7 @@ import type {
   ProjectDTO,
   NoteRowDTO,
   SettingsDTO,
+  RepeatType,
 } from "@toasty/contracts";
 
 let dbInstance: SQLite.SQLiteDatabase | null = null;
@@ -155,7 +156,7 @@ export class LocalDatabase {
       starLevel: row.star_level as 0 | 1 | 2 | 3,
       starIntentVersion: row.star_intent_version as number,
       dueAt: row.due_at as string | null,
-      repeatType: row.repeat_type as string,
+      repeatType: row.repeat_type as RepeatType,
       repeatRule: row.repeat_rule as string | null,
       heat: row.heat as number,
       heatCalculatedAt: row.heat_calculated_at as string | null,

@@ -54,8 +54,8 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       // User is not signed in and trying to access protected route
       router.replace("/(auth)/sign-in");
     } else if (isSignedIn && inAuthGroup) {
-      // User is signed in but still on auth screen
-      router.replace("/(tabs)");
+      // User is signed in but still on auth screen - go to main screen (v2)
+      router.replace("/");
     }
   }, [isLoaded, isSignedIn, segments, router]);
 
@@ -95,7 +95,11 @@ export default function RootLayout() {
           <DatabaseProvider>
             <QueryClientProvider client={queryClient}>
               <Stack>
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="index" options={{ headerShown: false }} />
+                <Stack.Screen
+                  name="settings"
+                  options={{ title: "Settings", presentation: "card" }}
+                />
                 <Stack.Screen
                   name="task/[id]"
                   options={{ title: "Task", presentation: "modal" }}
@@ -120,7 +124,11 @@ export default function RootLayout() {
                   <AuthGuard>
                     <Stack>
                       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-                      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                      <Stack.Screen name="index" options={{ headerShown: false }} />
+                      <Stack.Screen
+                        name="settings"
+                        options={{ title: "Settings", presentation: "card" }}
+                      />
                       <Stack.Screen
                         name="task/[id]"
                         options={{ title: "Task", presentation: "modal" }}
