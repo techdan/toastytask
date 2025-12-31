@@ -7,6 +7,7 @@ import { getNetworkStateSync } from "./network";
 
 export type SyncEvent =
   | { type: "sync:started" }
+  | { type: "sync:progress"; phase: "auth" | "push" | "pull"; message: string }
   | { type: "sync:completed"; cursor: string }
   | { type: "sync:offline" }
   | { type: "sync:error"; error: Error }
@@ -40,6 +41,7 @@ export class SyncEngine {
 
     try {
       // Validate auth token
+      this.events.emit({ type: "sync:progress", phase: "auth", message: "Authenticating..." });
       const authValid = await this.config.refreshAuthToken();
       if (!authValid) {
         this.events.emit({ type: "sync:auth-required" });
@@ -47,9 +49,11 @@ export class SyncEngine {
       }
 
       // Push local changes first
+      this.events.emit({ type: "sync:progress", phase: "push", message: "Uploading changes..." });
       await this.push();
 
       // Then pull remote changes
+      this.events.emit({ type: "sync:progress", phase: "pull", message: "Downloading tasks..." });
       await this.pull();
 
       const cursor = this.config.database.getSyncCursor();

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
-import { useColorScheme } from "react-native";
-import { Stack } from "expo-router";
+import { useColorScheme, ActivityIndicator, View } from "react-native";
+import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { ClerkProvider, ClerkLoaded, useAuth } from "@clerk/clerk-expo";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -31,6 +31,42 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     // Set the Clerk getToken function for API calls
     setClerkGetToken(getToken);
   }, [getToken]);
+
+  return <>{children}</>;
+}
+
+/**
+ * Auth guard that redirects based on authentication state.
+ * - Unauthenticated users are redirected to sign-in
+ * - Authenticated users are redirected away from auth screens
+ */
+function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { isLoaded, isSignedIn } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    const inAuthGroup = segments[0] === "(auth)";
+
+    if (!isSignedIn && !inAuthGroup) {
+      // User is not signed in and trying to access protected route
+      router.replace("/(auth)/sign-in");
+    } else if (isSignedIn && inAuthGroup) {
+      // User is signed in but still on auth screen
+      router.replace("/(tabs)");
+    }
+  }, [isLoaded, isSignedIn, segments, router]);
+
+  // Show loading while checking auth
+  if (!isLoaded) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
 
   return <>{children}</>;
 }
@@ -81,14 +117,16 @@ export default function RootLayout() {
             <DatabaseProvider>
               <QueryClientProvider client={queryClient}>
                 <AuthProvider>
-                  <Stack>
-                    <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-                    <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                    <Stack.Screen
-                      name="task/[id]"
-                      options={{ title: "Task", presentation: "modal" }}
-                    />
-                  </Stack>
+                  <AuthGuard>
+                    <Stack>
+                      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+                      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                      <Stack.Screen
+                        name="task/[id]"
+                        options={{ title: "Task", presentation: "modal" }}
+                      />
+                    </Stack>
+                  </AuthGuard>
                 </AuthProvider>
               </QueryClientProvider>
             </DatabaseProvider>

@@ -46,7 +46,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const themeColors = useThemeColors();
   const syncStatus = useSyncStatus();
-  const { sync, isSyncing, isOffline } = useSync();
+  const { sync, isSyncing, isOffline, error: syncError } = useSync();
 
   const handleSignOut = async () => {
     await signOut();
@@ -102,8 +102,8 @@ export default function SettingsScreen() {
         />
         <SettingRow
           label="Status"
-          value={isOffline ? "Offline" : "Online"}
-          valueColor={isOffline ? semantic.warning : semantic.success}
+          value={syncError ? "Error" : isOffline ? "Offline" : "Online"}
+          valueColor={syncError ? semantic.error : isOffline ? semantic.warning : semantic.success}
           showChevron={false}
         />
         <View style={styles.syncButtonContainer}>
@@ -140,8 +140,20 @@ export default function SettingsScreen() {
         />
       </SettingsSection>
 
+      {/* Sync Error */}
+      {syncError && (
+        <View style={[styles.errorCard, { backgroundColor: "#fee2e2" }]}>
+          <Text style={styles.errorText}>
+            Sync failed: {syncError.message || "Unable to connect to server"}
+          </Text>
+          <Text style={[styles.errorHint, { color: themeColors.mutedForeground }]}>
+            Check that the dev server is running and API_BASE_URL is configured correctly in .env
+          </Text>
+        </View>
+      )}
+
       {/* Sync Warning */}
-      {syncStatus.isVeryStale && (
+      {syncStatus.isVeryStale && !syncError && (
         <View style={[styles.warningCard, { backgroundColor: "#fef3c7" }]}>
           <Text style={styles.warningText}>
             Your data hasn't synced in over 24 hours. Connect to the internet and sync to avoid losing changes.
@@ -187,5 +199,19 @@ const styles = StyleSheet.create({
   warningText: {
     ...textStyles.body,
     color: "#92400e",
+  },
+  errorCard: {
+    padding: spacing.lg,
+    borderRadius: borderRadius.lg,
+    marginTop: spacing.md,
+  },
+  errorText: {
+    ...textStyles.body,
+    color: "#dc2626",
+    fontWeight: "600",
+  },
+  errorHint: {
+    ...textStyles.caption,
+    marginTop: spacing.sm,
   },
 });

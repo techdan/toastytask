@@ -11,6 +11,7 @@ interface SyncStatus {
   lastPushAt: string | null;
   isOffline: boolean;
   error: Error | null;
+  progressMessage: string | null;
 }
 
 export function useSync() {
@@ -24,6 +25,7 @@ export function useSync() {
     lastPushAt: null,
     isOffline: false,
     error: null,
+    progressMessage: null,
   });
 
   const engineRef = useRef<SyncEngine | null>(null);
@@ -64,23 +66,28 @@ export function useSync() {
 
           switch (event.type) {
             case "sync:started":
-              setStatus((prev) => ({ ...prev, isSyncing: true, error: null }));
+              setStatus((prev) => ({ ...prev, isSyncing: true, error: null, progressMessage: "Starting sync..." }));
+              break;
+            case "sync:progress":
+              setStatus((prev) => ({ ...prev, progressMessage: event.message }));
               break;
             case "sync:completed":
               setStatus((prev) => ({
                 ...prev,
                 isSyncing: false,
                 lastPullAt: new Date().toISOString(),
+                progressMessage: null,
               }));
               break;
             case "sync:offline":
-              setStatus((prev) => ({ ...prev, isOffline: true }));
+              setStatus((prev) => ({ ...prev, isOffline: true, progressMessage: null }));
               break;
             case "sync:error":
               setStatus((prev) => ({
                 ...prev,
                 isSyncing: false,
                 error: event.error,
+                progressMessage: null,
               }));
               break;
             case "sync:pending-count":

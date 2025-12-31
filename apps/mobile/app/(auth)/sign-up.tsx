@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useSignUp } from "@clerk/clerk-expo";
 import { useRouter, Link } from "expo-router";
+import { Eye, EyeOff } from "lucide-react-native";
 
 export default function SignUpScreen() {
   const { signUp, setActive, isLoaded } = useSignUp();
@@ -17,6 +18,7 @@ export default function SignUpScreen() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [pendingVerification, setPendingVerification] = useState(false);
@@ -82,6 +84,7 @@ export default function SignUpScreen() {
           <TextInput
             style={styles.input}
             placeholder="Verification Code"
+            placeholderTextColor="#9ca3af"
             value={code}
             onChangeText={setCode}
             keyboardType="number-pad"
@@ -115,6 +118,7 @@ export default function SignUpScreen() {
         <TextInput
           style={styles.input}
           placeholder="Email"
+          placeholderTextColor="#9ca3af"
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
@@ -122,14 +126,27 @@ export default function SignUpScreen() {
           autoComplete="email"
         />
 
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoComplete="password-new"
-        />
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={styles.passwordInput}
+            placeholder="Password"
+            placeholderTextColor="#9ca3af"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+            autoComplete="password-new"
+          />
+          <TouchableOpacity
+            style={styles.passwordToggle}
+            onPress={() => setShowPassword(!showPassword)}
+          >
+            {showPassword ? (
+              <EyeOff size={20} color="#6b7280" />
+            ) : (
+              <Eye size={20} color="#6b7280" />
+            )}
+          </TouchableOpacity>
+        </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -185,6 +202,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 16,
     fontSize: 16,
+    color: "#1f2937",
+  },
+  passwordContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    marginBottom: 16,
+    height: 48,
+  },
+  passwordInput: {
+    flex: 1,
+    height: 48,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: "#1f2937",
+  },
+  passwordToggle: {
+    padding: 12,
   },
   error: {
     color: "#dc2626",

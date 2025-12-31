@@ -11,17 +11,18 @@
  */
 
 import { useState, useCallback } from "react";
-import { View, Text, FlatList, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
-import { ClipboardList } from "lucide-react-native";
+import { ClipboardList, AlertCircle, WifiOff, RefreshCw } from "lucide-react-native";
 import { useTasks, useHeatTask, useCoolTask } from "@/hooks/useTasks";
+import { useSync } from "@/hooks/useSync";
 import { SwipeableTaskRow } from "@/components/task/SwipeableTaskRow";
 import { QuickAddFAB } from "@/components/add/QuickAddFAB";
 import { QuickAddModal } from "@/components/add/QuickAddModal";
 import { useThemeColors } from "@/constants/theme";
 import { spacing, borderRadius } from "@/constants/spacing";
 import { textStyles } from "@/constants/typography";
-import { brand } from "@/constants/colors";
+import { brand, semantic } from "@/constants/colors";
 import type { BadgeMode } from "@/components/ui/HeatBadge";
 import type { DensityMode } from "@/components/TaskListItem";
 
@@ -29,6 +30,7 @@ export default function TodoScreen() {
   const router = useRouter();
   const themeColors = useThemeColors();
   const { tasks, isLoading, error, refetch } = useTasks({ bucket: "todo" });
+  const { isSyncing, isOffline, error: syncError, progressMessage, sync } = useSync();
   const heatTask = useHeatTask();
   const coolTask = useCoolTask();
 
@@ -75,8 +77,44 @@ export default function TodoScreen() {
     );
   }
 
+  // Sync status banner component
+  const renderSyncBanner = () => {
+    if (isSyncing && progressMessage) {
+      return (
+        <View style={[styles.syncBanner, styles.syncBannerProgress]}>
+          <ActivityIndicator size="small" color="#1d4ed8" />
+          <Text style={styles.syncBannerTextProgress}>{progressMessage}</Text>
+        </View>
+      );
+    }
+
+    if (syncError) {
+      return (
+        <TouchableOpacity style={[styles.syncBanner, styles.syncBannerError]} onPress={sync}>
+          <AlertCircle size={16} color="#dc2626" />
+          <Text style={styles.syncBannerTextError}>
+            Sync failed: {syncError.message || "Connection error"}
+          </Text>
+          <RefreshCw size={14} color="#dc2626" />
+        </TouchableOpacity>
+      );
+    }
+
+    if (isOffline) {
+      return (
+        <View style={[styles.syncBanner, styles.syncBannerOffline]}>
+          <WifiOff size={16} color="#92400e" />
+          <Text style={styles.syncBannerTextOffline}>Offline - changes will sync when connected</Text>
+        </View>
+      );
+    }
+
+    return null;
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+      {renderSyncBanner()}
       <FlatList
         data={tasks}
         keyExtractor={(item) => String(item.id)}
@@ -126,6 +164,37 @@ export default function TodoScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  syncBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
+  },
+  syncBannerProgress: {
+    backgroundColor: "#dbeafe",
+  },
+  syncBannerError: {
+    backgroundColor: "#fee2e2",
+  },
+  syncBannerOffline: {
+    backgroundColor: "#fef3c7",
+  },
+  syncBannerTextProgress: {
+    ...textStyles.caption,
+    color: "#1d4ed8",
+    flex: 1,
+  },
+  syncBannerTextError: {
+    ...textStyles.caption,
+    color: "#dc2626",
+    flex: 1,
+  },
+  syncBannerTextOffline: {
+    ...textStyles.caption,
+    color: "#92400e",
     flex: 1,
   },
   listContent: {
