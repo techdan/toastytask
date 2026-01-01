@@ -31,6 +31,7 @@ import {
   useCoolTask,
   useCycleStarTask,
 } from "@/hooks/useTasks";
+import { useSaveNotes } from "@/hooks/useNotes";
 import { useLocalDatabase } from "@/hooks/useLocalDatabase";
 import { TaskDetailHeader } from "@/components/detail/TaskDetailHeader";
 import { FieldRow } from "@/components/detail/FieldRow";
@@ -64,6 +65,7 @@ export default function TaskDetailScreen() {
   const heatTask = useHeatTask();
   const coolTask = useCoolTask();
   const cycleStarTask = useCycleStarTask();
+  const saveNotes = useSaveNotes();
 
   const [badgeMode, setBadgeMode] = useState<BadgeMode>("heat");
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
@@ -158,13 +160,11 @@ export default function TaskDetailScreen() {
   );
 
   const handleNotesChange = useCallback(
-    (_notes: string) => {
-      // Notes update not yet implemented for mobile
-      // Notes require a separate API endpoint, not part of task update
-      // TODO: Implement notes sync when notes API is available in mobile
+    (notes: string) => {
       if (!task) return;
+      saveNotes.mutate({ taskId: task.id, text: notes });
     },
-    [task]
+    [task, saveNotes]
   );
 
   // Format recurrence for display

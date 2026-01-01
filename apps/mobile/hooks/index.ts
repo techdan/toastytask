@@ -20,6 +20,9 @@ export {
 } from "./useTasks";
 export type { ProjectFilter } from "./useTasks";
 
+// Notes hooks - for offline-first notes management
+export { useSaveNotes, useNotesText } from "./useNotes";
+
 // Project hooks - for v2 drawer navigation
 export { useProjects, useProject } from "./useProjects";
 export type { ProjectWithCount, UseProjectsResult } from "./useProjects";

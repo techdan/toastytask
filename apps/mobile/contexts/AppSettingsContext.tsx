@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { MobileSortMode, SortDirection } from "../lib/sorting";
+import type { Priority, DefaultDueDate } from "@toasty/contracts";
 
 /**
  * App settings that persist locally on the device
@@ -20,6 +21,10 @@ export interface AppSettings {
   badgeMode: "heat" | "importance";
   showCompleted: boolean;
   theme: "light" | "dark" | "system";
+  // Default settings for new tasks
+  defaultPriority: Priority;
+  defaultDueDate: DefaultDueDate;
+  defaultProjectId: number | null;
 }
 
 /**
@@ -32,6 +37,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   badgeMode: "importance",
   showCompleted: false,
   theme: "system",
+  // Default settings for new tasks
+  defaultPriority: "medium",
+  defaultDueDate: "none",
+  defaultProjectId: null,
 };
 
 const STORAGE_KEY = "toasty:app-settings";
@@ -46,6 +55,9 @@ type AppSettingsAction =
   | { type: "SET_BADGE_MODE"; payload: "heat" | "importance" }
   | { type: "SET_SHOW_COMPLETED"; payload: boolean }
   | { type: "SET_THEME"; payload: "light" | "dark" | "system" }
+  | { type: "SET_DEFAULT_PRIORITY"; payload: Priority }
+  | { type: "SET_DEFAULT_DUE_DATE"; payload: DefaultDueDate }
+  | { type: "SET_DEFAULT_PROJECT_ID"; payload: number | null }
   | { type: "LOAD_SETTINGS"; payload: Partial<AppSettings> }
   | { type: "RESET_SETTINGS" };
 
@@ -66,6 +78,12 @@ function settingsReducer(
       return { ...state, showCompleted: action.payload };
     case "SET_THEME":
       return { ...state, theme: action.payload };
+    case "SET_DEFAULT_PRIORITY":
+      return { ...state, defaultPriority: action.payload };
+    case "SET_DEFAULT_DUE_DATE":
+      return { ...state, defaultDueDate: action.payload };
+    case "SET_DEFAULT_PROJECT_ID":
+      return { ...state, defaultProjectId: action.payload };
     case "LOAD_SETTINGS":
       return { ...state, ...action.payload };
     case "RESET_SETTINGS":
@@ -220,15 +238,29 @@ export function useAppSettingsUpdaters() {
     [dispatch]
   );
 
+  const setDefaultPriority = useCallback(
+    (priority: Priority) => {
+      dispatch({ type: "SET_DEFAULT_PRIORITY", payload: priority });
+    },
+    [dispatch]
+  );
+
+  const setDefaultDueDate = useCallback(
+    (dueDate: DefaultDueDate) => {
+      dispatch({ type: "SET_DEFAULT_DUE_DATE", payload: dueDate });
+    },
+    [dispatch]
+  );
+
+  const setDefaultProjectId = useCallback(
+    (projectId: number | null) => {
+      dispatch({ type: "SET_DEFAULT_PROJECT_ID", payload: projectId });
+    },
+    [dispatch]
+  );
+
   const resetSettings = useCallback(() => {
     dispatch({ type: "RESET_SETTINGS" });
-  }, [dispatch]);
-
-  const toggleBadgeMode = useCallback(() => {
-    dispatch({
-      type: "SET_BADGE_MODE",
-      payload: undefined as unknown as "heat" | "importance",
-    });
   }, [dispatch]);
 
   return {
@@ -238,6 +270,9 @@ export function useAppSettingsUpdaters() {
     setBadgeMode,
     setShowCompleted,
     setTheme,
+    setDefaultPriority,
+    setDefaultDueDate,
+    setDefaultProjectId,
     resetSettings,
   };
 }

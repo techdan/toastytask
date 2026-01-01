@@ -18,6 +18,7 @@ import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingRow } from "@/components/settings/SettingRow";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
 import { useSync } from "@/hooks/useSync";
+import { useProjects } from "@/hooks/useProjects";
 import { useThemeColors } from "@/constants/theme";
 import { spacing, borderRadius } from "@/constants/spacing";
 import { textStyles } from "@/constants/typography";
@@ -27,6 +28,7 @@ import {
   useAppSettingsUpdaters,
 } from "@/contexts/AppSettingsContext";
 import type { MobileSortMode } from "@/lib/sorting";
+import type { Priority, DefaultDueDate } from "@toasty/contracts";
 
 function formatLastSync(isoDate: string | null): string {
   if (!isoDate) return "Never";
@@ -96,6 +98,36 @@ function formatBadgeMode(badgeMode: "heat" | "importance"): string {
   }
 }
 
+function formatPriority(priority: Priority): string {
+  switch (priority) {
+    case "low":
+      return "Low";
+    case "medium":
+      return "Medium";
+    case "high":
+      return "High";
+    case "top":
+      return "Top";
+    default:
+      return priority;
+  }
+}
+
+function formatDefaultDueDate(dueDate: DefaultDueDate): string {
+  switch (dueDate) {
+    case "none":
+      return "None";
+    case "today":
+      return "Today";
+    case "tomorrow":
+      return "Tomorrow";
+    case "next_week":
+      return "Next Week";
+    default:
+      return dueDate;
+  }
+}
+
 export default function SettingsScreen() {
   const { signOut, isSignedIn } = useAuth();
   const { user } = useUser();
@@ -103,6 +135,7 @@ export default function SettingsScreen() {
   const themeColors = useThemeColors();
   const syncStatus = useSyncStatus();
   const { sync, isSyncing, isOffline, error: syncError } = useSync();
+  const { projects } = useProjects();
 
   // App settings from context
   const appSettings = useAppSettings();
@@ -111,6 +144,9 @@ export default function SettingsScreen() {
     setTheme,
     setDensity,
     setBadgeMode,
+    setDefaultPriority,
+    setDefaultDueDate,
+    setDefaultProjectId,
   } = useAppSettingsUpdaters();
 
   const handleSignOut = async () => {
@@ -147,6 +183,37 @@ export default function SettingsScreen() {
   // Toggle badge mode
   const toggleBadgeMode = () => {
     setBadgeMode(appSettings.badgeMode === "heat" ? "importance" : "heat");
+  };
+
+  // Cycle through priorities
+  const cyclePriority = () => {
+    const priorities: Priority[] = ["low", "medium", "high", "top"];
+    const currentIndex = priorities.indexOf(appSettings.defaultPriority);
+    const nextIndex = (currentIndex + 1) % priorities.length;
+    setDefaultPriority(priorities[nextIndex]);
+  };
+
+  // Cycle through default due dates
+  const cycleDueDate = () => {
+    const dueDates: DefaultDueDate[] = ["none", "today", "tomorrow", "next_week"];
+    const currentIndex = dueDates.indexOf(appSettings.defaultDueDate);
+    const nextIndex = (currentIndex + 1) % dueDates.length;
+    setDefaultDueDate(dueDates[nextIndex]);
+  };
+
+  // Cycle through projects (including "None")
+  const cycleProject = () => {
+    const projectIds: (number | null)[] = [null, ...projects.map((p) => p.id)];
+    const currentIndex = projectIds.indexOf(appSettings.defaultProjectId);
+    const nextIndex = (currentIndex + 1) % projectIds.length;
+    setDefaultProjectId(projectIds[nextIndex]);
+  };
+
+  // Get project name for display
+  const getProjectName = (projectId: number | null): string => {
+    if (projectId === null) return "None";
+    const project = projects.find((p) => p.id === projectId);
+    return project?.name ?? "Unknown";
   };
 
   return (
@@ -214,6 +281,26 @@ export default function SettingsScreen() {
             label="Badge Display"
             value={formatBadgeMode(appSettings.badgeMode)}
             onPress={toggleBadgeMode}
+            isLast
+          />
+        </SettingsSection>
+
+        {/* Default Settings Section */}
+        <SettingsSection title="New Task Defaults">
+          <SettingRow
+            label="Priority"
+            value={formatPriority(appSettings.defaultPriority)}
+            onPress={cyclePriority}
+          />
+          <SettingRow
+            label="Due Date"
+            value={formatDefaultDueDate(appSettings.defaultDueDate)}
+            onPress={cycleDueDate}
+          />
+          <SettingRow
+            label="Project"
+            value={getProjectName(appSettings.defaultProjectId)}
+            onPress={cycleProject}
             isLast
           />
         </SettingsSection>

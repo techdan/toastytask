@@ -1,8 +1,9 @@
 /**
  * Logo Component
  *
- * Simple logo component for the Toasty Task mobile app.
- * Displays the fire emoji and app name.
+ * Toasty Task logo for the mobile app.
+ * Uses the fire emoji as the icon which renders natively on mobile.
+ * The text follows the theme colors.
  */
 
 import { View, Text, StyleSheet } from "react-native";
@@ -16,40 +17,43 @@ interface LogoProps {
   size?: "small" | "medium" | "large";
   /** Whether to show the text */
   showText?: boolean;
+  /** Use brand color for text (orange) */
+  useBrandColor?: boolean;
 }
 
 const SIZES = {
   small: {
-    emoji: 16,
+    icon: 16,
     text: 14,
     gap: spacing.xs,
   },
   medium: {
-    emoji: 20,
+    icon: 22,
     text: 18,
     gap: spacing.xs,
   },
   large: {
-    emoji: 28,
+    icon: 32,
     text: 24,
     gap: spacing.sm,
   },
 } as const;
 
-export function Logo({ size = "medium", showText = true }: LogoProps) {
+export function Logo({ size = "medium", showText = true, useBrandColor = false }: LogoProps) {
   const colors = useThemeColors();
   const sizeConfig = SIZES[size];
+  const textColor = useBrandColor ? brand.primary : colors.text;
 
   return (
     <View style={styles.container}>
-      <Text style={[styles.emoji, { fontSize: sizeConfig.emoji }]}>🔥</Text>
+      <Text style={[styles.icon, { fontSize: sizeConfig.icon }]}>🔥</Text>
       {showText && (
         <Text
           style={[
             styles.text,
             {
               fontSize: sizeConfig.text,
-              color: colors.text,
+              color: textColor,
               marginLeft: sizeConfig.gap,
             },
           ]}
@@ -66,8 +70,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  emoji: {
-    // Fire emoji
+  icon: {
+    // Fire emoji renders natively on both iOS and Android
   },
   text: {
     fontWeight: fontWeight.semibold,

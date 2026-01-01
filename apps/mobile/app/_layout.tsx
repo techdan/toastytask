@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useColorScheme, ActivityIndicator, View } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -11,6 +11,10 @@ import { tokenCache } from "@/lib/auth/token-cache";
 import { setClerkGetToken } from "@/lib/api";
 import { DatabaseProvider } from "@/lib/storage/DatabaseContext";
 import { ThemeProvider, themes, type ColorScheme } from "@/constants/theme";
+import {
+  AppSettingsProvider,
+  useAppSettings,
+} from "@/contexts/AppSettingsContext";
 
 // Prevent auto-hide of splash screen
 SplashScreen.preventAutoHideAsync();
@@ -33,6 +37,100 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [getToken]);
 
   return <>{children}</>;
+}
+
+/**
+ * Resolves the theme based on user preference and system setting
+ */
+function useResolvedTheme() {
+  const systemColorScheme = useColorScheme();
+  const appSettings = useAppSettings();
+
+  return useMemo(() => {
+    let resolvedScheme: ColorScheme;
+
+    if (appSettings.theme === "system") {
+      resolvedScheme = systemColorScheme ?? "light";
+    } else {
+      resolvedScheme = appSettings.theme;
+    }
+
+    return {
+      theme: themes[resolvedScheme],
+      colorScheme: resolvedScheme,
+    };
+  }, [appSettings.theme, systemColorScheme]);
+}
+
+/**
+ * App content with resolved theme
+ */
+function ThemedAppContent({
+  children,
+  publishableKey,
+}: {
+  children?: React.ReactNode;
+  publishableKey?: string;
+}) {
+  const { theme, colorScheme } = useResolvedTheme();
+
+  useEffect(() => {
+    // Hide splash screen after layout is ready
+    SplashScreen.hideAsync();
+  }, []);
+
+  if (!publishableKey) {
+    return (
+      <ThemeProvider value={theme}>
+        <DatabaseProvider>
+          <QueryClientProvider client={queryClient}>
+            <Stack>
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="settings"
+                options={{ title: "Settings", presentation: "card" }}
+              />
+              <Stack.Screen
+                name="task/[id]"
+                options={{ title: "Task", presentation: "modal" }}
+              />
+            </Stack>
+            <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+          </QueryClientProvider>
+        </DatabaseProvider>
+      </ThemeProvider>
+    );
+  }
+
+  return (
+    <ThemeProvider value={theme}>
+      <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+        <ClerkLoaded>
+          <DatabaseProvider>
+            <QueryClientProvider client={queryClient}>
+              <AuthProvider>
+                <AuthGuard>
+                  <Stack>
+                    <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+                    <Stack.Screen name="index" options={{ headerShown: false }} />
+                    <Stack.Screen
+                      name="settings"
+                      options={{ title: "Settings", presentation: "card" }}
+                    />
+                    <Stack.Screen
+                      name="task/[id]"
+                      options={{ title: "Task", presentation: "modal" }}
+                    />
+                  </Stack>
+                </AuthGuard>
+              </AuthProvider>
+            </QueryClientProvider>
+          </DatabaseProvider>
+        </ClerkLoaded>
+        <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+      </ClerkProvider>
+    </ThemeProvider>
+  );
 }
 
 /**
@@ -73,75 +171,18 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
 export default function RootLayout() {
   const publishableKey = Constants.expoConfig?.extra?.clerkPublishableKey;
-  const systemColorScheme = useColorScheme();
-  const colorScheme: ColorScheme = systemColorScheme ?? "light";
-  const theme = themes[colorScheme];
-
-  useEffect(() => {
-    // Hide splash screen after layout is ready
-    SplashScreen.hideAsync();
-  }, []);
 
   if (!publishableKey) {
     // In development without Clerk, show a warning
     console.warn("EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY is not set");
   }
 
-  // If no Clerk key, render without auth (for development)
-  if (!publishableKey) {
-    return (
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <ThemeProvider value={theme}>
-          <DatabaseProvider>
-            <QueryClientProvider client={queryClient}>
-              <Stack>
-                <Stack.Screen name="index" options={{ headerShown: false }} />
-                <Stack.Screen
-                  name="settings"
-                  options={{ title: "Settings", presentation: "card" }}
-                />
-                <Stack.Screen
-                  name="task/[id]"
-                  options={{ title: "Task", presentation: "modal" }}
-                />
-              </Stack>
-              <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-            </QueryClientProvider>
-          </DatabaseProvider>
-        </ThemeProvider>
-      </GestureHandlerRootView>
-    );
-  }
-
+  // AppSettingsProvider must be at root level for theme to work
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider value={theme}>
-        <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-          <ClerkLoaded>
-            <DatabaseProvider>
-              <QueryClientProvider client={queryClient}>
-                <AuthProvider>
-                  <AuthGuard>
-                    <Stack>
-                      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-                      <Stack.Screen name="index" options={{ headerShown: false }} />
-                      <Stack.Screen
-                        name="settings"
-                        options={{ title: "Settings", presentation: "card" }}
-                      />
-                      <Stack.Screen
-                        name="task/[id]"
-                        options={{ title: "Task", presentation: "modal" }}
-                      />
-                    </Stack>
-                  </AuthGuard>
-                </AuthProvider>
-              </QueryClientProvider>
-            </DatabaseProvider>
-          </ClerkLoaded>
-          <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-        </ClerkProvider>
-      </ThemeProvider>
+      <AppSettingsProvider>
+        <ThemedAppContent publishableKey={publishableKey} />
+      </AppSettingsProvider>
     </GestureHandlerRootView>
   );
 }

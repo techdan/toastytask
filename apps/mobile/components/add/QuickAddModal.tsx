@@ -10,7 +10,7 @@
  * - Optionally assigns to a project (v2 UI)
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -25,6 +25,7 @@ import {
 import { X, ArrowRight } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCreateTask } from "@/hooks/useTasks";
+import { useAppSettings } from "@/contexts/AppSettingsContext";
 import { brand } from "@/constants/colors";
 import { spacing, borderRadius, layout } from "@/constants/spacing";
 import { textStyles } from "@/constants/typography";
@@ -41,6 +42,31 @@ interface QuickAddModalProps {
   projectName?: string;
 }
 
+/**
+ * Calculate due date based on default setting
+ */
+function calculateDueDate(defaultDueDate: string): string | null {
+  const today = new Date();
+  today.setHours(23, 59, 59, 999); // End of day
+
+  switch (defaultDueDate) {
+    case "today":
+      return today.toISOString();
+    case "tomorrow": {
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      return tomorrow.toISOString();
+    }
+    case "next_week": {
+      const nextWeek = new Date(today);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      return nextWeek.toISOString();
+    }
+    default:
+      return null;
+  }
+}
+
 export function QuickAddModal({
   visible,
   onClose,
@@ -52,6 +78,7 @@ export function QuickAddModal({
   const inputRef = useRef<TextInput>(null);
   const [title, setTitle] = useState("");
   const createTask = useCreateTask();
+  const appSettings = useAppSettings();
 
   // Auto-focus input when modal opens
   useEffect(() => {
@@ -64,6 +91,16 @@ export function QuickAddModal({
     }
   }, [visible]);
 
+  // Resolve the project ID - prefer filter context, then default setting
+  const resolvedProjectId = useMemo(() => {
+    // If filtering by a specific project, use that
+    if (typeof projectId === "number") {
+      return projectId;
+    }
+    // Otherwise use the default project setting
+    return appSettings.defaultProjectId;
+  }, [projectId, appSettings.defaultProjectId]);
+
   const handleSubmit = async () => {
     const trimmedTitle = title.trim();
     if (!trimmedTitle || createTask.isPending) return;
@@ -73,8 +110,12 @@ export function QuickAddModal({
         title: trimmedTitle,
         // In v2, bucket is always "todo" - no longer used for navigation
         bucket: "todo",
-        // Assign to project if filtering by a specific project
-        projectId: typeof projectId === "number" ? projectId : undefined,
+        // Use default priority from settings
+        priority: appSettings.defaultPriority,
+        // Calculate due date based on default setting
+        dueAt: calculateDueDate(appSettings.defaultDueDate),
+        // Assign to project - filter context takes precedence over default
+        projectId: resolvedProjectId ?? undefined,
       });
       setTitle("");
       onClose();

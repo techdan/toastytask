@@ -24,7 +24,6 @@ import {
   useAppSettings,
   useAppSettingsUpdaters,
   useToggleBadgeMode,
-  AppSettingsProvider,
 } from "@/contexts/AppSettingsContext";
 
 // Components
@@ -345,14 +344,10 @@ function MainScreenContent() {
 }
 
 /**
- * Main screen with AppSettingsProvider wrapper
+ * Main screen - uses AppSettingsProvider from root layout
  */
 export default function MainScreen() {
-  return (
-    <AppSettingsProvider>
-      <MainScreenContent />
-    </AppSettingsProvider>
-  );
+  return <MainScreenContent />;
 }
 
 const styles = StyleSheet.create({
