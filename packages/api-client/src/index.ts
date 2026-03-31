@@ -5,11 +5,16 @@
  * Provides auth header injection and typed request/response handling.
  */
 
-export { ApiClient, ApiClientConfig, AuthError, ApiError, NetworkError } from "./client";
-export { TasksApi, ListTasksOptions, TaskListResponse, TaskResponse, HeatCoolOptions } from "./tasks";
-export { ProjectsApi, ProjectListResponse, ProjectResponse } from "./projects";
-export { NotesApi, NotesResponse } from "./notes";
-export { SettingsApi, SettingsResponse } from "./settings";
+export { ApiClient, AuthError, ApiError, NetworkError } from "./client";
+export type { ApiClientConfig } from "./client";
+export { TasksApi } from "./tasks";
+export type { ListTasksOptions, TaskListResponse, TaskResponse, HeatCoolOptions } from "./tasks";
+export { ProjectsApi } from "./projects";
+export type { ProjectListResponse, ProjectResponse } from "./projects";
+export { NotesApi } from "./notes";
+export type { NotesResponse } from "./notes";
+export { SettingsApi } from "./settings";
+export type { SettingsResponse } from "./settings";
 export { SyncApi } from "./sync";
 
 import { ApiClient, ApiClientConfig } from "./client";
