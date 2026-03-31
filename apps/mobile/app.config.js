@@ -1,4 +1,7 @@
-export default {
+// Note: API base URL is configured via config.local.js (see lib/api.ts)
+// Environment variables from root .env.local are loaded by dotenv-webpack in Metro
+
+module.exports = {
   expo: {
     name: "Toasty Task",
     slug: "toasty-task",
@@ -29,7 +32,7 @@ export default {
       bundler: "metro",
     },
     extra: {
-      apiBaseUrl: process.env.API_BASE_URL || "http://localhost:3000",
+      apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:3000",
       clerkPublishableKey: process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY,
       eas: {
         projectId: "your-eas-project-id",
@@ -40,6 +43,7 @@ export default {
       "expo-router",
       "expo-secure-store",
       "expo-web-browser",
+      "expo-sqlite",
       [
         "expo-splash-screen",
         {

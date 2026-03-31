@@ -36,7 +36,7 @@ export default function SignInScreen() {
 
       if (result.status === "complete") {
         await setActive({ session: result.createdSessionId });
-        router.replace("/(tabs)");
+        router.replace("/");
       }
     } catch (err: unknown) {
       const clerkError = err as { errors?: Array<{ message: string }> };

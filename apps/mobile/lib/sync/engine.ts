@@ -30,31 +30,43 @@ export class SyncEngine {
    * Perform full sync (push then pull)
    */
   async sync(): Promise<void> {
-    if (this.isSyncing) return;
+    console.log('[SyncEngine] Sync requested');
+    if (this.isSyncing) {
+      console.log('[SyncEngine] Already syncing, skipping');
+      return;
+    }
     if (!getNetworkStateSync()) {
+      console.log('[SyncEngine] Offline, skipping sync');
       this.events.emit({ type: "sync:offline" });
       return;
     }
 
     this.isSyncing = true;
     this.events.emit({ type: "sync:started" });
+    console.log('[SyncEngine] Sync started');
 
     try {
       // Validate auth token
+      console.log('[SyncEngine] Checking auth token...');
       this.events.emit({ type: "sync:progress", phase: "auth", message: "Authenticating..." });
       const authValid = await this.config.refreshAuthToken();
+      console.log('[SyncEngine] Auth valid:', authValid);
       if (!authValid) {
         this.events.emit({ type: "sync:auth-required" });
         return;
       }
 
       // Push local changes first
+      console.log('[SyncEngine] Starting push phase...');
       this.events.emit({ type: "sync:progress", phase: "push", message: "Uploading changes..." });
       await this.push();
+      console.log('[SyncEngine] Push completed');
 
       // Then pull remote changes
+      console.log('[SyncEngine] Starting pull phase...');
       this.events.emit({ type: "sync:progress", phase: "pull", message: "Downloading tasks..." });
       await this.pull();
+      console.log('[SyncEngine] Pull completed');
 
       const cursor = this.config.database.getSyncCursor();
       this.events.emit({ type: "sync:completed", cursor });
@@ -140,9 +152,16 @@ export class SyncEngine {
   private async pull(): Promise<void> {
     let cursor = this.config.database.getSyncCursor();
     let hasMore = true;
+    console.log('[SyncEngine] Pull starting with cursor:', cursor);
 
     while (hasMore) {
+      console.log('[SyncEngine] Calling api.sync.pull with cursor:', cursor);
       const response = await api.sync.pull(cursor, 500);
+      console.log('[SyncEngine] Pull response received:', { hasMore: response.hasMore, entityCounts: {
+        tasks: response.entities.tasks.length,
+        projects: response.entities.projects.length,
+        notes: response.entities.notes.length
+      }});
 
       // Apply entities to local database
       this.applyPullResponse(response);

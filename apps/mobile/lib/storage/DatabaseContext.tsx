@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useMemo } from "react";
 import type { SQLiteDatabase } from "expo-sqlite";
 import { getDatabase, LocalDatabase } from "./database";
 import { OutboxQueue } from "../sync/outbox";
@@ -46,8 +46,14 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     initDatabase();
   }, []);
 
+  // Memoize context value to prevent unnecessary re-renders
+  const value = useMemo(
+    () => ({ db, database, outbox, isReady, error }),
+    [db, database, outbox, isReady, error]
+  );
+
   return (
-    <DatabaseContext.Provider value={{ db, database, outbox, isReady, error }}>
+    <DatabaseContext.Provider value={value}>
       {children}
     </DatabaseContext.Provider>
   );

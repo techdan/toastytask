@@ -11,6 +11,7 @@
     "build": "next build --turbopack",
     "start": "next start",
     "buildstart": "npm run build && npm start",
+    "mobile": "npm --workspace @toasty/mobile start",
     "lint": "eslint",
     "db:generate": "drizzle-kit generate --config=lib/db/drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config=lib/db/drizzle.config.ts",

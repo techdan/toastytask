@@ -1,5 +1,4 @@
 import { createApiClient } from "@toasty/api-client";
-import Constants from "expo-constants";
 import { tokenCache } from "./auth/token-cache";
 
 // Get auth token from Clerk session
@@ -9,8 +8,17 @@ export function setClerkGetToken(getToken: () => Promise<string | null>) {
   clerkGetToken = getToken;
 }
 
-const baseUrl =
-  Constants.expoConfig?.extra?.apiBaseUrl || "http://localhost:3000";
+// Try to load from config.local.js, fallback to localhost
+let baseUrl = "http://localhost:3000";
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const localConfig = require("../config.local.js");
+  baseUrl = localConfig.API_BASE_URL || baseUrl;
+} catch {
+  // config.local.js doesn't exist, use default
+}
+
+console.log("[API] Base URL:", baseUrl);
 
 export const api = createApiClient({
   baseUrl,

@@ -43,6 +43,8 @@ export class ApiClient {
     const token = await this.config.getAuthToken();
 
     const url = `${this.config.baseUrl}${path}`;
+    console.log(`[API] Making ${options.method || 'GET'} request to:`, url);
+    console.log(`[API] Has auth token:`, !!token);
 
     try {
       const response = await fetch(url, {
@@ -82,6 +84,13 @@ export class ApiClient {
 
       return response.json();
     } catch (error) {
+      console.error('[API] Request failed:', {
+        url,
+        error,
+        errorType: error?.constructor?.name,
+        message: (error as Error)?.message
+      });
+
       // Re-throw our custom errors
       if (
         error instanceof AuthError ||

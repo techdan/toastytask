@@ -1,8 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "@clerk/clerk-expo";
-import { getDatabase, LocalDatabase } from "@/lib/storage/database";
-import { SyncEngine, OutboxQueue, useNetworkState, type SyncEvent } from "@/lib/sync";
-import * as SQLite from "expo-sqlite";
+import { useDatabaseContext } from "@/lib/storage/DatabaseContext";
+import { SyncEngine, useNetworkState, type SyncEvent } from "@/lib/sync";
 
 interface SyncStatus {
   isSyncing: boolean;
@@ -17,6 +16,7 @@ interface SyncStatus {
 export function useSync() {
   const { getToken, isSignedIn } = useAuth();
   const isConnected = useNetworkState();
+  const { database, outbox, isReady } = useDatabaseContext();
 
   const [status, setStatus] = useState<SyncStatus>({
     isSyncing: false,
@@ -29,96 +29,97 @@ export function useSync() {
   });
 
   const engineRef = useRef<SyncEngine | null>(null);
-  const dbRef = useRef<SQLite.SQLiteDatabase | null>(null);
+  // Track refs to avoid getToken/isSignedIn causing re-runs
+  const getTokenRef = useRef(getToken);
+  const isSignedInRef = useRef(isSignedIn);
 
-  // Initialize sync engine
+  // Keep refs current without triggering effect re-runs
   useEffect(() => {
-    let mounted = true;
+    getTokenRef.current = getToken;
+    isSignedInRef.current = isSignedIn;
+  }, [getToken, isSignedIn]);
 
-    async function init() {
-      try {
-        const db = await getDatabase();
-        if (!mounted) return;
-
-        dbRef.current = db;
-        const localDb = new LocalDatabase(db);
-        const outbox = new OutboxQueue(db);
-
-        const engine = new SyncEngine({
-          database: localDb,
-          outbox,
-          refreshAuthToken: async () => {
-            if (!isSignedIn) return false;
-            try {
-              const token = await getToken();
-              return token !== null;
-            } catch {
-              return false;
-            }
-          },
-        });
-
-        engineRef.current = engine;
-
-        // Subscribe to sync events
-        const unsubscribe = engine.events.subscribe((event: SyncEvent) => {
-          if (!mounted) return;
-
-          switch (event.type) {
-            case "sync:started":
-              setStatus((prev) => ({ ...prev, isSyncing: true, error: null, progressMessage: "Starting sync..." }));
-              break;
-            case "sync:progress":
-              setStatus((prev) => ({ ...prev, progressMessage: event.message }));
-              break;
-            case "sync:completed":
-              setStatus((prev) => ({
-                ...prev,
-                isSyncing: false,
-                lastPullAt: new Date().toISOString(),
-                progressMessage: null,
-              }));
-              break;
-            case "sync:offline":
-              setStatus((prev) => ({ ...prev, isOffline: true, progressMessage: null }));
-              break;
-            case "sync:error":
-              setStatus((prev) => ({
-                ...prev,
-                isSyncing: false,
-                error: event.error,
-                progressMessage: null,
-              }));
-              break;
-            case "sync:pending-count":
-              setStatus((prev) => ({ ...prev, pendingCount: event.count }));
-              break;
-          }
-        });
-
-        // Update initial status
-        const engineStatus = engine.getStatus();
-        setStatus((prev) => ({
-          ...prev,
-          pendingCount: engineStatus.pendingCount,
-          lastPullAt: engineStatus.syncState.lastPullAt,
-          lastPushAt: engineStatus.syncState.lastPushAt,
-        }));
-
-        return () => {
-          unsubscribe();
-        };
-      } catch (error) {
-        console.error("Failed to initialize sync:", error);
-      }
+  // Initialize sync engine only after database is ready
+  useEffect(() => {
+    // Don't initialize until database context is ready
+    if (!isReady || !database || !outbox) {
+      return;
     }
 
-    init();
+    // Only create engine once
+    if (engineRef.current) {
+      return;
+    }
+
+    let mounted = true;
+
+    const engine = new SyncEngine({
+      database,
+      outbox,
+      refreshAuthToken: async () => {
+        if (!isSignedInRef.current) return false;
+        try {
+          const token = await getTokenRef.current();
+          return token !== null;
+        } catch {
+          return false;
+        }
+      },
+    });
+
+    engineRef.current = engine;
+
+    // Subscribe to sync events
+    const unsubscribe = engine.events.subscribe((event: SyncEvent) => {
+      if (!mounted) return;
+
+      switch (event.type) {
+        case "sync:started":
+          setStatus((prev) => ({ ...prev, isSyncing: true, error: null, progressMessage: "Starting sync..." }));
+          break;
+        case "sync:progress":
+          setStatus((prev) => ({ ...prev, progressMessage: event.message }));
+          break;
+        case "sync:completed":
+          setStatus((prev) => ({
+            ...prev,
+            isSyncing: false,
+            lastPullAt: new Date().toISOString(),
+            progressMessage: null,
+          }));
+          break;
+        case "sync:offline":
+          setStatus((prev) => ({ ...prev, isOffline: true, progressMessage: null }));
+          break;
+        case "sync:error":
+          setStatus((prev) => ({
+            ...prev,
+            isSyncing: false,
+            error: event.error,
+            progressMessage: null,
+          }));
+          break;
+        case "sync:pending-count":
+          setStatus((prev) => ({ ...prev, pendingCount: event.count }));
+          break;
+      }
+    });
+
+    // Update initial status - database is guaranteed ready now
+    const engineStatus = engine.getStatus();
+    setStatus((prev) => ({
+      ...prev,
+      pendingCount: engineStatus.pendingCount,
+      lastPullAt: engineStatus.syncState.lastPullAt,
+      lastPushAt: engineStatus.syncState.lastPushAt,
+    }));
 
     return () => {
       mounted = false;
+      unsubscribe();
+      engineRef.current = null;
     };
-  }, [getToken, isSignedIn]);
+  }, [isReady, database, outbox]);
 
   // Update offline status when network changes
   useEffect(() => {

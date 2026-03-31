@@ -1,12 +1,10 @@
 import React, { useRef, useEffect } from "react";
 import {
   View,
-  Text,
   TouchableOpacity,
   TextInput,
   StyleSheet,
   Animated,
-  Platform,
   StatusBar,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

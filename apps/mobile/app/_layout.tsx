@@ -5,7 +5,6 @@ import { StatusBar } from "expo-status-bar";
 import { ClerkProvider, ClerkLoaded, useAuth } from "@clerk/clerk-expo";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import Constants from "expo-constants";
 import * as SplashScreen from "expo-splash-screen";
 import { tokenCache } from "@/lib/auth/token-cache";
 import { setClerkGetToken } from "@/lib/api";
@@ -15,6 +14,16 @@ import {
   AppSettingsProvider,
   useAppSettings,
 } from "@/contexts/AppSettingsContext";
+
+// Load Clerk key from config.local.js
+let clerkPublishableKey: string | undefined;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const localConfig = require("../config.local.js");
+  clerkPublishableKey = localConfig.CLERK_PUBLISHABLE_KEY;
+} catch {
+  // config.local.js doesn't exist
+}
 
 // Prevent auto-hide of splash screen
 SplashScreen.preventAutoHideAsync();
@@ -170,11 +179,11 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 }
 
 export default function RootLayout() {
-  const publishableKey = Constants.expoConfig?.extra?.clerkPublishableKey;
+  const publishableKey = clerkPublishableKey;
 
   if (!publishableKey) {
     // In development without Clerk, show a warning
-    console.warn("EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY is not set");
+    console.warn("Clerk publishable key not found. Add CLERK_PUBLISHABLE_KEY to apps/mobile/config.local.js");
   }
 
   // AppSettingsProvider must be at root level for theme to work
