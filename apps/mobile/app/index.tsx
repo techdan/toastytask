@@ -13,7 +13,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
-import { AlertCircle, WifiOff, RefreshCw } from "lucide-react-native";
+import { AlertCircle, WifiOff, RefreshCw, Clock, Upload } from "lucide-react-native";
 
 // Hooks
 import { useTasks, useHeatTask, useCoolTask } from "@/hooks/useTasks";
@@ -21,6 +21,8 @@ import { useProjects } from "@/hooks/useProjects";
 import { useCreateProject, useUpdateProject, useDeleteProject } from "@/hooks/useProjectMutations";
 import { useFilterState } from "@/hooks/useFilterState";
 import { useSync } from "@/hooks/useSync";
+import { useFailedOps } from "@/hooks/useSyncStatus";
+import { FailedOpsModal } from "@/components/sync/FailedOpsModal";
 import {
   useAppSettings,
   useAppSettingsUpdaters,
@@ -93,7 +95,8 @@ function MainScreenContent() {
   });
 
   // Sync
-  const { isSyncing, isOffline, error: syncError, progressMessage, sync } = useSync();
+  const { isSyncing, isOffline, error: syncError, progressMessage, pendingCount, lastPullAt, sync } = useSync();
+  const { failedOps, retry: retryOp, discard: discardOp } = useFailedOps();
 
   // Mutations
   const heatTask = useHeatTask();
@@ -108,6 +111,7 @@ function MainScreenContent() {
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [searchInputValue, setSearchInputValue] = useState("");
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
+  const [isFailedOpsVisible, setIsFailedOpsVisible] = useState(false);
 
   // Get the project name for the current filter (for QuickAddModal)
   const currentFilterLabel = useMemo(
@@ -242,6 +246,18 @@ function MainScreenContent() {
     setIsAddModalVisible(false);
   }, []);
 
+  // Format last-synced time as a human-readable string
+  const lastSyncedLabel = useMemo(() => {
+    if (!lastPullAt) return "Never synced";
+    const diffMs = Date.now() - new Date(lastPullAt).getTime();
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  }, [lastPullAt]);
+
   // Sync status banner
   const renderSyncBanner = () => {
     if (isSyncing && progressMessage) {
@@ -255,16 +271,22 @@ function MainScreenContent() {
 
     if (syncError) {
       return (
-        <TouchableOpacity
-          style={[styles.syncBanner, styles.syncBannerError]}
-          onPress={sync}
-        >
-          <AlertCircle size={16} color="#dc2626" />
-          <Text style={styles.syncBannerTextError}>
-            Sync failed: {syncError.message || "Connection error"}
-          </Text>
-          <RefreshCw size={14} color="#dc2626" />
-        </TouchableOpacity>
+        <View style={[styles.syncBannerColumn, styles.syncBannerError]}>
+          <TouchableOpacity style={styles.syncBannerRow} onPress={sync}>
+            <AlertCircle size={16} color="#dc2626" />
+            <Text style={[styles.syncBannerTextError, { flex: 1 }]}>
+              Sync failed: {syncError.message || "Connection error"}
+            </Text>
+            <RefreshCw size={14} color="#dc2626" />
+          </TouchableOpacity>
+          {failedOps.length > 0 && (
+            <TouchableOpacity onPress={() => setIsFailedOpsVisible(true)}>
+              <Text style={styles.failedOpsLink}>
+                {failedOps.length} operation{failedOps.length !== 1 ? "s" : ""} permanently failed — tap to review
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       );
     }
 
@@ -275,6 +297,30 @@ function MainScreenContent() {
           <Text style={styles.syncBannerTextOffline}>
             Offline - changes will sync when connected
           </Text>
+        </View>
+      );
+    }
+
+    // Idle state: show pending count badge or last-synced time
+    if (pendingCount > 0) {
+      return (
+        <TouchableOpacity
+          style={[styles.syncBanner, styles.syncBannerIdle]}
+          onPress={sync}
+        >
+          <Upload size={14} color="#6b7280" />
+          <Text style={styles.syncBannerTextIdle}>
+            {pendingCount} change{pendingCount !== 1 ? "s" : ""} pending sync
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
+    if (!lastPullAt || Date.now() - new Date(lastPullAt).getTime() > 60 * 60 * 1000) {
+      return (
+        <View style={[styles.syncBanner, styles.syncBannerIdle]}>
+          <Clock size={14} color="#6b7280" />
+          <Text style={styles.syncBannerTextIdle}>Last synced: {lastSyncedLabel}</Text>
         </View>
       );
     }
@@ -354,6 +400,15 @@ function MainScreenContent() {
         onDeleteProject={handleDeleteProject}
       />
 
+      {/* Failed Ops Modal */}
+      <FailedOpsModal
+        visible={isFailedOpsVisible}
+        ops={failedOps}
+        onClose={() => setIsFailedOpsVisible(false)}
+        onRetry={(key) => { retryOp(key); sync(); }}
+        onDiscard={discardOp}
+      />
+
       {/* Options Menu */}
       <OptionsMenu
         isOpen={isOptionsOpen}
@@ -412,5 +467,29 @@ const styles = StyleSheet.create({
     ...textStyles.caption,
     color: "#92400e",
     flex: 1,
+  },
+  syncBannerIdle: {
+    backgroundColor: "#f3f4f6",
+  },
+  syncBannerTextIdle: {
+    ...textStyles.caption,
+    color: "#6b7280",
+    flex: 1,
+  },
+  syncBannerColumn: {
+    flexDirection: "column",
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
+  syncBannerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  failedOpsLink: {
+    ...textStyles.caption,
+    color: "#dc2626",
+    textDecorationLine: "underline",
+    marginTop: spacing.xs,
   },
 });

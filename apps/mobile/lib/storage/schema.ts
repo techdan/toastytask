@@ -66,6 +66,7 @@ export const migrations: Migration[] = [
           current_text TEXT NOT NULL,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL,
+          deleted_at TEXT,
           FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
         );
 
@@ -113,6 +114,13 @@ export const migrations: Migration[] = [
         CREATE INDEX IF NOT EXISTS notes_task_id ON notes(task_id, ordinal);
         CREATE INDEX IF NOT EXISTS outbox_state ON outbox(state);
       `);
+    },
+  },
+  {
+    version: 2,
+    up: (db) => {
+      // Add soft-delete support to notes
+      db.execSync(`ALTER TABLE notes ADD COLUMN deleted_at TEXT;`);
     },
   },
 ];

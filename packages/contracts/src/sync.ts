@@ -16,6 +16,9 @@ export const SyncPullResponseSchema = z.object({
     notes: z.array(NoteRowDTOSchema),
     settings: SettingsDTOSchema.optional(),
   }),
+  // Task IDs whose note sets were fully refreshed in this page.
+  // Mobile should replace (not merge) all local notes for these task IDs.
+  noteTaskIds: z.array(z.number()).optional(),
   cursor: z.string(), // ISO 8601 timestamp or opaque cursor
   hasMore: z.boolean(),
 });

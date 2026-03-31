@@ -42,4 +42,5 @@ export {
 export {
   useSyncStatus,
   useDatabaseStats,
+  useFailedOps,
 } from "./useSyncStatus";

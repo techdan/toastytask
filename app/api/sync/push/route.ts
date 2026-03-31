@@ -315,6 +315,47 @@ async function processOperation(
   }
 }
 
+// In-memory idempotency cache — prevents double-processing when a push succeeds
+// on the server but the response is lost (client retries with the same keys).
+// Keyed by `userId:idempotencyKey`. Entries expire after 1 hour.
+
+const IDEMPOTENCY_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+interface CacheEntry {
+  result: SyncOperationResult;
+  expiresAt: number;
+}
+
+const idempotencyCache = new Map<string, CacheEntry>();
+
+function idempotencyCacheKey(userId: string, idempotencyKey: string): string {
+  return `${userId}:${idempotencyKey}`;
+}
+
+function getCachedResult(userId: string, idempotencyKey: string): SyncOperationResult | null {
+  const entry = idempotencyCache.get(idempotencyCacheKey(userId, idempotencyKey));
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    idempotencyCache.delete(idempotencyCacheKey(userId, idempotencyKey));
+    return null;
+  }
+  return entry.result;
+}
+
+function cacheResult(userId: string, idempotencyKey: string, result: SyncOperationResult): void {
+  idempotencyCache.set(idempotencyCacheKey(userId, idempotencyKey), {
+    result,
+    expiresAt: Date.now() + IDEMPOTENCY_TTL_MS,
+  });
+}
+
+function evictExpiredCacheEntries(): void {
+  const now = Date.now();
+  for (const [key, entry] of idempotencyCache) {
+    if (now > entry.expiresAt) idempotencyCache.delete(key);
+  }
+}
+
 // POST /api/sync/push
 export async function POST(request: Request) {
   try {
@@ -326,10 +367,25 @@ export async function POST(request: Request) {
     const body = await request.json();
     const operations: SyncOperation[] = (body.operations ?? []).slice(0, 100);
 
+    // Periodically evict expired cache entries (cheap, synchronous)
+    evictExpiredCacheEntries();
+
     // Process sequentially — operations may depend on each other (e.g. create then update)
     const results: SyncOperationResult[] = [];
     for (const op of operations) {
-      results.push(await processOperation(op, userId));
+      // Return cached result if this key was already successfully processed
+      const cached = getCachedResult(userId, op.idempotencyKey);
+      if (cached) {
+        results.push(cached);
+        continue;
+      }
+
+      const result = await processOperation(op, userId);
+      results.push(result);
+
+      if (result.status === "success") {
+        cacheResult(userId, op.idempotencyKey, result);
+      }
     }
 
     return NextResponse.json({

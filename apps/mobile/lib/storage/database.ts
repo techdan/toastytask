@@ -248,7 +248,7 @@ export class LocalDatabase {
 
   getNotesForTask(taskId: number): NoteRowDTO[] {
     const rows = this.db.getAllSync<Record<string, unknown>>(
-      "SELECT * FROM notes WHERE task_id = ? ORDER BY ordinal ASC",
+      "SELECT * FROM notes WHERE task_id = ? AND deleted_at IS NULL ORDER BY ordinal ASC",
       [taskId]
     );
     return rows.map(this.rowToNoteDTO);
@@ -257,8 +257,8 @@ export class LocalDatabase {
   upsertNote(note: NoteRowDTO): void {
     this.db.runSync(
       `INSERT OR REPLACE INTO notes (
-        id, task_id, ordinal, current_text, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?)`,
+        id, task_id, ordinal, current_text, created_at, updated_at, deleted_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         note.id,
         note.taskId,
@@ -266,8 +266,37 @@ export class LocalDatabase {
         note.currentText,
         note.createdAt,
         note.updatedAt,
+        note.deletedAt ?? null,
       ]
     );
+  }
+
+  /** Hard-delete a single note row (used by diff cleanup) */
+  deleteNote(id: number): void {
+    this.db.runSync("DELETE FROM notes WHERE id = ?", [id]);
+  }
+
+  /** Hard-delete all note rows for a task (used before wholesale note replacement from sync) */
+  deleteNotesForTask(taskId: number): void {
+    this.db.runSync("DELETE FROM notes WHERE task_id = ?", [taskId]);
+  }
+
+  /** Update note text and ordinal in place; preserves createdAt */
+  updateNoteText(id: number, text: string, ordinal: number, updatedAt: string): NoteRowDTO {
+    this.db.runSync(
+      "UPDATE notes SET current_text = ?, ordinal = ?, updated_at = ? WHERE id = ?",
+      [text, ordinal, updatedAt, id]
+    );
+    const row = this.db.getFirstSync<Record<string, unknown>>(
+      "SELECT * FROM notes WHERE id = ?",
+      [id]
+    );
+    return this.rowToNoteDTO(row!);
+  }
+
+  /** Update ordinal only (for equal-op lines that shifted position) */
+  updateNoteOrdinal(id: number, ordinal: number): void {
+    this.db.runSync("UPDATE notes SET ordinal = ? WHERE id = ?", [ordinal, id]);
   }
 
   private rowToNoteDTO(row: Record<string, unknown>): NoteRowDTO {
@@ -278,6 +307,7 @@ export class LocalDatabase {
       currentText: row.current_text as string,
       createdAt: row.created_at as string,
       updatedAt: row.updated_at as string,
+      deletedAt: (row.deleted_at as string | null) ?? null,
     };
   }
 

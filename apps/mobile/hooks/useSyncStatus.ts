@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocalDatabase } from "./useLocalDatabase";
+import type { OutboxEntry } from "@/lib/sync/outbox";
 
 interface SyncStatus {
   pendingCount: number;
@@ -107,4 +108,42 @@ export function useDatabaseStats() {
     refresh,
     isReady,
   };
+}
+
+/**
+ * Hook for accessing permanently-failed outbox entries (retry_count >= 5).
+ * Exposes retry and discard actions.
+ */
+export function useFailedOps() {
+  const { outbox, isReady } = useLocalDatabase();
+  const [failedOps, setFailedOps] = useState<OutboxEntry[]>([]);
+
+  const refresh = useCallback(() => {
+    if (!outbox || !isReady) return;
+    setFailedOps(outbox.getFailed());
+  }, [outbox, isReady]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const retry = useCallback(
+    (idempotencyKey: string) => {
+      if (!outbox) return;
+      outbox.retry(idempotencyKey);
+      refresh();
+    },
+    [outbox, refresh]
+  );
+
+  const discard = useCallback(
+    (idempotencyKey: string) => {
+      if (!outbox) return;
+      outbox.discard(idempotencyKey);
+      refresh();
+    },
+    [outbox, refresh]
+  );
+
+  return { failedOps, refresh, retry, discard };
 }

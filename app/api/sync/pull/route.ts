@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { eq, gt, and, asc } from "drizzle-orm";
+import { eq, gt, and, asc, inArray } from "drizzle-orm";
 import { getDatabase } from "@/lib/db/client";
 import { tasks, projects, noteRows, noteRowVersions } from "@/lib/db/schema";
 import { settingsRepository } from "@/lib/db/repositories";
@@ -114,20 +114,26 @@ export async function GET(request: Request) {
       .from(projects)
       .where(and(eq(projects.userId, userId), gt(projects.updatedAt, since)));
 
-    // Notes: join through tasks to enforce user ownership
-    const updatedNotes = await db
-      .select({
-        id: noteRows.id,
-        taskId: noteRows.taskId,
-        ordinal: noteRows.ordinal,
-        createdAt: noteRows.createdAt,
-        updatedAt: noteRows.updatedAt,
-        currentText: noteRowVersions.text,
-      })
-      .from(noteRows)
-      .innerJoin(tasks, eq(noteRows.taskId, tasks.id))
-      .leftJoin(noteRowVersions, eq(noteRowVersions.id, noteRows.activeVersionId))
-      .where(and(eq(tasks.userId, userId), gt(noteRows.updatedAt, since)));
+    // Notes: fetch ALL current notes for tasks that changed in this page.
+    // Using task IDs (not note updatedAt) means hard-deleted notes are absent,
+    // so the mobile can replace the note set for each changed task wholesale.
+    const changedTaskIds = tasksPage.map((t) => t.id);
+    const updatedNotes =
+      changedTaskIds.length > 0
+        ? await db
+            .select({
+              id: noteRows.id,
+              taskId: noteRows.taskId,
+              ordinal: noteRows.ordinal,
+              createdAt: noteRows.createdAt,
+              updatedAt: noteRows.updatedAt,
+              currentText: noteRowVersions.text,
+            })
+            .from(noteRows)
+            .innerJoin(tasks, eq(noteRows.taskId, tasks.id))
+            .leftJoin(noteRowVersions, eq(noteRowVersions.id, noteRows.activeVersionId))
+            .where(and(eq(tasks.userId, userId), inArray(noteRows.taskId, changedTaskIds)))
+        : [];
 
     // Settings: always include on initial sync, otherwise only if changed
     const userSettings = await settingsRepository.get(userId);
@@ -157,6 +163,9 @@ export async function GET(request: Request) {
         ),
         settings: includeSettings ? settingsToDTO(userSettings) : undefined,
       },
+      // Tell the mobile which task IDs had their notes fully refreshed so it
+      // can replace (not merge) local notes, correctly removing deleted lines.
+      noteTaskIds: changedTaskIds,
       cursor,
       hasMore,
     };

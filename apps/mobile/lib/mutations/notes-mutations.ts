@@ -1,13 +1,7 @@
-import type { SQLiteDatabase } from "expo-sqlite";
 import type { NoteRowDTO } from "@toasty/contracts";
 import { LocalDatabase } from "../storage/database";
 import { OutboxQueue } from "../sync/outbox";
-
-/**
- * Notes mutations for offline-first operations.
- * Notes are saved as a complete text string that gets synced to the server.
- * The server handles line-by-line diffing and storage.
- */
+import { diffNoteLines, trimTrailingBlanks, defaultNormalize } from "../sync/diff-note-lines";
 
 export interface NotesMutationsConfig {
   database: LocalDatabase;
@@ -18,44 +12,85 @@ export class NotesMutations {
   constructor(private config: NotesMutationsConfig) {}
 
   /**
-   * Save notes for a task
-   * Stores optimistically in local DB and queues for sync
+   * Save notes for a task using smart LCS diff.
+   *
+   * Unchanged lines keep their original row IDs and timestamps, preserving
+   * version history. Only genuinely changed lines are updated; new lines are
+   * inserted and removed lines are hard-deleted.
    */
   saveNotes(taskId: number, text: string): NoteRowDTO[] {
     const now = new Date().toISOString();
-    const db = this.config.database["db"] as SQLiteDatabase;
+    const db = this.config.database;
 
-    // Clear existing notes for this task
-    db.runSync("DELETE FROM notes WHERE task_id = ?", [taskId]);
+    const existingNotes = db.getNotesForTask(taskId);
+    const newLines = trimTrailingBlanks(text.split("\n"));
+    const oldLines = existingNotes.map((n) => n.currentText);
 
-    // Split text into lines and create note rows
-    const lines = text.split("\n");
-    const notes: NoteRowDTO[] = [];
-
-    // Filter out trailing empty lines but keep internal ones
-    let lastNonEmptyIndex = lines.length - 1;
-    while (lastNonEmptyIndex >= 0 && lines[lastNonEmptyIndex].trim() === "") {
-      lastNonEmptyIndex--;
+    // Fast path: clearing all notes
+    if (newLines.length === 0) {
+      for (const note of existingNotes) {
+        db.deleteNote(note.id);
+      }
+      if (taskId > 0) {
+        this.config.outbox.enqueue({
+          method: "POST",
+          path: `/api/tasks/${taskId}/notes`,
+          body: { text: "" },
+        });
+      }
+      return [];
     }
 
-    const trimmedLines = lines.slice(0, lastNonEmptyIndex + 1);
+    const { ops } = diffNoteLines(oldLines, newLines, { normalize: defaultNormalize });
 
-    for (let i = 0; i < trimmedLines.length; i++) {
-      const note: NoteRowDTO = {
-        // Use negative IDs for local-only notes
-        id: -(taskId * 1000 + i),
-        taskId,
-        ordinal: i,
-        currentText: trimmedLines[i],
-        createdAt: now,
-        updatedAt: now,
-      };
+    const result: NoteRowDTO[] = new Array(newLines.length);
+    const toDelete = new Set<number>(); // old indices to hard-delete
 
-      notes.push(note);
-      this.config.database.upsertNote(note);
+    for (const op of ops) {
+      switch (op.op) {
+        case "equal": {
+          const row = existingNotes[op.oldIndex];
+          if (row.ordinal !== op.newIndex) {
+            db.updateNoteOrdinal(row.id, op.newIndex);
+          }
+          result[op.newIndex] = { ...row, ordinal: op.newIndex };
+          break;
+        }
+        case "replace": {
+          const row = existingNotes[op.oldIndex];
+          const updated = db.updateNoteText(row.id, newLines[op.newIndex], op.newIndex, now);
+          result[op.newIndex] = updated;
+          break;
+        }
+        case "insert": {
+          // Stable local ID: negative, unique within task + position + time bucket
+          const localId = -(taskId * 100000 + op.newIndex * 1000 + (Date.now() % 1000));
+          const newNote: NoteRowDTO = {
+            id: localId,
+            taskId,
+            ordinal: op.newIndex,
+            currentText: newLines[op.newIndex],
+            createdAt: now,
+            updatedAt: now,
+            deletedAt: null,
+          };
+          db.upsertNote(newNote);
+          result[op.newIndex] = newNote;
+          break;
+        }
+        case "delete": {
+          toDelete.add(op.oldIndex);
+          break;
+        }
+      }
     }
 
-    // Queue save operation for sync (only for server-side tasks)
+    // Hard-delete removed rows
+    for (const oldIdx of toDelete) {
+      db.deleteNote(existingNotes[oldIdx].id);
+    }
+
+    // Queue full-text save for server-side smart diff
     if (taskId > 0) {
       this.config.outbox.enqueue({
         method: "POST",
@@ -64,7 +99,7 @@ export class NotesMutations {
       });
     }
 
-    return notes;
+    return result.filter(Boolean);
   }
 
   /**

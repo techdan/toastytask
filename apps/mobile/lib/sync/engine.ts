@@ -196,9 +196,25 @@ export class SyncEngine {
       }
     }
 
-    // Notes
+    // Notes — server sends ALL current notes for each changed task (noteTaskIds).
+    // Only replace the local note set when it actually differs from what the
+    // server returned, preserving local timestamps on unchanged rows.
+    const receivedByTask = new Map<number, typeof response.entities.notes>();
     for (const note of response.entities.notes) {
-      db.upsertNote(note);
+      if (!receivedByTask.has(note.taskId)) receivedByTask.set(note.taskId, []);
+      receivedByTask.get(note.taskId)!.push(note);
+    }
+
+    for (const taskId of (response.noteTaskIds ?? [])) {
+      const received = receivedByTask.get(taskId) ?? [];
+      const existing = db.getNotesForTask(taskId);
+      const changed =
+        received.length !== existing.length ||
+        received.some((n, i) => n.id !== existing[i]?.id || n.currentText !== existing[i]?.currentText);
+      if (changed) {
+        db.deleteNotesForTask(taskId);
+        for (const note of received) db.upsertNote(note);
+      }
     }
 
     // Settings

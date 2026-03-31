@@ -13,6 +13,7 @@ export const NoteRowDTOSchema = z.object({
   currentText: z.string(),
   createdAt: z.string(), // ISO 8601
   updatedAt: z.string(), // ISO 8601
+  deletedAt: z.string().nullable().optional(), // ISO 8601 — present when note is soft-deleted
 });
 
 export type NoteRowDTO = z.infer<typeof NoteRowDTOSchema>;
