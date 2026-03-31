@@ -290,7 +290,7 @@ function TasksPageContent() {
 
   // Track pending completion mutations to prevent refetch races
   const pendingCompletionMutations = useRef(new Set<number>());
-  const invalidationTimeout = useRef<NodeJS.Timeout | undefined>(undefined);
+  const invalidationTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Track the latest intended completion state to ignore out-of-order responses
   const latestCompletionIntent = useRef(new Map<number, { shouldBeCompleted: boolean; timestamp: number }>());
   // Track corrections that need to be applied
