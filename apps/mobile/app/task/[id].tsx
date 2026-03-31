@@ -9,7 +9,7 @@
  * - All pickers for editing fields
  */
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -41,6 +41,7 @@ import { ProjectPicker } from "@/components/detail/pickers/ProjectPicker";
 import { DatePicker } from "@/components/detail/pickers/DatePicker";
 import { RecurrencePicker } from "@/components/detail/pickers/RecurrencePicker";
 import { Checkbox } from "@/components/ui/Checkbox";
+import type { TaskWithFresh } from "@/components/TaskListItem";
 import { DueDateDisplay } from "@/components/ui/DueDateDisplay";
 import { ColorDot, DEFAULT_PROJECT_COLOR } from "@/components/ui/ColorDot";
 import type { BadgeMode } from "@/components/ui/HeatBadge";
@@ -48,6 +49,11 @@ import type { StarLevel } from "@/components/ui/StarButton";
 import { useThemeColors } from "@/constants/theme";
 import { spacing, borderRadius, shadows } from "@/constants/spacing";
 import { textStyles } from "@/constants/typography";
+import {
+  calculateHeatWithBreakdown,
+  calculateImportanceV1,
+  calculateImportanceV1WithFactors,
+} from "@toasty/domain";
 
 type ActivePicker = "priority" | "project" | "date" | "recurrence" | null;
 
@@ -70,6 +76,11 @@ export default function TaskDetailScreen() {
   const [badgeMode, setBadgeMode] = useState<BadgeMode>("heat");
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
   const [localTitle, setLocalTitle] = useState<string | null>(null);
+
+  // Reset local title once the saved title is reflected in cache
+  useEffect(() => {
+    setLocalTitle(null);
+  }, [task?.title]);
 
   // Get all projects for the picker
   const projects = useMemo(() => {
@@ -115,13 +126,20 @@ export default function TaskDetailScreen() {
     coolTask.mutate({ id: task.id });
   }, [task, coolTask]);
 
+  const handleFocusToggle = useCallback(() => {
+    if (!task) return;
+    updateTask.mutate({ taskId: task.id, data: { isFocused: !task.isFocused } });
+  }, [task, updateTask]);
+
   const handleTitleBlur = useCallback(() => {
     if (!task || localTitle === null) return;
     const trimmedTitle = localTitle.trim();
     if (trimmedTitle && trimmedTitle !== task.title) {
       updateTask.mutate({ taskId: task.id, data: { title: trimmedTitle } });
+    } else {
+      // Nothing to save — restore to task title
+      setLocalTitle(null);
     }
-    setLocalTitle(null);
   }, [task, localTitle, updateTask]);
 
   const handlePrioritySelect = useCallback(
@@ -239,6 +257,8 @@ export default function TaskDetailScreen() {
           onStarPress={handleStarPress}
           onHeatPress={handleHeatPress}
           onCoolPress={handleCoolPress}
+          isFocused={!!task.isFocused}
+          onFocusToggle={handleFocusToggle}
           onBackPress={handleBack}
           createdAt={task.createdAt}
           updatedAt={task.updatedAt}
@@ -322,6 +342,9 @@ export default function TaskDetailScreen() {
               disabled={isCompleted}
             />
           </View>
+
+          {/* Debug Info */}
+          <TaskDebugInfo task={task} heat={heat} importance={importance} />
         </ScrollView>
 
         {/* Pickers */}
@@ -357,6 +380,126 @@ export default function TaskDetailScreen() {
     </KeyboardAvoidingView>
   );
 }
+
+function formatTimeAgo(date: string | null | undefined): string {
+  if (!date) return "Never";
+  const diffMs = Date.now() - new Date(date).getTime();
+  const diffDays = Math.floor(diffMs / 86400000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  if (diffDays > 0) return `${diffDays}d ago`;
+  if (diffHours > 0) return `${diffHours}h ago`;
+  return "Just now";
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  const themeColors = useThemeColors();
+  return (
+    <View style={debugStyles.row}>
+      <Text style={[debugStyles.label, { color: themeColors.textMuted }]}>{label}</Text>
+      <Text style={[debugStyles.value, { color: themeColors.textSecondary }]}>{value}</Text>
+    </View>
+  );
+}
+
+function TaskDebugInfo({
+  task,
+  heat,
+  importance,
+}: {
+  task: TaskWithFresh;
+  heat: number;
+  importance: number;
+}) {
+  const themeColors = useThemeColors();
+  const breakdown = calculateHeatWithBreakdown(task);
+  const importanceFactors = calculateImportanceV1WithFactors(task);
+  const calcImportance = calculateImportanceV1(task);
+
+  const starLabels = ["None", "Blue (+1)", "Yellow (+2)", "Orange (+3)"];
+
+  return (
+    <View style={[debugStyles.container, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+      <Text style={[debugStyles.heading, { color: themeColors.text }]}>Debug Info</Text>
+
+      <Row label="Task ID" value={String(task.id)} />
+      <Row label="Created" value={new Date(task.createdAt).toLocaleString()} />
+      <Row label="Modified" value={new Date(task.updatedAt).toLocaleString()} />
+
+      <View style={[debugStyles.divider, { backgroundColor: themeColors.border }]} />
+      <Text style={[debugStyles.section, { color: themeColors.text }]}>
+        Importance: {importance}/14 (calc: {calcImportance})
+      </Text>
+      <Row label={`Priority (${task.priority})`} value={`${importanceFactors.priorityWeight} pts`} />
+      <Row label="Due date" value={`${importanceFactors.dueWeight} pts`} />
+      {(task.starLevel ?? 0) > 0 && (
+        <Row label={`Star (${starLabels[task.starLevel ?? 0]})`} value={`${importanceFactors.starBonus} pts`} />
+      )}
+
+      <View style={[debugStyles.divider, { backgroundColor: themeColors.border }]} />
+      <Text style={[debugStyles.section, { color: themeColors.text }]}>
+        Heat: {Math.round(heat)} pts
+      </Text>
+      <Row label="Base importance" value={`${breakdown.importancePoints} pts (raw: ${breakdown.importancePointsUnrounded.toFixed(2)})`} />
+      <Row
+        label="Heat adjustment"
+        value={`${breakdown.adjustmentPoints >= 0 ? "+" : ""}${breakdown.adjustmentPoints} pts`}
+      />
+      {breakdown.heatAdjustment !== 0 && (
+        <>
+          <Row label="  Last heated/cooled" value={formatTimeAgo(task.lastHeatTouchedAt as string)} />
+          <Row label="  Decay factor" value={`${(breakdown.decayFactor * 100).toFixed(1)}%`} />
+          <Row label="  After decay" value={`${breakdown.decayedAdjustmentUnrounded.toFixed(2)} pts`} />
+        </>
+      )}
+      <Row label="Recency" value={`${breakdown.recencyPoints} pts (raw: ${breakdown.recencyPointsUnrounded.toFixed(2)})`} />
+      <Row label="Last touched" value={formatTimeAgo(task.lastTouchedAt as string)} />
+      {breakdown.isFocused && (
+        <Row
+          label="Focus boost"
+          value={breakdown.focusBoostApplied ? `+${Math.round(breakdown.focusBoostAmount)} pts` : "(snoozed)"}
+        />
+      )}
+      <Row label="heatAdjustment (stored)" value={(task.heatAdjustment ?? 0).toFixed(2)} />
+    </View>
+  );
+}
+
+const debugStyles = StyleSheet.create({
+  container: {
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
+  heading: {
+    ...textStyles.label,
+    marginBottom: spacing.xs,
+  },
+  section: {
+    ...textStyles.caption,
+    fontWeight: "600",
+    marginTop: spacing.xs,
+  },
+  divider: {
+    height: 1,
+    marginVertical: spacing.xs,
+  },
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+  },
+  label: {
+    ...textStyles.caption,
+  },
+  value: {
+    ...textStyles.caption,
+    fontFamily: "monospace",
+    textAlign: "right",
+    flexShrink: 1,
+  },
+});
 
 const styles = StyleSheet.create({
   container: {

@@ -18,6 +18,7 @@ import { AlertCircle, WifiOff, RefreshCw } from "lucide-react-native";
 // Hooks
 import { useTasks, useHeatTask, useCoolTask } from "@/hooks/useTasks";
 import { useProjects } from "@/hooks/useProjects";
+import { useCreateProject, useUpdateProject, useDeleteProject } from "@/hooks/useProjectMutations";
 import { useFilterState } from "@/hooks/useFilterState";
 import { useSync } from "@/hooks/useSync";
 import {
@@ -97,6 +98,9 @@ function MainScreenContent() {
   // Mutations
   const heatTask = useHeatTask();
   const coolTask = useCoolTask();
+  const createProject = useCreateProject();
+  const updateProject = useUpdateProject();
+  const deleteProject = useDeleteProject();
 
   // UI state
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -174,6 +178,27 @@ function MainScreenContent() {
   const handleNavigateSettings = useCallback(() => {
     router.push("/settings");
   }, [router]);
+
+  const handleCreateProject = useCallback(
+    (name: string, colorHex: string) => {
+      createProject.mutate({ name, colorHex });
+    },
+    [createProject]
+  );
+
+  const handleUpdateProject = useCallback(
+    (id: number, data: Partial<{ name: string; colorHex: string; archived: boolean }>) => {
+      updateProject.mutate({ id, data });
+    },
+    [updateProject]
+  );
+
+  const handleDeleteProject = useCallback(
+    (id: number) => {
+      deleteProject.mutate(id);
+    },
+    [deleteProject]
+  );
 
   const handleTaskPress = useCallback(
     (taskId: number) => {
@@ -324,6 +349,9 @@ function MainScreenContent() {
         focusedTaskCount={focusedTaskCount}
         noProjectTaskCount={noProjectTaskCount}
         onNavigateSettings={handleNavigateSettings}
+        onCreateProject={handleCreateProject}
+        onUpdateProject={handleUpdateProject}
+        onDeleteProject={handleDeleteProject}
       />
 
       {/* Options Menu */}

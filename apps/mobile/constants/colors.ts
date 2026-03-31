@@ -92,9 +92,9 @@ export const background = {
     muted: "#f3f4f6",
   },
   dark: {
-    primary: "#1f2937",
-    card: "#374151",
-    muted: "#4b5563",
+    primary: "#111111",
+    card: "#1a1a1a",
+    muted: "#242424",
   },
 } as const;
 
@@ -121,8 +121,8 @@ export const border = {
     muted: "#f3f4f6",
   },
   dark: {
-    default: "#4b5563",
-    muted: "#374151",
+    default: "#2a2a2a",
+    muted: "#222222",
   },
 } as const;
 

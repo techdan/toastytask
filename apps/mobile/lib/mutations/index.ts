@@ -10,3 +10,6 @@ export type { TaskMutationsConfig } from "./task-mutations";
 
 export { NotesMutations } from "./notes-mutations";
 export type { NotesMutationsConfig } from "./notes-mutations";
+
+export { ProjectMutations } from "./project-mutations";
+export type { ProjectMutationsConfig } from "./project-mutations";

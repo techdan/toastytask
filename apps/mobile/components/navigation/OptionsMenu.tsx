@@ -29,8 +29,8 @@ interface OptionsMenuProps {
 }
 
 const SORT_OPTIONS: Array<{ value: MobileSortMode; label: string }> = [
-  { value: "importance", label: "Importance" },
   { value: "heat", label: "Heat" },
+  { value: "importance", label: "Importance" },
   { value: "createdAt", label: "Created" },
   { value: "updatedAt", label: "Modified" },
 ];

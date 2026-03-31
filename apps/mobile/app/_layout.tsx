@@ -1,3 +1,4 @@
+import "react-native-get-random-values";
 import { useEffect, useMemo } from "react";
 import { useColorScheme, ActivityIndicator, View } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";

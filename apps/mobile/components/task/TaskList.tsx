@@ -235,7 +235,7 @@ const COMPACT_ITEM_HEIGHT = 52;
 
 const styles = StyleSheet.create({
   listContent: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 0,
   },
   listContentEmpty: {
     flexGrow: 1,

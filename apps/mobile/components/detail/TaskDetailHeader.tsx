@@ -10,7 +10,7 @@
  */
 
 import { View, Text, StyleSheet, Pressable } from "react-native";
-import { ArrowLeft, Flame, Snowflake } from "lucide-react-native";
+import { ArrowLeft, Flame, Snowflake, Eye, EyeOff } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HeatBadge, type BadgeMode } from "@/components/ui/HeatBadge";
 import { StarButton, type StarLevel } from "@/components/ui/StarButton";
@@ -36,6 +36,10 @@ interface TaskDetailHeaderProps {
   onHeatPress: () => void;
   /** Cool button press handler */
   onCoolPress: () => void;
+  /** Whether task is focused */
+  isFocused?: boolean;
+  /** Focus toggle handler */
+  onFocusToggle: () => void;
   /** Back button press handler */
   onBackPress: () => void;
   /** Task creation date */
@@ -64,6 +68,8 @@ export function TaskDetailHeader({
   onStarPress,
   onHeatPress,
   onCoolPress,
+  isFocused = false,
+  onFocusToggle,
   onBackPress,
   createdAt,
   updatedAt,
@@ -129,6 +135,19 @@ export function TaskDetailHeader({
             hitSlop={4}
           >
             <Snowflake size={20} color={swipeColors.cool} />
+          </Pressable>
+
+          {/* Focus Toggle */}
+          <Pressable
+            style={[styles.actionButton, isCompleted && styles.disabled]}
+            onPress={onFocusToggle}
+            disabled={isCompleted}
+            hitSlop={4}
+          >
+            {isFocused
+              ? <Eye size={20} color={semantic.success} />
+              : <EyeOff size={20} color={themeColors.textMuted} />
+            }
           </Pressable>
         </View>
 

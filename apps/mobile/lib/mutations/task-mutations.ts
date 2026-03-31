@@ -4,10 +4,45 @@ import type {
   TaskDTO,
   CreateTaskDTO,
   UpdateTaskDTO,
+  RepeatType,
 } from "@toasty/contracts";
 import { LocalDatabase } from "../storage/database";
 import { OutboxQueue } from "../sync/outbox";
 import { calculateHeat, calculateImportanceV1 } from "@toasty/domain";
+
+function calculateNextDueDate(repeatType: RepeatType, currentDueAt: string): string {
+  const date = new Date(currentDueAt);
+  switch (repeatType) {
+    case "daily":
+      date.setDate(date.getDate() + 1);
+      break;
+    case "weekly":
+      date.setDate(date.getDate() + 7);
+      break;
+    case "biweekly":
+      date.setDate(date.getDate() + 14);
+      break;
+    case "monthly": {
+      const day = date.getDate();
+      date.setMonth(date.getMonth() + 1);
+      if (date.getDate() !== day) date.setDate(0); // clamp to end of month
+      break;
+    }
+    case "semiannual": {
+      const day = date.getDate();
+      date.setMonth(date.getMonth() + 6);
+      if (date.getDate() !== day) date.setDate(0);
+      break;
+    }
+    case "annual": {
+      const month = date.getMonth();
+      date.setFullYear(date.getFullYear() + 1);
+      if (date.getMonth() !== month) date.setDate(0); // leap year edge case
+      break;
+    }
+  }
+  return date.toISOString();
+}
 
 /**
  * Task mutations for offline-first operations.
@@ -209,16 +244,29 @@ export class TaskMutations {
     }
 
     const now = new Date().toISOString();
+    let updatedTask: TaskDTO;
 
-    const completedTask: TaskDTO = {
-      ...existingTask,
-      completedAt: now,
-      updatedAt: now,
-      lastTouchedAt: now,
-      touchCount: existingTask.touchCount + 1,
-    };
+    // Mirror server logic: recurring tasks advance due date instead of completing
+    if (existingTask.repeatType && existingTask.repeatType !== "none" && existingTask.dueAt) {
+      const nextDueAt = calculateNextDueDate(existingTask.repeatType as RepeatType, existingTask.dueAt);
+      updatedTask = {
+        ...existingTask,
+        dueAt: nextDueAt,
+        updatedAt: now,
+        lastTouchedAt: now,
+        touchCount: existingTask.touchCount + 1,
+      };
+    } else {
+      updatedTask = {
+        ...existingTask,
+        completedAt: now,
+        updatedAt: now,
+        lastTouchedAt: now,
+        touchCount: existingTask.touchCount + 1,
+      };
+    }
 
-    this.config.database.upsertTask(completedTask);
+    this.config.database.upsertTask(updatedTask);
     this.markTaskPending(taskId);
 
     // Queue complete operation for sync
@@ -229,7 +277,7 @@ export class TaskMutations {
       });
     }
 
-    return completedTask;
+    return updatedTask;
   }
 
   /**

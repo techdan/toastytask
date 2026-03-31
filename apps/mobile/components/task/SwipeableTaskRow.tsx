@@ -6,7 +6,7 @@
  * - Swipe left (>60%): Cool task (blue background, snowflake icon)
  */
 
-import { useRef } from "react";
+import { useRef, useCallback } from "react";
 import { View, StyleSheet, Text, Dimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -16,7 +16,6 @@ import Animated, {
   withTiming,
   runOnJS,
   interpolate,
-  interpolateColor,
   Extrapolation,
 } from "react-native-reanimated";
 import { Flame, Snowflake } from "lucide-react-native";
@@ -25,11 +24,11 @@ import { TaskListItem, type TaskWithFresh, type DensityMode } from "@/components
 import type { BadgeMode } from "@/components/ui/HeatBadge";
 import type { ProjectDTO } from "@toasty/contracts";
 import { swipe as swipeColors } from "@/constants/colors";
-import { spacing, borderRadius } from "@/constants/spacing";
+import { spacing } from "@/constants/spacing";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
-const SWIPE_THRESHOLD = 0.6; // 60% of width to trigger action
-const MAX_SWIPE = SCREEN_WIDTH * 0.8; // Max swipe distance
+const SWIPE_THRESHOLD = 0.4; // 40% of width to trigger action
+const MAX_SWIPE = SCREEN_WIDTH * 0.75; // Max swipe distance
 
 interface SwipeableTaskRowProps {
   /** The task to display */
@@ -67,31 +66,34 @@ export function SwipeableTaskRow({
   enableSwipe = true,
 }: SwipeableTaskRowProps) {
   const translateX = useSharedValue(0);
-  const isSwipingRef = useRef(false);
   const hasTriggeredHapticRef = useRef(false);
 
-  const triggerHaptic = () => {
+  // Stable refs prevent stale closures in Reanimated worklets
+  const onHeatRef = useRef(onHeat);
+  onHeatRef.current = onHeat;
+  const onCoolRef = useRef(onCool);
+  onCoolRef.current = onCool;
+
+  const triggerHaptic = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  };
+  }, []);
 
-  const handleHeat = () => {
-    onHeat?.();
-  };
+  const handleHeat = useCallback(() => {
+    onHeatRef.current?.();
+  }, []);
 
-  const handleCool = () => {
-    onCool?.();
-  };
+  const handleCool = useCallback(() => {
+    onCoolRef.current?.();
+  }, []);
 
   const panGesture = Gesture.Pan()
     .enabled(enableSwipe)
     .activeOffsetX([-10, 10])
-    .failOffsetY([-5, 5])
+    .failOffsetY([-10, 10])
     .onStart(() => {
-      isSwipingRef.current = true;
       hasTriggeredHapticRef.current = false;
     })
     .onUpdate((event) => {
-      // Clamp translation
       const clampedX = Math.max(-MAX_SWIPE, Math.min(MAX_SWIPE, event.translationX));
       translateX.value = clampedX;
 
@@ -106,25 +108,20 @@ export function SwipeableTaskRow({
         hasTriggeredHapticRef.current = false;
       }
     })
-    .onEnd((event) => {
+    .onEnd((event, success) => {
       const thresholdDistance = SCREEN_WIDTH * SWIPE_THRESHOLD;
       const translationX = event.translationX;
 
-      // Check if we should trigger an action
-      if (translationX > thresholdDistance) {
-        // Swiped right - Heat
-        runOnJS(handleHeat)();
-      } else if (translationX < -thresholdDistance) {
-        // Swiped left - Cool
-        runOnJS(handleCool)();
+      // Only trigger action on successful (non-cancelled) gesture that crossed threshold
+      if (success) {
+        if (translationX > thresholdDistance) {
+          runOnJS(handleHeat)();
+        } else if (translationX < -thresholdDistance) {
+          runOnJS(handleCool)();
+        }
       }
 
-      // Animate back to rest
-      translateX.value = withSpring(0, {
-        damping: 20,
-        stiffness: 200,
-      });
-      isSwipingRef.current = false;
+      translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
     });
 
   // Animated style for the row
@@ -276,14 +273,12 @@ const styles = StyleSheet.create({
   heatBackground: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: swipeColors.heat,
-    borderRadius: borderRadius.lg,
     justifyContent: "center",
     paddingLeft: spacing.xl,
   },
   coolBackground: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: swipeColors.cool,
-    borderRadius: borderRadius.lg,
     justifyContent: "center",
     alignItems: "flex-end",
     paddingRight: spacing.xl,

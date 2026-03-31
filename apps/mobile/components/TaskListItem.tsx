@@ -27,14 +27,11 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { ColorDot, DEFAULT_PROJECT_COLOR } from "@/components/ui/ColorDot";
 import {
   getHeatColor,
-  state as stateColors,
 } from "@/constants/colors";
 import {
   spacing,
-  borderRadius,
   componentSize,
   layout,
-  shadows,
 } from "@/constants/spacing";
 import { textStyles } from "@/constants/typography";
 import { useThemeColors } from "@/constants/theme";
@@ -114,9 +111,10 @@ export function TaskListItem({
         {
           backgroundColor: themeColors.card,
           paddingVertical: containerPadding,
+          borderBottomColor: themeColors.borderMuted,
         },
+        isFocused ? styles.focused : null,
         isCompleted && styles.completed,
-        isFocused && styles.focused,
         pressed && styles.pressed,
       ]}
       onPress={onPress}
@@ -251,14 +249,14 @@ const styles = StyleSheet.create({
     borderRadius: layout.cardBorderRadius,
     paddingRight: spacing.md,
     marginBottom: layout.cardMarginBottom,
-    overflow: "hidden",
-    ...shadows.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   completed: {
     opacity: 0.6,
   },
   focused: {
-    backgroundColor: stateColors.focused,
+    borderLeftWidth: 2,
+    borderLeftColor: "#4ADE80",
   },
   pressed: {
     opacity: 0.8,

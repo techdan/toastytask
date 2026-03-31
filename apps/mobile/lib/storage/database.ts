@@ -186,6 +186,22 @@ export class LocalDatabase {
     return rows.map(this.rowToProjectDTO);
   }
 
+  getProject(id: number): ProjectDTO | null {
+    const row = this.db.getFirstSync<Record<string, unknown>>(
+      "SELECT * FROM projects WHERE id = ?",
+      [id]
+    );
+    return row ? this.rowToProjectDTO(row) : null;
+  }
+
+  setProjectSyncStatus(id: number, status: string): void {
+    const now = new Date().toISOString();
+    this.db.runSync(
+      "UPDATE projects SET sync_status = ?, local_updated_at = ? WHERE id = ?",
+      [status, now, id]
+    );
+  }
+
   upsertProject(project: ProjectDTO): void {
     const now = new Date().toISOString();
     this.db.runSync(

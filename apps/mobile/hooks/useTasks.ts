@@ -357,8 +357,12 @@ export function useUpdateTask() {
         }
       );
     },
-    onSettled: () => {
+    onError: (error) => {
+      console.error("[useUpdateTask] mutation failed:", error);
+    },
+    onSettled: (_data, _error, variables) => {
       queryClient.invalidateQueries({ queryKey: ["local-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["local-task", variables.taskId] });
     },
   });
 }

@@ -31,10 +31,10 @@ export interface AppSettings {
  * Default settings values
  */
 const DEFAULT_SETTINGS: AppSettings = {
-  sortMode: "importance",
+  sortMode: "heat",
   sortDirection: "desc",
   density: "comfortable",
-  badgeMode: "importance",
+  badgeMode: "heat",
   showCompleted: false,
   theme: "system",
   // Default settings for new tasks
@@ -66,8 +66,13 @@ function settingsReducer(
   action: AppSettingsAction
 ): AppSettings {
   switch (action.type) {
-    case "SET_SORT_MODE":
-      return { ...state, sortMode: action.payload };
+    case "SET_SORT_MODE": {
+      const badgeMode =
+        action.payload === "heat" || action.payload === "importance"
+          ? action.payload
+          : state.badgeMode;
+      return { ...state, sortMode: action.payload, badgeMode };
+    }
     case "SET_SORT_DIRECTION":
       return { ...state, sortDirection: action.payload };
     case "SET_DENSITY":

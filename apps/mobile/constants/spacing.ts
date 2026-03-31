@@ -65,8 +65,8 @@ export const layout = {
 
   // Card/list item
   cardPadding: spacing.md,
-  cardMarginBottom: spacing.sm,
-  cardBorderRadius: borderRadius.lg,
+  cardMarginBottom: 0,
+  cardBorderRadius: 0,
 
   // Task list item
   taskItemPaddingCompact: spacing.xs,
