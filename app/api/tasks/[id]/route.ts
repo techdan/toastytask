@@ -7,6 +7,16 @@ import { calculateHeat } from "@/lib/scoring/heat-v3";
 // Force Node.js runtime for better-sqlite3 compatibility
 export const runtime = 'nodejs';
 
+const TOUCH_ON_EDIT_FIELDS = new Set([
+  "title",
+  "priority",
+  "dueAt",
+  "projectId",
+  "repeatType",
+  "repeatRule",
+  "bucket",
+]);
+
 // PATCH /api/tasks/[id] - Update a task
 export async function PATCH(
   request: Request,
@@ -27,6 +37,8 @@ export async function PATCH(
     if (!existingTask) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
+
+    const now = new Date();
 
     // Prepare updates
     const updates: Record<string, unknown> = { ...body };
@@ -53,6 +65,15 @@ export async function PATCH(
         : null;
     }
 
+    const shouldCountAsTouch =
+      updates.lastHeatTouchedAt === undefined &&
+      Object.keys(body).some((key) => TOUCH_ON_EDIT_FIELDS.has(key));
+
+    if (shouldCountAsTouch) {
+      updates.lastTouchedAt = now;
+      updates.touchCount = (existingTask.touchCount ?? 0) + 1;
+    }
+
     // Note: We no longer persist importanceV1 (pure calculation architecture)
     // Importance will be calculated on the client side from base properties
 
@@ -60,7 +81,6 @@ export async function PATCH(
 
     // Recalculate heat using fresh importance
     // Calculate importance if relevant fields changed (for heat calculation only)
-    const now = new Date();
     let freshImportance: number | undefined;
     if (
       updates.priority !== undefined ||

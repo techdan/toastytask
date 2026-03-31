@@ -52,3 +52,6 @@ next-env.d.ts
 .beads/daemon.pid
 .beads/daemon.lock
 .beads/*.tmp.*
+
+# clerk configuration (can include secrets)
+/.clerk/

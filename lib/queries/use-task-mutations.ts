@@ -68,6 +68,23 @@ interface UpdateTaskData {
   updates: Partial<Task>;
 }
 
+const TOUCH_ON_EDIT_FIELDS = new Set([
+  "title",
+  "priority",
+  "dueAt",
+  "projectId",
+  "repeatType",
+  "repeatRule",
+  "bucket",
+]);
+
+function shouldTreatUpdateAsTouch(updates: Partial<Task>) {
+  return (
+    updates.lastHeatTouchedAt === undefined &&
+    Object.keys(updates).some((key) => TOUCH_ON_EDIT_FIELDS.has(key))
+  );
+}
+
 
 // Create task
 async function createTask(taskData: NewTask): Promise<Task> {
@@ -284,6 +301,9 @@ export function useUpdateTask() {
           return oldTasks;
         }
 
+        const now = new Date();
+        const shouldCountAsTouch = shouldTreatUpdateAsTouch(updates);
+
         return oldTasks.map((task) => {
           if (task.id !== id) return task;
 
@@ -291,6 +311,13 @@ export function useUpdateTask() {
           const updatedTask = {
             ...task,
             ...updates,
+            ...(shouldCountAsTouch
+              ? {
+                  lastTouchedAt: now,
+                  touchCount: (task.touchCount ?? 0) + 1,
+                  updatedAt: now,
+                }
+              : {}),
           };
 
           // Note: We no longer calculate importanceV1 optimistically
@@ -304,13 +331,13 @@ export function useUpdateTask() {
             priorityChanged ||
             starChanged ||
             dueChanged ||
+            shouldCountAsTouch ||
             updates.heatAdjustment !== undefined ||
             updates.lastTouchedAt !== undefined ||
             updates.lastHeatTouchedAt !== undefined;
 
           if (heatAffectingChange) {
             // Calculate fresh importance for heat calculation
-            const now = new Date();
             const freshImportance = calculateImportanceV1(updatedTask, now);
             updatedTask.heat = calculateHeat(updatedTask, now, freshImportance);
             updatedTask.heatCalculatedAt = now;

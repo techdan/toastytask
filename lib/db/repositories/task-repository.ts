@@ -352,7 +352,8 @@ export class TaskRepository implements ITaskRepository {
     const now = new Date();
     await this.db
       .update(tasks)
-      .set({ heat, heatCalculatedAt: now, updatedAt: now })
+      // Refresh cached heat metadata without changing the user-visible modified timestamp.
+      .set({ heat, heatCalculatedAt: now })
       .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
   }
 }

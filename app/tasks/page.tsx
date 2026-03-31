@@ -847,32 +847,8 @@ function TasksPageContent() {
   }, [applyOptimisticStarLevel, enrichedTaskMap, flushStarIntent, markOrderAsStale, queryClient]);
 
   const handleUpdateTask = async (id: number, updates: Partial<Task>) => {
-    // Check if we need to mark a green task as touched
-    let finalUpdates = updates;
-    const currentTask = enrichedTaskMap.get(id);
-
-    // Definition of a "green" (new) task: untouched by both regular means and heat
-    const isGreen = currentTask && !currentTask.lastTouchedAt && !currentTask.lastHeatTouchedAt;
-
-    if (isGreen) {
-      // Check if any of the trigger properties are being updated
-      const needsTouch =
-        "dueAt" in updates ||
-        "priority" in updates ||
-        "projectId" in updates ||
-        "repeatType" in updates ||
-        "repeatRule" in updates;
-
-      if (needsTouch) {
-        finalUpdates = {
-          ...updates,
-          lastTouchedAt: new Date(),
-        };
-      }
-    }
-
-    updateTaskMutation.mutate({ id, updates: finalUpdates });
-    if ("dueAt" in finalUpdates || "priority" in finalUpdates) {
+    updateTaskMutation.mutate({ id, updates });
+    if ("dueAt" in updates || "priority" in updates) {
       markOrderAsStale();
     }
   };

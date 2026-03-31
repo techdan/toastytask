@@ -14,6 +14,9 @@ import { getGlowLevel } from "@/lib/scoring/heat-v3";
 import type { Task, Priority, SortMode, Project, TaskWithFreshValues, TaskDensity } from "@/types";
 import { cn } from "@/lib/utils";
 
+const ROW_TOUCH_IGNORE_SELECTOR =
+  "button, input, textarea, a, [role='button'], [data-slot='select-trigger'], [data-slot='popover-trigger']";
+
 const priorityStyles: Record<Priority, string> = {
   low: "text-muted-foreground",
   medium: "",
@@ -203,6 +206,11 @@ export const TaskRow = memo(function TaskRow({
     }
 
     if (isCompleted) {
+      return;
+    }
+
+    const target = event.target;
+    if (target instanceof Element && target.closest(ROW_TOUCH_IGNORE_SELECTOR)) {
       return;
     }
 
