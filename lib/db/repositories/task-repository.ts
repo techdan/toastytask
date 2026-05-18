@@ -344,6 +344,10 @@ export class TaskRepository implements ITaskRepository {
    * - Client recalculates fresh values ensuring accurate display
    * - Staleness is minimal (only occurs between user actions)
    *
+   * IMPORTANT: Only call this from mutation paths. The tasks table updates
+   * updated_at on every write, so persisting cached heat during GET/list reads
+   * would incorrectly mark untouched tasks as recently modified.
+   *
    * @param id - Task ID
    * @param heat - Calculated heat value to cache (0-145)
    * @param userId - User ID for authorization
@@ -352,7 +356,7 @@ export class TaskRepository implements ITaskRepository {
     const now = new Date();
     await this.db
       .update(tasks)
-      // Refresh cached heat metadata without changing the user-visible modified timestamp.
+      // Refresh cached heat metadata after a real mutation has occurred.
       .set({ heat, heatCalculatedAt: now })
       .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
   }

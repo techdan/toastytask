@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { taskRepository, noteRepository } from "@/lib/db/repositories";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
-import { calculateHeat, isHeatStale } from "@/lib/scoring/heat-v3";
+import { calculateHeat } from "@/lib/scoring/heat-v3";
 import type { NewTask } from "@/types";
 
 // Force Node.js runtime for better-sqlite3 compatibility
@@ -46,21 +46,14 @@ export async function GET(request: Request) {
     // Calculate importance for heat calculation and sorting
     // Note: We calculate but don't send importanceV1 to client (pure calculation architecture)
     const now = new Date();
-    tasks = await Promise.all(tasks.map(async (task) => {
+    tasks = tasks.map((task) => {
       // Calculate fresh importance (not persisted, only used for heat calculation)
       const freshImportance = calculateImportanceV1(task, now);
 
-      // Always recompute heat using latest importance
+      // Always recompute heat using latest importance, but do not persist from
+      // the read path. Writing cached heat here triggers the DB updated_at
+      // column and makes untouched tasks look recently modified.
       const freshHeat = calculateHeat(task, now, freshImportance);
-      const storedHeat = typeof task.heat === "number" ? task.heat : 0;
-      const requiresUpdate =
-        !Number.isFinite(storedHeat) ||
-        Math.abs(freshHeat - storedHeat) > 0.0001 ||
-        isHeatStale(task.heatCalculatedAt, now);
-
-      if (requiresUpdate) {
-        await taskRepository.updateHeat(task.id, freshHeat, userId);
-      }
 
       // Store calculated importance for sorting (will be removed before sending)
       return {
@@ -69,7 +62,7 @@ export async function GET(request: Request) {
         heat: freshHeat,
         heatCalculatedAt: now,
       };
-    }));
+    });
 
     // Fetch all notes for all tasks in one query
     const taskIds = tasks.map(t => t.id);
