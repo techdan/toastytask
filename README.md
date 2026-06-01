@@ -1,5 +1,7 @@
 # Toasty Task
 
+![Toasty Task logo](public/logo/toasty-task-logo-lightbg-gemini.png)
+
 Toasty Task is a task manager that automatically surfaces the work that matters
 most. It combines deadline-aware importance scoring with a heat model so tasks
 rise and fall naturally as priorities change.
@@ -38,8 +40,8 @@ multi-tenant web app with Clerk authentication and PostgreSQL persistence.
 ### Install
 
 ```bash
-git clone https://github.com/techdan/toodle.git
-cd toodle
+git clone https://github.com/techdan/toastytask.git
+cd toastytask
 npm install
 ```
 
@@ -90,13 +92,36 @@ npm run pg:test      # Test the PostgreSQL connection
 
 - [Heat algorithm](docs/current-heat-algorithm.md)
 - [Importance algorithm](docs/current-importance-algorithm.md)
+- [Roadmap](docs/roadmap.md)
 - [Database layer](lib/db/README.md)
 - [Supabase setup](SUPABASE_SETUP.md)
 - [Production deployment workflow](PRODUCTION_DEPLOYMENT_WORKFLOW.md)
 - [Agent workflow and architecture notes](AGENTS.md)
+
+## Project Status
+
+Toasty Task is under active development. The web application is functional and
+the repository includes ongoing work for responsive design, mobile clients,
+performance improvements, and maintainability.
+
+Sanitized product screenshots and a public demo are planned. Reference images
+from other task managers are intentionally excluded from this repository.
 
 ## Issue Tracking
 
 This repository uses [beads](https://github.com/steveyegge/beads) for local,
 dependency-aware issue tracking. See [AGENTS.md](AGENTS.md) for the project
 workflow.
+
+Public bug reports and feature requests should use
+[GitHub Issues](https://github.com/techdan/toastytask/issues).
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup,
+testing, and pull request guidance. For security reports, follow
+[SECURITY.md](SECURITY.md).
+
+## License
+
+Toasty Task is available under the [MIT License](LICENSE).
