@@ -9,7 +9,7 @@ review, and contribute to.
 - Harden authentication and multi-tenant authorization boundaries.
 - Expand automated tests for task mutations, notes, recurrence, and scoring.
 - Improve setup documentation for local PostgreSQL and Clerk configuration.
-- Publish sanitized product screenshots and a public demo environment.
+- Maintain the hosted application and sanitized product screenshots.
 - Continue responsive web and mobile client work.
 
 ## Near-Term Releases

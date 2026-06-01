@@ -9,6 +9,12 @@ rise and fall naturally as priorities change.
 The application is inspired by Toodledo and is built as a responsive,
 multi-tenant web app with Clerk authentication and PostgreSQL persistence.
 
+## Hosted App
+
+The hosted application is available at
+[homeandmatter.com/tasks](https://www.homeandmatter.com/tasks). Sign-in is
+required because task data is private to each account.
+
 ## Screenshot
 
 ![Toasty Task desktop task list with heat-based sorting](public/screenshots/toasty-task-desktop.png)
@@ -110,8 +116,9 @@ Toasty Task is under active development. The web application is functional and
 the repository includes ongoing work for responsive design, mobile clients,
 performance improvements, and maintainability.
 
-A public demo is planned. Reference images from other task managers are
-intentionally excluded from this repository.
+The hosted application is available for evaluation with a signed-in account.
+Reference images from other task managers are intentionally excluded from this
+repository.
 
 ## Issue Tracking
 
