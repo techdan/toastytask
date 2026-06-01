@@ -31,6 +31,11 @@ review, and contribute to.
 - Expand maintainer automation for issue triage, pull request review, release
   notes, and regression testing.
 - Evaluate import and export workflows for common task-management formats.
+- Explore OpenClaw and Hermes integration so external agents can create,
+  update, prioritize, and complete Toasty Task work through a documented
+  interoperability layer.
+- Add knowledge-base features for durable reference notes, linked context,
+  search, and reusable information that supports both people and task agents.
 
 ## Proposing Work
 
