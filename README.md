@@ -10,8 +10,19 @@ multi-tenant web app with Clerk authentication and PostgreSQL persistence.
 ## Hosted App
 
 The hosted application is available at
-[homeandmatter.com/tasks](https://www.homeandmatter.com/tasks). Sign-in is
-required because task data is private to each account.
+[homeandmatter.com](https://www.homeandmatter.com/). Sign-in is required
+because task data is private to each account.
+
+To try the application without creating an account, use the shared demo user:
+
+```text
+Email: demo@toastytask.com
+Password: demotoastytask
+```
+
+The demo account contains synthetic data. Its contents are shared and may be
+changed or reset at any time. Do not add private information to it. See
+[docs/demo-environment.md](docs/demo-environment.md) for details.
 
 ## Screenshot
 
