@@ -9,6 +9,12 @@ rise and fall naturally as priorities change.
 The application is inspired by Toodledo and is built as a responsive,
 multi-tenant web app with Clerk authentication and PostgreSQL persistence.
 
+## Screenshot
+
+![Toasty Task desktop task list with heat-based sorting](public/screenshots/toasty-task-desktop.png)
+
+The screenshot uses synthetic sample data.
+
 ## Features
 
 - Automatic importance scoring based on priority, due date, and star level
@@ -104,8 +110,8 @@ Toasty Task is under active development. The web application is functional and
 the repository includes ongoing work for responsive design, mobile clients,
 performance improvements, and maintainability.
 
-Sanitized product screenshots and a public demo are planned. Reference images
-from other task managers are intentionally excluded from this repository.
+A public demo is planned. Reference images from other task managers are
+intentionally excluded from this repository.
 
 ## Issue Tracking
 
