@@ -1,7 +1,5 @@
 # Toasty Task
 
-![Toasty Task logo](public/logo/toasty-task-logo-lightbg-gemini.png)
-
 Toasty Task is a task manager that automatically surfaces the work that matters
 most. It combines deadline-aware importance scoring with a heat model so tasks
 rise and fall naturally as priorities change.
