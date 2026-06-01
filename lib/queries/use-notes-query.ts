@@ -22,6 +22,12 @@ async function fetchNotes(taskId: number): Promise<NoteRowData[]> {
   return data.notes;
 }
 
+export function getNotesText(noteRows: NoteRowData[] | undefined): string {
+  return Array.isArray(noteRows) && noteRows.length > 0
+    ? noteRows.map((note) => note.currentText || "").join("\n")
+    : "";
+}
+
 export function useNotesQuery(taskId: number, enabled: boolean = true, initialData?: NoteRowData[]) {
   return useQuery({
     queryKey: ["notes", taskId],

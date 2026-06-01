@@ -6,7 +6,13 @@ import { useSearchParams } from "next/navigation";
 import { Notebook, NotebookText, NotebookPen } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { useNotesQuery, useSaveNotes, type NoteRowData } from "@/lib/queries";
+import {
+  getNotesText,
+  useNotesAutosave,
+  useNotesQuery,
+  type NoteRowData,
+  type NotesSaveState,
+} from "@/lib/queries";
 
 const MS_PER_MINUTE = 60 * 1000;
 const MS_PER_HOUR = 60 * MS_PER_MINUTE;
@@ -37,6 +43,22 @@ const formatNoteRelativeTime = (date: Date) => {
   }
 
   return date.toLocaleDateString();
+};
+
+const getSaveStateLabel = (state: NotesSaveState) => {
+  switch (state) {
+    case "unsaved":
+      return "Unsaved";
+    case "saving":
+      return "Saving...";
+    case "retrying":
+      return "Retrying...";
+    case "error":
+      return "Save failed";
+    case "saved":
+    default:
+      return null;
+  }
 };
 
 interface TaskNotesProps {
@@ -122,7 +144,6 @@ export function TaskNotesPanel({
   isCompleted?: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
-  const [notesText, setNotesText] = useState("");
   const [hoveredLineIndex, setHoveredLineIndex] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const searchParams = useSearchParams();
@@ -141,17 +162,14 @@ export function TaskNotesPanel({
   // Use query hook for fetching notes with caching
   // If initialNotes are provided (from task cache), use them for instant display
   const { data: noteRows = initialNotes || [], isLoading } = useNotesQuery(taskId, true, initialNotes);
-
-  // Use mutation hook for saving notes
-  const saveNotesMutation = useSaveNotes();
-
-  // Sync notesText with fetched noteRows when data changes
-  useEffect(() => {
-    if (noteRows.length > 0 && !isEditing) {
-      const text = noteRows.map(r => r.currentText || "").join("\n");
-      setNotesText(text);
-    }
-  }, [noteRows, isEditing]);
+  const serverText = getNotesText(noteRows);
+  const {
+    text: notesText,
+    saveState,
+    updateText: updateNotesText,
+    flush: flushNotes,
+  } = useNotesAutosave({ taskId, serverText });
+  const saveStateLabel = getSaveStateLabel(saveState);
 
   // Auto-resize when entering edit mode or when text changes
   useEffect(() => {
@@ -161,21 +179,9 @@ export function TaskNotesPanel({
     }
   }, [isEditing, notesText, autoResize]);
 
-  const handleSave = () => {
-    // Optimistically exit edit mode immediately for snappy UX
-    setIsEditing(false);
-
-    // Save to server with optimistic update
-    saveNotesMutation.mutate({ taskId, text: notesText });
-  };
-
   const handleBlur = () => {
-    const currentText = noteRows.map(r => r.currentText).join("\n");
-    if (notesText !== currentText) {
-      handleSave();
-    } else {
-      setIsEditing(false);
-    }
+    void flushNotes();
+    setIsEditing(false);
   };
 
   const handleClick = () => {
@@ -245,18 +251,31 @@ export function TaskNotesPanel({
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading notes...</p>
       ) : isEditing ? (
-        <Textarea
-          ref={textareaRef}
-          value={notesText}
-          onChange={(e) => {
-            setNotesText(e.target.value);
-            autoResize();
-          }}
-          onBlur={handleBlur}
-          className="min-h-[100px] resize-none overflow-hidden bg-transparent text-sm leading-5 border-0 focus-visible:ring-0 text-gray-800 dark:text-gray-200"
-          placeholder="Add notes here..."
-          autoFocus
-        />
+        <>
+          <Textarea
+            ref={textareaRef}
+            value={notesText}
+            onChange={(e) => {
+              updateNotesText(e.target.value);
+              autoResize();
+            }}
+            onBlur={handleBlur}
+            className="min-h-[100px] resize-none overflow-hidden bg-transparent text-sm leading-5 border-0 focus-visible:ring-0 text-gray-800 dark:text-gray-200"
+            placeholder="Add notes here..."
+            autoFocus
+          />
+          {saveStateLabel ? (
+            <div
+              className={cn(
+                "mt-1 text-right text-xs",
+                saveState === "error" ? "text-destructive" : "text-muted-foreground"
+              )}
+              aria-live="polite"
+            >
+              {saveStateLabel}
+            </div>
+          ) : null}
+        </>
       ) : (
         <div className="min-h-[60px] cursor-pointer" onClick={handleClick}>
           {noteRows.length > 0 ? (

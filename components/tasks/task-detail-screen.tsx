@@ -12,10 +12,9 @@ import { TaskProjectSelect } from "./project-select";
 import { RecurrenceSelect } from "./recurrence-select";
 import { DueDateDisplay } from "./due-date-display";
 import { HeatBadge } from "./heat-badge";
-import { useTasksQuery, useProjectsQuery, useNotesQuery } from "@/lib/queries";
+import { getNotesText, useNotesAutosave, useTasksQuery, useProjectsQuery, useNotesQuery } from "@/lib/queries";
 import { useCompleteTask, useUncompleteTask, useUpdateTask, useDeleteTask } from "@/lib/queries";
 import { useTouchTask, useCoolTask, useStarTask } from "@/lib/queries/use-task-mutations";
-import { useSaveNotes } from "@/lib/queries/use-notes-mutations";
 import { calculateImportanceV1 } from "@/lib/scoring/importance-v1";
 import { calculateHeat } from "@/lib/scoring/heat-v3";
 import { cn } from "@/lib/utils";
@@ -46,6 +45,7 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
     [tasks, taskId]
   );
   const { data: notesData = task?.notes ?? [], isFetching: isNotesLoading } = useNotesQuery(taskId, true, task?.notes);
+  const serverNotesText = getNotesText(notesData);
 
   const updateTaskMutation = useUpdateTask();
   const completeTaskMutation = useCompleteTask();
@@ -53,7 +53,6 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
   const touchTaskMutation = useTouchTask();
   const coolTaskMutation = useCoolTask();
   const starTaskMutation = useStarTask();
-  const saveNotesMutation = useSaveNotes();
   const [badgeMode, setBadgeMode] = useState<SortMode>("heat");
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const deleteTaskMutation = useDeleteTask();
@@ -66,13 +65,20 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
   }, [task]);
 
   const [title, setTitle] = useState(task?.title ?? "");
-  const [notes, setNotes] = useState(
-    Array.isArray(notesData) && notesData.length > 0
-      ? notesData.map((note) => note.currentText).join("\n")
-      : ""
-  );
   const [saveError, setSaveError] = useState<string | null>(null);
   const [, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const {
+    text: notes,
+    saveState: notesSaveState,
+    updateText: updateNotes,
+    flush: flushNotes,
+  } = useNotesAutosave({
+    taskId,
+    serverText: serverNotesText,
+    onError: (error) => {
+      setSaveError(error instanceof Error ? error.message : "Save failed");
+    },
+  });
 
   const [highlightDueDate, setHighlightDueDate] = useState(false);
   const [highlightRecurrence, setHighlightRecurrence] = useState(false);
@@ -81,17 +87,18 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
   useEffect(() => {
     if (task) {
       setTitle(task.title);
-      setNotes(
-        Array.isArray(notesData) && notesData.length > 0
-          ? notesData.map((note) => note.currentText).join("\n")
-          : ""
-      );
     }
-  }, [notesData, task]);
+  }, [task]);
+
+  useEffect(() => {
+    if (notesSaveState === "saved") {
+      setSaveError(null);
+    }
+  }, [notesSaveState]);
 
   const handleClose = useCallback(() => {
-    onClose();
-  }, [onClose]);
+    void flushNotes().finally(onClose);
+  }, [flushNotes, onClose]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -122,21 +129,8 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
   }, [runSave, task?.title, title]);
 
   const handleNotesBlur = useCallback(() => {
-    const current = Array.isArray(notesData) && notesData.length > 0
-      ? notesData.map((note) => note.currentText).join("\n")
-      : "";
-    if (notes === current) return;
-    saveNotesMutation.mutate(
-      { taskId, text: notes },
-      {
-        onSuccess: () => {
-        },
-        onError: (error) => {
-          setSaveError(error instanceof Error ? error.message : "Save failed");
-        },
-      }
-    );
-  }, [notes, notesData, saveNotesMutation, taskId]);
+    void flushNotes();
+  }, [flushNotes]);
 
   const handleCompleteToggle = useCallback(async () => {
     try {
@@ -392,7 +386,7 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
               <div className="text-lg font-semibold text-muted-foreground">Notes</div>
               <Textarea
                 value={notes}
-                onChange={(event) => setNotes(event.target.value)}
+                onChange={(event) => updateNotes(event.target.value)}
                 onBlur={handleNotesBlur}
                 rows={8}
                 placeholder="Notes"
@@ -401,6 +395,23 @@ export function TaskDetailScreen({ taskId, onClose, mode }: TaskDetailScreenProp
                   task.completedAt && "line-through text-muted-foreground italic"
                 )}
               />
+              {notesSaveState !== "saved" ? (
+                <div
+                  className={cn(
+                    "text-right text-xs",
+                    notesSaveState === "error" ? "text-destructive" : "text-muted-foreground"
+                  )}
+                  aria-live="polite"
+                >
+                  {notesSaveState === "unsaved"
+                    ? "Unsaved"
+                    : notesSaveState === "saving"
+                      ? "Saving..."
+                      : notesSaveState === "retrying"
+                        ? "Retrying..."
+                        : "Save failed"}
+                </div>
+              ) : null}
             </div>
 
             {saveError ? (
